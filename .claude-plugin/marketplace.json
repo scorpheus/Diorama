@@ -1,0 +1,15 @@
+{
+  "name": "diorama",
+  "description": "Diorama : un mod Claude Code, un personnage en pixel art qui vit au-dessus du prompt.",
+  "owner": {
+    "name": "Scorpheus",
+    "url": "https://github.com/scorpheus"
+  },
+  "plugins": [
+    {
+      "name": "diorama",
+      "source": "./",
+      "description": "Un diorama vivant en pixel art au-dessus du prompt, qui suit le travail de Claude. Thèmes : la forge, la sorcière, ou le vôtre."
+    }
+  ]
+}

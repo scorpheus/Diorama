@@ -1,0 +1,4 @@
+# Claude Code's API types, generated locally
+.claude-plugin/types/
+node_modules/
+apercu*.png

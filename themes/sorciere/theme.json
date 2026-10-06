@@ -1,0 +1,1953 @@
+{
+ "diorama": 1,
+ "name": "L'antre de la sorcière",
+ "width": 72,
+ "height": 32,
+ "crops": {
+  "full": [
+   0,
+   72
+  ],
+  "compact": [
+   6,
+   72
+  ],
+  "solo": [
+   6,
+   50
+  ]
+ },
+ "palette": {
+  "6": "#f2c7a0",
+  "7": "#c9926c",
+  "8": "#d8602e",
+  "9": "#26302b",
+  "K": "#4c5a52",
+  "%": "#4d4170",
+  "&": "#7a6aa3"
+ },
+ "sky": {
+  "at": [
+   2,
+   1
+  ],
+  "size": [
+   10,
+   8
+  ],
+  "shutters": false
+ },
+ "background": [
+  "...qqqqqqqq....RRRRRRRRRRRRRRRRRRR......................................",
+  "..q....q...q............................................................",
+  ".q.....q....q......................W....................................",
+  ".q.....q....q......................W....................................",
+  ".q.....q....q.....................aaa...................................",
+  ".qqqqqqqqqqqq......................k....................................",
+  ".q.....q....q...........................................................",
+  ".q.....q....q...........................................................",
+  ".q.....q....q...........................................................",
+  "QQQQQQQQQQQQQQ..........................................................",
+  "rrrrrrrrrrrrrr..........................................................",
+  "........................................................................",
+  "......................................rrrrrrrrrrrrrrrrrrrrrrrrrrrrrr....",
+  ".......................................RR........................RR.....",
+  "........................................................................",
+  "........................................................................",
+  "........................................................................",
+  "........................................................................",
+  "........................................................................",
+  "........................................................................",
+  "........................................................................",
+  "..........kkkkkkkkkk....................................................",
+  ".........kKGGjGGGjGKk...................................................",
+  "........kKKKKKKKKKKKKk..................................................",
+  "........k999999999999k..................................................",
+  "........k9K9999999999k..................................................",
+  "........k9K9999999999k..................................................",
+  "........k999999999999k..................................................",
+  ".........k9999999999k...................................................",
+  "..........kkkkkkkkkk....................................................",
+  "..........k........k....................................................",
+  ".........kk........kk..................................................."
+ ],
+ "character": {
+  "home": [
+   22,
+   6
+  ],
+  "every": 5,
+  "mirror": false,
+  "recolor": [
+   "o",
+   "O"
+  ],
+  "bubble": [
+   16,
+   -6
+  ],
+  "poses": {
+   "idle": [
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "...........kk...",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "...........kk...",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k8666666668k..",
+     "..k8776666778k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ]
+   ],
+   "walk": [
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "...kkkkk.kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kRRkoooooook..",
+     "..kkkkk...kRRk..",
+     "..........kkkkk."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "...kkkkk.kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k..",
+     "..k8k666666k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..koooookRRkok..",
+     "....kRRkkkkkk...",
+     "....kkkkk......."
+    ]
+   ],
+   "thinking": {
+    "frames": [
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k888k8888k8k..",
+      "..k8666666668k..",
+      "..k8E666666E8k..",
+      "..k8666mm6668k..",
+      "..k8k66666668k..",
+      "..k88kkkkkk7Ok..",
+      "..kOOOOyyOOOok..",
+      ".kOOOOOOOOOOoOk.",
+      "kOOkOOOOOOOOOo..",
+      "kOOkoOOOOOOook..",
+      "kOOkoOOOOOOook..",
+      "k66koOOyyOOook..",
+      ".kk.oOOOOOOok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k888k8888k8k..",
+      "..k8666666668k..",
+      "..k8E666666E8k..",
+      "..k8666mm6668k..",
+      "..k8k66666668k..",
+      "..k88kkkkkk7Ok..",
+      "..kOOOOyyOOOok..",
+      ".kOOOOOOOOOOoOk.",
+      "kOOkOOOOOOOOOo..",
+      "kOOkoOOOOOOook..",
+      "kOOkoOOOOOOook..",
+      "k66koOOyyOOook..",
+      ".kk.oOOOOOOok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "...........kk...",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k888k8888k8k..",
+      "..k8666666668k..",
+      "..k8E666666E8k..",
+      "..k8666mm6668k..",
+      "..k8k66666668k..",
+      "..k88kkkkkk7Ok..",
+      "..kOOOOyyOOOok..",
+      ".kOOOOOOOOOOoOk.",
+      "kOOkOOOOOOOOOo..",
+      "kOOkoOOOOOOook..",
+      "kOOkoOOOOOOook..",
+      "k66koOOyyOOook..",
+      ".kk.oOOOOOOok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "...........kk...",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k888k8888k8k..",
+      "..k8666666668k..",
+      "..k8E666666E8k..",
+      "..k8666mm6668k..",
+      "..k8k66666668k..",
+      "..k88kkkkkk7Ok..",
+      "..kOOOOyyOOOok..",
+      ".kOOOOOOOOOOoOk.",
+      "kOOkOOOOOOOOOo..",
+      "kOOkoOOOOOOook..",
+      "kOOkoOOOOOOook..",
+      "k66koOOyyOOook..",
+      ".kk.oOOOOOOok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ]
+    ],
+    "every": 6
+   },
+   "running": {
+    "frames": [
+     [
+      "................kk....",
+      "...............kOk....",
+      "..............kOOk....",
+      ".............kOOOk....",
+      "............kOOOOk....",
+      "...........kOOOOOOk...",
+      "..........kyyyyyyyyk..",
+      "......kkkkooooooooookk",
+      "........k8888888888k..",
+      "........k86k6666k68k..",
+      "......r.k8E666666E8k..",
+      ".....r..k8666mm6668k..",
+      ".....r..k8k666666k8k..",
+      "....r...k88kkkkkk88k..",
+      "...r6O..kOOOOyyOOOOk..",
+      "..r.7o6OOOOOOOOOOOOOk.",
+      "..r...7ooooooooooook..",
+      "RR......kooOOOOOOook..",
+      "........kooOOOOOOook..",
+      "........kooOOyyOOook..",
+      ".........koOOOOOOok...",
+      ".........koOOOOOOok...",
+      "........koOOOOOOOOok..",
+      "........kooooooooook..",
+      ".........kRRk..kRRk...",
+      "........kkkkk..kkkkk.."
+     ],
+     [
+      "................kk....",
+      "...............kOk....",
+      "..............kOOk....",
+      ".............kOOOk....",
+      "............kOOOOk....",
+      "...........kOOOOOOk...",
+      "..........kyyyyyyyyk..",
+      "......kkkkooooooooookk",
+      "........k8888888888k..",
+      ".......rk86k6666k68k..",
+      "......r.k8E666666E8k..",
+      "......r.k8666mm6668k..",
+      ".....r..k8k66EE66k8k..",
+      "....r6..k88kkkkkk88k..",
+      "....r7O6OOOOOOyOOOOk..",
+      "...r..o7ooooooOOOOOOk.",
+      "...r...okOOOOOoooook..",
+      ".RR.....kooOOOOOOook..",
+      "........kooOOOOOOook..",
+      "........kooOOyyOOook..",
+      ".........koOOOOOOok...",
+      ".........koOOOOOOok...",
+      "........koOOOOOOOOok..",
+      "........kooooooooook..",
+      ".........kRRk..kRRk...",
+      "........kkkkk..kkkkk.."
+     ],
+     [
+      "................kk....",
+      "...............kOk....",
+      "..............kOOk....",
+      ".............kOOOk....",
+      "............kOOOOk....",
+      "...........kOOOOOOk...",
+      "..........kyyyyyyyyk..",
+      "......kkkkooooooooookk",
+      "......r.k8888888888k..",
+      "......r.k86k6666k68k..",
+      ".....r..k8E666666E8k..",
+      ".....r..k8666mm6668k..",
+      "....6r..k8k66EE66k8k..",
+      "....7O6OOO8kkkkkk88k..",
+      "....ro7oooOOOOOOOOOk..",
+      "....r.oOOOooooooOOOOk.",
+      "...r...okOOOOOOOoook..",
+      "..RR....kooOOOOOOook..",
+      "........kooOOOOOOook..",
+      "........kooOOyyOOook..",
+      ".........koOOOOOOok...",
+      ".........koOOOOOOok...",
+      "........koOOOOOOOOok..",
+      "........kooooooooook..",
+      ".........kRRk..kRRk...",
+      "........kkkkk..kkkkk.."
+     ],
+     [
+      "................kk....",
+      "...............kOk....",
+      "..............kOOk....",
+      ".............kOOOk....",
+      "............kOOOOk....",
+      "...........kOOOOOOk...",
+      "..........kyyyyyyyyk..",
+      "......kkkkooooooooookk",
+      "........k8888888888k..",
+      ".....r..k86k6666k68k..",
+      ".....r..k8E666666E8k..",
+      "....r...k8666mm6668k..",
+      "....r...k8k666666k8k..",
+      "...6O...k88kkkkkk88k..",
+      "...7o6OOOOOOOyyOOOOk..",
+      "...r.7oooooooOOOOOOOk.",
+      "..r....okOOOOooooook..",
+      ".RR.....kooOOOOOOook..",
+      "........kooOOOOOOook..",
+      "........kooOOyyOOook..",
+      ".........koOOOOOOok...",
+      ".........koOOOOOOok...",
+      "........koOOOOOOOOok..",
+      "........kooooooooook..",
+      ".........kRRk..kRRk...",
+      "........kkkkk..kkkkk.."
+     ]
+    ],
+    "every": 2,
+    "at": [
+     -6,
+     0
+    ]
+   },
+   "review": {
+    "frames": [
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k8666666668k..",
+      "..k8Ek6666kE8k..",
+      "..k8666mm6668k..",
+      "..k8k666666k8k..",
+      "..k88kkkkkk88k..",
+      "..kOOOOyyOOOOk..",
+      ".kOOOOOOOOOOOOk.",
+      "..kkWWWkWWWkOk..",
+      "..kkWVVkVVWkok..",
+      "..6kWWWkWWWk6k..",
+      "..kkWVVkVWWkok..",
+      "...kkkkkkkkok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k8666666668k..",
+      "..k8Ek6666kE8k..",
+      "..k8666mm6668k..",
+      "..k8k666666k8k..",
+      "..k88kkkkkk88k..",
+      "..kOOOOyyOOOOk..",
+      ".kOOOOOOOOOOOOk.",
+      "..kkWWWkWWWkOk..",
+      "..kkWVVkVVWkok..",
+      "..6kWWWkWWWk6k..",
+      "..kkWVVkVWWkok..",
+      "...kkkkkkkkok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k8666666668k..",
+      "..k8Ek6666kE8k..",
+      "..k8666mm6668k..",
+      "..k8k666666k8k..",
+      "..k88kkkkkk88k..",
+      "..kOOOOyyOOOOk..",
+      ".kOOOOOOOOOOOOk.",
+      "..kkWWWkWWWkOk..",
+      "..kkWVVkWVVkok..",
+      "..6kWWWkWWWk6k..",
+      "..kkWVWkVVWkok..",
+      "...kkkkkkkkok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k8666666668k..",
+      "..k8Ek6666kE8k..",
+      "..k8666mm6668k..",
+      "..k8k666666k8k..",
+      "..k88kkkkkk88k..",
+      "..kOOOOyyOOOOk..",
+      ".kOOOOOOOOOOOOk.",
+      "..kkWWWkWWWkOk..",
+      "..kkWVVkWVVkok..",
+      "..6kWWWkWWWk6k..",
+      "..kkWVWkVVWkok..",
+      "...kkkkkkkkok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ]
+    ],
+    "every": 8
+   },
+   "waiting": [
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k.O",
+     "..k8k666666k8k.o",
+     "..k88kkkkkk88kOo",
+     "..kOOOOyyOOOOko.",
+     ".kOOOOOOOOOOOOo.",
+     "kOOkOOOOOOOOOo..",
+     "kOOkoOOOOOOook..",
+     "kOOkoOOOOOOook..",
+     "k66koOOyyOOook..",
+     ".kk.oOOOOOOok...",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k.O",
+     "..k8k666666k8k.o",
+     "..k88kkkkkk88kOo",
+     "..kOOOOyyOOOOko.",
+     ".kOOOOOOOOOOOOo.",
+     "kOOkOOOOOOOOOo..",
+     "kOOkoOOOOOOook..",
+     "kOOkoOOOOOOook..",
+     "k66koOOyyOOook..",
+     ".kk.oOOOOOOok...",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k86k6666k68k..",
+     "..k8E666666E8k..",
+     "..k8666mm6668k.O",
+     "..k8k666666k8k.o",
+     "..k88kkkkkk88kOo",
+     "..kOOOOyyOOOOko.",
+     ".kOOOOOOOOOOOOo.",
+     "kOOkOOOOOOOOOo..",
+     "kOOkoOOOOOOook..",
+     "kOOkoOOOOOOook..",
+     "k66koOOyyOOook..",
+     ".kk.oOOOOOOok...",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ],
+    [
+     "..........kk....",
+     ".........kOk....",
+     "........kOOk....",
+     ".......kOOOk....",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k8666666668k..",
+     "..k8776666778k..",
+     "..k8666mm6668k.O",
+     "..k8k666666k8k.o",
+     "..k88kkkkkk88kOo",
+     "..kOOOOyyOOOOko.",
+     ".kOOOOOOOOOOOOo.",
+     "kOOkOOOOOOOOOo..",
+     "kOOkoOOOOOOook..",
+     "kOOkoOOOOOOook..",
+     "k66koOOyyOOook..",
+     ".kk.oOOOOOOok...",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ]
+   ],
+   "failed": [
+    [
+     "................",
+     "................",
+     ".....kkk........",
+     ".....kOOkk......",
+     "......kOOOOk....",
+     ".....kOOOOOOk...",
+     "....kyyyyyyyyk..",
+     "kkkkooooooooookk",
+     "..k8888888888k..",
+     "..k8k766667k8k..",
+     "..k8Ek6666kE8k..",
+     "..k8666mm6668k..",
+     "..k8k6m66m6k8k..",
+     "..k88kkkkkk88k..",
+     "..kOOOOyyOOOOk..",
+     ".kOOOOOOOOOOOOk.",
+     "kOOkOOOOOOOOkOOk",
+     "kOOkoOOOOOOokOOk",
+     "kOOkoOOOOOOokOOk",
+     "k66koOOyyOOok66k",
+     ".kk.oOOOOOOo.kk.",
+     "...koOOOOOOok...",
+     "..koOOOOOOOOok..",
+     "..kooooooooook..",
+     "...kRRk..kRRk...",
+     "..kkkkk..kkkkk.."
+    ]
+   ],
+   "jumping": {
+    "frames": [
+     [
+      "............kk......",
+      "...........kOk......",
+      "..........kOOk......",
+      ".........kOOOk......",
+      "........kOOOOk......",
+      ".......kOOOOOOk.....",
+      "......kyyyyyyyyk....",
+      "..kkkkooooooooookk..",
+      "....k8888888888k....",
+      "6...k86k6666k68k...6",
+      "7O..k8k6k66k6k8k..O7",
+      ".o..k8666mm6668k..o.",
+      ".oO.k8k66EE66k8k.Oo.",
+      "..oOk88kkkkkk88kOo..",
+      "...okOOOOyyOOOOko...",
+      "...oOOOOOOOOOOOOo...",
+      "....oOOOOOOOOOOo....",
+      "....kooOOOOOOook....",
+      "....kooOOOOOOook....",
+      "....kooOOyyOOook....",
+      ".....koOOOOOOok.....",
+      ".....koOOOOOOok.....",
+      "....koOOOOOOOOok....",
+      "....kooooooooook....",
+      ".....kRRk..kRRk.....",
+      "....kkkkk..kkkkk....",
+      "...................."
+     ],
+     [
+      "....................",
+      "............kk......",
+      "...........kOk......",
+      "..........kOOk......",
+      ".........kOOOk......",
+      "........kOOOOk......",
+      ".......kOOOOOOk.....",
+      "......kyyyyyyyyk....",
+      "..kkkkooooooooookk..",
+      "....k8888888888k....",
+      "6...k86k6666k68k...6",
+      "7O..k8k6k66k6k8k..O7",
+      ".o..k8666mm6668k..o.",
+      ".oO.k8k66EE66k8k.Oo.",
+      "..oOk88kkkkkk88kOo..",
+      "...okOOOOyyOOOOko...",
+      "...oOOOOOOOOOOOOo...",
+      "....oOOOOOOOOOOo....",
+      "....kooOOOOOOook....",
+      "....kooOOOOOOook....",
+      "....kooOOyyOOook....",
+      ".....koOOOOOOok.....",
+      ".....koOOOOOOok.....",
+      "....koOOOOOOOOok....",
+      "....kooooooooook....",
+      ".....kRRk..kRRk.....",
+      "....kkkkk..kkkkk...."
+     ]
+    ],
+    "every": 2,
+    "at": [
+     -2,
+     -1
+    ]
+   },
+   "waving": {
+    "frames": [
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k86k6666k68k..",
+      "..k8k6k66k6k8k..",
+      "..k866m66m668k..",
+      "..k8k66mm66k8k.O",
+      "..k88kkkkkk88k.o",
+      "..kOOOOyyOOOOkOo",
+      ".kOOOOOOOOOOOOo.",
+      "kOOkOOOOOOOOOo..",
+      "kOOkoOOOOOOook..",
+      "kOOkoOOOOOOook..",
+      "k66koOOyyOOook..",
+      ".kk.oOOOOOOok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k86k6666k68k.6",
+      "..k8k6k66k6k8k.7",
+      "..k866m66m668kOo",
+      "..k8k66mm66k8ko.",
+      "..k88kkkkkk88ko.",
+      "..kOOOOyyOOOOOo.",
+      ".kOOOOOOOOOOOok.",
+      "kOOkOOOOOOOOOo..",
+      "kOOkoOOOOOOook..",
+      "kOOkoOOOOOOook..",
+      "k66koOOyyOOook..",
+      ".kk.oOOOOOOok...",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ]
+    ],
+    "every": 2
+   },
+   "sleep": {
+    "frames": [
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k8666666668k..",
+      "..k8776666778k..",
+      "..k86666m6668k..",
+      "..k8k666666k8k..",
+      "..k88kkkkkk88k..",
+      "..kOOOOyyOOOOk..",
+      ".kOOOOOOOOOOOOk.",
+      "kOOkOOOOOOOOkOOk",
+      "kOOkoOOOOOOokOOk",
+      "kOOkoOOOOOOokOOk",
+      "k66koOOyyOOok66k",
+      ".kk.oOOOOOOo.kk.",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "..........kk....",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k8666666668k..",
+      "..k8776666778k..",
+      "..k86666m6668k..",
+      "..k8k666666k8k..",
+      "..k88kkkkkk88k..",
+      "..kOOOOyyOOOOk..",
+      ".kOOOOOOOOOOOOk.",
+      "kOOkOOOOOOOOkOOk",
+      "kOOkoOOOOOOokOOk",
+      "kOOkoOOOOOOokOOk",
+      "k66koOOyyOOok66k",
+      ".kk.oOOOOOOo.kk.",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "...........kk...",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k8666666668k..",
+      "..k8776666778k..",
+      "..k86666m6668k..",
+      "..k8k666666k8k..",
+      "..k88kkkkkk88k..",
+      "..kOOOOyyOOOOk..",
+      ".kOOOOOOOOOOOOk.",
+      "kOOkOOOOOOOOkOOk",
+      "kOOkoOOOOOOokOOk",
+      "kOOkoOOOOOOokOOk",
+      "k66koOOyyOOok66k",
+      ".kk.oOOOOOOo.kk.",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ],
+     [
+      "...........kk...",
+      ".........kOk....",
+      "........kOOk....",
+      ".......kOOOk....",
+      "......kOOOOk....",
+      ".....kOOOOOOk...",
+      "....kyyyyyyyyk..",
+      "kkkkooooooooookk",
+      "..k8888888888k..",
+      "..k8666666668k..",
+      "..k8776666778k..",
+      "..k86666m6668k..",
+      "..k8k666666k8k..",
+      "..k88kkkkkk88k..",
+      "..kOOOOyyOOOOk..",
+      ".kOOOOOOOOOOOOk.",
+      "kOOkOOOOOOOOkOOk",
+      "kOOkoOOOOOOokOOk",
+      "kOOkoOOOOOOokOOk",
+      "k66koOOyyOOok66k",
+      ".kk.oOOOOOOo.kk.",
+      "...koOOOOOOok...",
+      "..koOOOOOOOOok..",
+      "..kooooooooook..",
+      "...kRRk..kRRk...",
+      "..kkkkk..kkkkk.."
+     ]
+    ],
+    "every": 8
+   },
+   "sweep": {
+    "frames": [
+     [
+      "..............kk....",
+      ".............kOk....",
+      "............kOOk....",
+      "...........kOOOk....",
+      "..........kOOOOk....",
+      ".........kOOOOOOk...",
+      "........kyyyyyyyyk..",
+      "....kkkkooooooooookk",
+      "......k8888888888k..",
+      "......k86k6666k68k..",
+      "......k8E666666E8k..",
+      "......k8666mm6668k..",
+      "......k8k666666k8k..",
+      "......k88kkkkkk88k..",
+      "......kOOrOyyOOOOk..",
+      ".....OOOrOOOOOOOOOk.",
+      ".....oOrOOOOOOOOoo..",
+      "......o6oOOOOOoook..",
+      "......r7oOOOooOook..",
+      ".....rko6OooyOOook..",
+      "....r..k7oOOOOOok...",
+      "....r..koOOOOOOok...",
+      "...r..koOOOOOOOOok..",
+      "yVyV..kooooooooook..",
+      "VyVy...kRRk..kRRk...",
+      "yVyV..kkkkk..kkkkk.."
+     ],
+     [
+      "..............kk....",
+      ".............kOk....",
+      "............kOOk....",
+      "...........kOOOk....",
+      "..........kOOOOk....",
+      ".........kOOOOOOk...",
+      "........kyyyyyyyyk..",
+      "....kkkkooooooooookk",
+      "......k8888888888k..",
+      "......k86k6666k68k..",
+      "......k8E666666E8k..",
+      "......k8666mm6668k..",
+      "......k8k666666k8k..",
+      "......k88kkkkkk88k..",
+      "......kOOrOyyOOOOk..",
+      ".....OOOrOOOOOOOOOk.",
+      ".....oOOrOOOOOOOoo..",
+      "......o6oOOOOOoook..",
+      "......r7oOOOooOook..",
+      "......ro6OooyOOook..",
+      ".....r.k7oOOOOOok...",
+      "....r..koOOOOOOok...",
+      "....r.koOOOOOOOOok..",
+      ".yVyV.kooooooooook..",
+      ".VyVy..kRRk..kRRk...",
+      ".yVyV.kkkkk..kkkkk.."
+     ],
+     [
+      "..............kk....",
+      ".............kOk....",
+      "............kOOk....",
+      "...........kOOOk....",
+      "..........kOOOOk....",
+      ".........kOOOOOOk...",
+      "........kyyyyyyyyk..",
+      "....kkkkooooooooookk",
+      "......k8888888888k..",
+      "......k86k6666k68k..",
+      "......k8E666666E8k..",
+      "......k8666mm6668k..",
+      "......k8k666666k8k..",
+      "......k88kkkkkk88k..",
+      "......kOOrOyyOOOOk..",
+      ".....OOOrOOOOOOOOOk.",
+      ".....oOOrOOOOOOOoo..",
+      "......o6oOOOOOoook..",
+      "......k7oOOOooOook..",
+      "......ro6OooyOOook..",
+      "......rk7oOOOOOok...",
+      ".....r.koOOOOOOok...",
+      ".....rkoOOOOOOOOok..",
+      "..yVyVkooooooooook..",
+      "..VyVy.kRRk..kRRk...",
+      "..yVyVkkkkk..kkkkk.."
+     ],
+     [
+      "..............kk....",
+      ".............kOk....",
+      "............kOOk....",
+      "...........kOOOk....",
+      "..........kOOOOk....",
+      ".........kOOOOOOk...",
+      "........kyyyyyyyyk..",
+      "....kkkkooooooooookk",
+      "......k8888888888k..",
+      "......k86k6666k68k..",
+      "......k8E666666E8k..",
+      "......k8666mm6668k..",
+      "......k8k666666k8k..",
+      "......k88kkkkkk88k..",
+      "......kOOrOyyOOOOk..",
+      ".....OOOrOOOOOOOOOk.",
+      ".....oOOrOOOOOOOoo..",
+      "......o6oOOOOOoook..",
+      "......r7oOOOooOook..",
+      "......ro6OooyOOook..",
+      ".....r.k7oOOOOOok...",
+      "....r..koOOOOOOok...",
+      "....r.koOOOOOOOOok..",
+      ".yVyV.kooooooooook..",
+      ".VyVy..kRRk..kRRk...",
+      ".yVyV.kkkkk..kkkkk.."
+     ]
+    ],
+    "every": 2,
+    "at": [
+     -4,
+     0
+    ]
+   }
+  }
+ },
+ "accessories": {
+  "lunettes": {
+   "at": [
+    4,
+    9
+   ],
+   "draw": [
+    "AkA..AkA"
+   ]
+  },
+  "etoile": {
+   "at": [
+    7,
+    2
+   ],
+   "draw": [
+    ".y.",
+    "yYy",
+    ".y."
+   ]
+  },
+  "echarpe": {
+   "at": [
+    3,
+    13
+   ],
+   "draw": [
+    "FFFFFFFFFF",
+    "........FF",
+    ".........F"
+   ]
+  }
+ },
+ "stage": {
+  "min": -12,
+  "max": 14,
+  "idle": [
+   -12,
+   -6,
+   0,
+   0,
+   6,
+   12,
+   14
+  ],
+  "work": 0,
+  "build": 0,
+  "offstage": 52,
+  "guests": [
+   32,
+   20
+  ]
+ },
+ "effects": [
+  {
+   "type": "fire",
+   "at": [
+    11,
+    29
+   ],
+   "size": [
+    8,
+    3
+   ],
+   "colors": [
+    "f",
+    "F",
+    "E",
+    "E"
+   ]
+  },
+  {
+   "type": "smoke",
+   "at": [
+    14,
+    20
+   ],
+   "colors": [
+    "j",
+    "G"
+   ]
+  },
+  {
+   "type": "sparks",
+   "at": [
+    15,
+    21
+   ]
+  },
+  {
+   "type": "glow",
+   "at": [
+    35,
+    1
+   ],
+   "colors": [
+    "Y",
+    "f"
+   ],
+   "night": true
+  }
+ ],
+ "gauges": [
+  {
+   "of": "5h",
+   "points": [
+    [
+     0,
+     31,
+     "R"
+    ],
+    [
+     1,
+     31,
+     "r"
+    ],
+    [
+     2,
+     31,
+     "R"
+    ],
+    [
+     3,
+     31,
+     "r"
+    ],
+    [
+     4,
+     31,
+     "R"
+    ],
+    [
+     1,
+     30,
+     "r"
+    ],
+    [
+     2,
+     30,
+     "R"
+    ],
+    [
+     3,
+     30,
+     "r"
+    ]
+   ]
+  },
+  {
+   "of": "7d",
+   "points": [
+    [
+     16,
+     1,
+     "G"
+    ],
+    [
+     18,
+     1,
+     "O"
+    ],
+    [
+     20,
+     1,
+     "G"
+    ],
+    [
+     22,
+     1,
+     "j"
+    ],
+    [
+     24,
+     1,
+     "G"
+    ],
+    [
+     26,
+     1,
+     "O"
+    ],
+    [
+     28,
+     1,
+     "G"
+    ],
+    [
+     30,
+     1,
+     "j"
+    ],
+    [
+     32,
+     1,
+     "G"
+    ],
+    [
+     17,
+     1,
+     "o"
+    ]
+   ]
+  },
+  {
+   "of": "ctx",
+   "points": [
+    [
+     40,
+     31,
+     "W"
+    ],
+    [
+     24,
+     31,
+     "V"
+    ],
+    [
+     43,
+     31,
+     "W"
+    ],
+    [
+     26,
+     30,
+     "W"
+    ],
+    [
+     38,
+     31,
+     "V"
+    ],
+    [
+     46,
+     31,
+     "W"
+    ],
+    [
+     22,
+     31,
+     "W"
+    ],
+    [
+     44,
+     30,
+     "V"
+    ]
+   ]
+  },
+  {
+   "of": "cost",
+   "points": [
+    [
+     56,
+     31,
+     "y"
+    ],
+    [
+     57,
+     31,
+     "y"
+    ],
+    [
+     58,
+     31,
+     "y"
+    ],
+    [
+     59,
+     31,
+     "y"
+    ],
+    [
+     57,
+     30,
+     "y"
+    ],
+    [
+     58,
+     30,
+     "Y"
+    ],
+    [
+     58,
+     29,
+     "y"
+    ]
+   ]
+  }
+ ],
+ "trophies": {
+  "slots": [
+   [
+    39,
+    8
+   ],
+   [
+    42,
+    8
+   ],
+   [
+    45,
+    8
+   ],
+   [
+    48,
+    8
+   ],
+   [
+    51,
+    8
+   ],
+   [
+    54,
+    8
+   ],
+   [
+    57,
+    8
+   ]
+  ],
+  "draw": {
+   "tests": [
+    ".k.",
+    "kGk",
+    "GjG",
+    "GGG"
+   ],
+   "builds": [
+    ".k.",
+    "kFk",
+    "FfF",
+    "FFF"
+   ],
+   "short": [
+    "...",
+    ".k.",
+    ".c.",
+    ".c."
+   ],
+   "other": [
+    ".k.",
+    "kPk",
+    "PiP",
+    "PPP"
+   ]
+  },
+  "honour": {
+   "at": [
+    61,
+    8
+   ],
+   "draw": [
+    "yYyYy",
+    ".yyy.",
+    "..y..",
+    ".yyy."
+   ]
+  }
+ },
+ "helpers": {
+  "walk": [
+   [
+    "........",
+    "........",
+    "....w.w.",
+    "..CCCCkC",
+    ".CCClCCC",
+    "CC.CC.CC"
+   ],
+   [
+    "....w.w.",
+    "..CCCCkC",
+    ".CCClCCC",
+    "CCC..CC.",
+    "C......C",
+    "........"
+   ],
+   [
+    "........",
+    "....w.w.",
+    "..CCCCkC",
+    ".CCClCCC",
+    "C.CC.CC.",
+    ".C....C."
+   ],
+   [
+    "........",
+    "........",
+    "....w.w.",
+    "..CCCCkC",
+    ".CCClCCC",
+    "CC.CC.CC"
+   ]
+  ],
+  "work": [
+   [
+    "......u.",
+    "....w.wY",
+    "..CCCCkC",
+    ".CCClCCr",
+    "CCClCCC.",
+    "CC.CC.CC"
+   ],
+   [
+    "........",
+    "....w.w.",
+    "..CCCCkr",
+    ".CCClCCC",
+    "CCClCCC.",
+    "CC.CC.CC"
+   ]
+  ],
+  "area": [
+   50,
+   71,
+   31
+  ],
+  "recolor": "C"
+ },
+ "pet": {
+  "walk": [
+   [
+    ".%.%........",
+    "%%%%.......%",
+    "%4%%%.....%.",
+    "%%%%%%%%%%%.",
+    ".%%%%&%%%%%.",
+    ".%.%.....%.%"
+   ],
+   [
+    ".%.%........",
+    "%%%%........",
+    "%4%%%.....%%",
+    "%%%%%%%%%%%.",
+    ".%%%%&%%%%%.",
+    "..%%......%%."
+   ],
+   [
+    ".%.%........",
+    "%%%%.......%",
+    "%4%%%.....%.",
+    "%%%%%%%%%%%.",
+    ".%%%%&%%%%%.",
+    "%...%...%..%"
+   ],
+   [
+    ".%.%........",
+    "%%%%........",
+    "%4%%%.....%%",
+    "%%%%%%%%%%%.",
+    ".%%%%&%%%%%.",
+    ".%%......%%."
+   ]
+  ],
+  "stand": [
+   ".%.%........",
+   "%%%%.......%",
+   "%4%%%.....%.",
+   "%%%%%%%%%%%.",
+   ".%%%%&%%%%%.",
+   ".%%.......%%"
+  ],
+  "sleep": [
+   "..%.%....",
+   ".%%%%..%.",
+   "%&%%%.%..",
+   "%%%%%&%%%",
+   ".%%%%%%%."
+  ],
+  "perch": [
+   3,
+   5
+  ],
+  "floor": 31,
+  "gate": 4
+ },
+ "messenger": {
+  "fly": [
+   [
+    "...VV....",
+    "....VV...",
+    ".rr..V...",
+    "rwkrrrrr.",
+    ".rrrrrr..",
+    "..y..y..."
+   ],
+   [
+    ".........",
+    ".........",
+    ".rr......",
+    "rwkrrrrr.",
+    ".rrrVVVV.",
+    "..y.VVy.."
+   ]
+  ]
+ },
+ "gift": {
+  "at": [
+   64,
+   28
+  ]
+ },
+ "feast": {
+  "at": [
+   36,
+   26
+  ],
+  "draw": [
+   "....F.F.F....",
+   "...WMWMWMW...",
+   "..WWWWWWWWW..",
+   "rrrrrrrrrrrrr",
+   ".R.........R.",
+   ".R.........R."
+  ]
+ },
+ "names": [
+  "Morgane",
+  "Viviane",
+  "Circé",
+  "Baba",
+  "Mélusine",
+  "Agnès",
+  "Ursule",
+  "Sabrina",
+  "Hécate",
+  "Esméralda",
+  "Ondine",
+  "Rosalie"
+ ],
+ "helperNames": [
+  "Crapoti",
+  "Rainette",
+  "Bulle",
+  "Cresson",
+  "Nénuphar",
+  "Gribouille",
+  "Têtard",
+  "Pistache",
+  "Mousse",
+  "Coâ"
+ ],
+ "words": {
+  "persona": "une sorcière qui touille ses potions de code",
+  "helper": "grenouille apprentie",
+  "placeOf": "l'antre {project}",
+  "lines": {
+   "morning": [
+    "Bonjour ! Le chaudron est chaud.",
+    "Une potion pour bien commencer ?"
+   ],
+   "afternoon": [
+    "Re-bonjour !",
+    "Le grimoire est ouvert."
+   ],
+   "evening": [
+    "Bonsoir…",
+    "Une dernière potion ?"
+   ],
+   "answer": [
+    "Abracadabra !",
+    "Et hop, potion prête.",
+    "Ça mijote bien.",
+    "Au suivant !"
+   ],
+   "failed": [
+    "Pouah, ça a tourné…",
+    "Le sort a raté.",
+    "On remue encore."
+   ],
+   "pass": [
+    "La potion est verte !",
+    "Sortilège réussi."
+   ],
+   "crack": [
+    "La potion a tourné…",
+    "Encore une fiole perdue."
+   ],
+   "commit": [
+    "Mis en fiole !"
+   ],
+   "push": [
+    "Vole, hibou !",
+    "Livré par hibou."
+   ],
+   "cold": [
+    "Plus de bois sous le chaudron…"
+   ],
+   "tea": [
+    "Une infusion ?",
+    "Une pause tisane ?"
+   ],
+   "night": [
+    "Minuit, l’heure des sorts…",
+    "La lune est haute."
+   ]
+  },
+  "labels": {
+   "running": "touille le chaudron",
+   "review": "lit le grimoire",
+   "quench": "goûte la potion",
+   "ship": "met en fiole",
+   "sweep": "passe le balai"
+  },
+  "atWork": {
+   "forge": "touille le chaudron",
+   "build": "attise le feu",
+   "test": "goûte la potion",
+   "shell": "lance un sort",
+   "git": "met en fiole",
+   "web": "consulte la boule de cristal",
+   "agent": "envoie une grenouille",
+   "mcp": "trace une rune"
+  },
+  "moods": {
+   "cold": "à court de bois",
+   "hourglass": "surveille le sablier",
+   "duck": "parle au crapaud"
+  },
+  "details": {
+   "pass": "la potion est bonne",
+   "crack": "la potion a tourné"
+  },
+  "notes": {
+   "petIn": "un chat noir entre dans l'antre",
+   "petFrom": "le chat noir arrive de chez {who}",
+   "petFromPlace": "le chat noir arrive de l'antre {project}",
+   "petTo": "le chat noir part chez {who}",
+   "newsDone": "hibou : {who} a fini sa tâche",
+   "newsWaiting": "hibou : {who} attend ton feu vert",
+   "feast": "sabbat à l'antre : tout le monde est invité",
+   "feastOut": "part au sabbat de {who}",
+   "gifts": {
+    "coin": "une pièce",
+    "cookie": "un biscuit",
+    "ore": "une plume de corbeau"
+   },
+   "lunch": "une soupe à midi et demi",
+   "lantern": "allume la bougie",
+   "testsPass": "potion réussie : tests verts ({cmd})",
+   "testsFail": "potion tournée : tests rouges ({cmd})",
+   "push": "fiole envoyée par hibou (push)",
+   "commit": "fiole scellée (commit)",
+   "masterpiece": "grand œuvre ! le calice d'or rejoint l'étagère",
+   "cold": "plus de bois : limite atteinte"
+  },
+  "teaToast": "deux heures de sorts, une infusion ?",
+  "today": {
+   "edits": "{n} ingrédients",
+   "tests": "{n} potions goûtées",
+   "builds": "{n} feux",
+   "shells": "{n} sorts",
+   "time": "{t} au chaudron"
+  },
+  "helpers": "grenouilles {n}"
+ }
+}

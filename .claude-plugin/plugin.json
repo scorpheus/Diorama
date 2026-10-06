@@ -1,0 +1,62 @@
+{
+  "name": "diorama",
+  "version": "1.0.0",
+  "description": "Un diorama vivant en pixel art au-dessus du prompt : un personnage qui suit le travail de Claude (réflexion, outils, tests, sous-agents, autres sessions), avec les jauges de contexte et de limites. Thème par défaut : la forge de Scorpheus ; un thème à soi tient dans un fichier JSON.",
+  "author": {
+    "name": "Scorpheus",
+    "url": "https://github.com/scorpheus"
+  },
+  "homepage": "https://github.com/scorpheus/Diorama",
+  "repository": "https://github.com/scorpheus/Diorama",
+  "license": "MIT",
+  "keywords": [
+    "mod",
+    "pixel-art",
+    "status",
+    "animation",
+    "theme"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "theme": {
+      "type": "string",
+      "title": "Thème",
+      "description": "forge (par défaut), le nom d'un thème livré (sorciere), ou le chemin absolu d'un fichier theme.json à soi. Un fichier modifié se redessine aussitôt.",
+      "default": "forge"
+    },
+    "decor": {
+      "type": "string",
+      "title": "Largeur de la scène",
+      "description": "auto : la plus large qui tient ; complet : toute la scène ; compact : sans le côté gauche ; seul : le personnage seul (selon ce que le thème propose)",
+      "default": "auto",
+      "options": [
+        "auto",
+        "complet",
+        "compact",
+        "seul"
+      ]
+    },
+    "repliques": {
+      "type": "string",
+      "title": "Répliques du personnage",
+      "description": "local : phrases toutes prêtes, sans coût ; haiku : Haiku écrit sa réplique de fin de tour (quelques fractions de centime) ; aucune : il se tait",
+      "default": "local",
+      "options": [
+        "local",
+        "haiku",
+        "aucune"
+      ]
+    },
+    "statut": {
+      "type": "string",
+      "title": "Statut de la tâche",
+      "description": "haiku : Haiku résume la tâche en cours, où elle en est et ce qui reste (un appel par demande, un toutes les 2 min de travail au plus, un en fin de tour ; quelques centaines de jetons chacun) ; simple : sans modèle, le début de la demande et la dernière action ; aucun : rien",
+      "default": "haiku",
+      "options": [
+        "haiku",
+        "simple",
+        "aucun"
+      ]
+    }
+  }
+}
