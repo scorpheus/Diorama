@@ -1293,6 +1293,7 @@ export const register: Register = (on, options) => {
   const themeWanted = String(options.theme ?? 'forge').trim() || 'forge'
   const voice = String(options.repliques ?? 'local')
   const statusMode = String(options.statut ?? 'haiku')
+  const lit = String(options.lumiere ?? 'oui') !== 'non'
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1399,7 +1400,7 @@ export const register: Register = (on, options) => {
         }
         if (!anim.bandId || !anim.crop) return
         // a band not mounted (a survey, a narrow terminal) answers deny or rejects: nothing to do
-        $.ui.blit({ requestId: anim.bandId, key: KEY, cells: encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow())) })
+        $.ui.blit({ requestId: anim.bandId, key: KEY, cells: encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit)) })
           .catch(() => undefined)
       }),
       // the countdowns move by the minute; the local time is set again
@@ -1662,13 +1663,15 @@ export const register: Register = (on, options) => {
 
     const gauge = (name: string, p: number | undefined, tail: string, key: string, colour?: string) => {
       if (p === undefined) return null
-      const filled = Math.round((clamp(p, 0, 100) / 100) * barWidth)
+      // two steps a column: a whole stroke, then a half one ('╸') where the level ends
+      const halves = Math.round((clamp(p, 0, 100) / 100) * barWidth * 2)
+      const filled = Math.floor(halves / 2), half = halves % 2
       const c = colour ?? tone(p)
       return (
         <Text key={key} wrap="truncate">
           <Text dimColor>{name.padEnd(4)}</Text>
-          <Text color={c}>{'━'.repeat(filled)}</Text>
-          <Text color="#3a3e4c">{'━'.repeat(barWidth - filled)}</Text>
+          <Text color={c}>{'━'.repeat(filled) + (half ? '╸' : '')}</Text>
+          <Text color="#3a3e4c">{'━'.repeat(barWidth - filled - half)}</Text>
           <Text color={c} bold>{` ${String(Math.round(p)).padStart(3)}%`}</Text>
           <Text dimColor>{tail}</Text>
         </Text>
@@ -1780,7 +1783,7 @@ export const register: Register = (on, options) => {
     const { Raster } = $.ui.resolve(e)
     return (
       <Box flexDirection="row" gap={2}>
-        <Raster key={KEY} columns={cropWidth(crop)} rows={ROWS} cells={encode(theme.frame(crop, anim.current, poseTick(), worldNow()))} />
+        <Raster key={KEY} columns={cropWidth(crop)} rows={ROWS} cells={encode(theme.frame(crop, anim.current, poseTick(), worldNow(), lit))} />
         {panel}
       </Box>
     )

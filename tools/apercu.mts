@@ -82,7 +82,13 @@ SCENES.forEach(([, activity, tick, world], n) => {
       const i = (r * fw + x) * 3
       const chr = words[i], fg = words[i + 1] ?? 0, bg = words[i + 2] ?? 0
       for (let half = 0; half < 2; half++) {
-        const c = chr === 0x2580 ? (half === 0 ? fg : bg) : chr === 0x2584 ? (half === 1 ? fg : bg) : bg
+        // finer glyphs, at a pixel's scale: a half shows the ink when it holds any of it
+        const braille = chr >= 0x2800 && chr <= 0x28ff ? chr - 0x2800 : -1
+        const quads = ' ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█'.indexOf(String.fromCodePoint(chr ?? 0x20))
+        const inked = braille >= 0 ? (braille & (half === 0 ? 0x1b : 0xe4)) !== 0
+          : quads > 0 ? (quads & (half === 0 ? 3 : 12)) !== 0
+          : chr !== 0x20 && chr !== 0x2580 && chr !== 0x2584
+        const c = chr === 0x2580 ? (half === 0 ? fg : bg) : chr === 0x2584 ? (half === 1 ? fg : bg) : inked ? fg : bg
         if (c === 0x01000000) continue
         const p = ((oy + 2 * r + half) * W + ox + x) * 3
         pixels[p] = (c >> 16) & 255; pixels[p + 1] = (c >> 8) & 255; pixels[p + 2] = c & 255

@@ -563,7 +563,7 @@ function cellsOf(b64: string): Uint32Array {
   return new Uint32Array(bin.buffer)
 }
 
-/** Columns in a band of rows where a colour shows, in a frame `cols` wide. */
+/** Columns in a band of rows where a colour shows, in a frame `cols` wide (drawn without light: `lumiere: 'non'`). */
 function columnsWith(b64: string, cols: number, colour: number, rows: readonly number[], below = cols): number[] {
   const w = cellsOf(b64)
   const found: number[] = []
@@ -579,7 +579,7 @@ function columnsWith(b64: string, cols: number, colour: number, rows: readonly n
 const CREST = 0x1f4f9e // his blue crest: only Scorpheus wears it left of the banner
 const VIOLET = 0xb07cff // a general-purpose cub's scarf
 
-test('idle, Scorpheus roams the workshop', { timeoutMs: 60_000 }, async ($, on) => {
+test('idle, Scorpheus roams the workshop', { options: { lumiere: 'non' }, timeoutMs: 60_000 }, async ($, on) => {
   const { clock } = await start($, on)
   await clock.advance(3100) // past the greeting
   blits.length = 0
@@ -588,7 +588,7 @@ test('idle, Scorpheus roams the workshop', { timeoutMs: 60_000 }, async ($, on) 
   expect(where.size).toBeGreaterThanOrEqual(3) // he went somewhere, and passed through on his way
 })
 
-test('a subagent comes in as a cub, and walks out when done', { timeoutMs: 30_000 }, async ($, on) => {
+test('a subagent comes in as a cub, and walks out when done', { options: { lumiere: 'non' }, timeoutMs: 30_000 }, async ($, on) => {
   const { clock } = await start($, on)
   const cubShows = () => columnsWith(blits[blits.length - 1] ?? '', 72, VIOLET, [12, 13, 14, 15]).length > 0
   await $.agent.spawn(spawned('c1', 'general-purpose', 'tranche', true))
@@ -629,7 +629,7 @@ test("Haiku dresses the session from the conversation's start, and the others se
   expect(presence['sess-other']).toBeDefined() // the neighbour is kept
 })
 
-test('a resumed session keeps its look', async ($, on) => {
+test('a resumed session keeps its look', { options: { lumiere: 'non' } }, async ($, on) => {
   const { ui } = await start($, on, answerTools, {
     presence: { 'sess-1': { project: 'vehigraph', cape: 'prune', accessory: 'bandeau', seen: Date.UTC(2026, 9, 2, 11, 0) } },
   })
@@ -669,7 +669,7 @@ test('two sessions started together are not in step', () => {
 const START = Date.UTC(2026, 9, 2, 12, 0)
 const crestColumns = (b: string) => columnsWith(b, 72, CREST, [3, 4, 5])
 
-test('idle, he goes to visit another forge, and work calls him home', { timeoutMs: 120_000 }, async ($, on) => {
+test('idle, he goes to visit another forge, and work calls him home', { options: { lumiere: 'non' }, timeoutMs: 120_000 }, async ($, on) => {
   const neighbour = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
   const { ui, clock } = await start($, on, answerTools, { presence: { 'sess-dev': neighbour } })
   const label = async () => (await ui.find({ text: /^ · / }))?.text
@@ -699,7 +699,7 @@ test('idle, he goes to visit another forge, and work calls him home', { timeoutM
   expect(await ui.find({ text: /de retour de chez Dev/ })).toBeDefined()
 })
 
-test('a guest from another forge comes into the yard, is greeted, and is walked out', { timeoutMs: 60_000 }, async ($, on) => {
+test('a guest from another forge comes into the yard, is greeted, and is walked out', { options: { lumiere: 'non' }, timeoutMs: 60_000 }, async ($, on) => {
   const { ui, clock } = await start($, on, answerTools, {
     'visit:sess-dev': { host: 'sess-1', until: START + 60_000, project: 'Dev', cape: 'nuit', accessory: 'lunettes', phase: 'there' },
   })
@@ -850,7 +850,7 @@ test('invited to a banquet, he goes', async ($, on) => {
   expect(await ui.find({ text: /part au banquet de la forge Dev/ })).toBeDefined()
 })
 
-test('the cat leaves the roof when the furnace roars', async ($, on) => {
+test('the cat leaves the roof when the furnace roars', { options: { lumiere: 'non' } }, async ($, on) => {
   let during: string | undefined
   let tick: (() => Promise<void>) | undefined
   const { clock } = await start($, on, async e => {
@@ -965,6 +965,38 @@ test('a cat standing still does not tread the air', async () => {
   expect(at(5, 1)).not.toBe(at(5, 0)) // walking: its legs move with its steps
 })
 
+test('the forge is lit: the day through the window, a darker night, the palette untouched without light', () => {
+  // the anvil's face (row 26, steel light), under the window, clear of the hearth
+  const steel = (hour: number, lit = true) => frame('full', 'idle', 0, { ...CALM, hour }, lit)[(13 * 72 + 22) * 3 + 1] ?? 0
+  const bright = (c: number) => (c >> 16) + ((c >> 8) & 255) + (c & 255)
+  expect(steel(12, false)).toBe(0x8a90a0) // without light: the palette's own steel
+  expect(steel(12)).not.toBe(0x8a90a0) // lit, it is the light's
+  expect(bright(steel(23))).toBeLessThan(bright(steel(12))) // and darker by night
+})
+
+test('the light shows the wall behind the forge, never the yard', () => {
+  const night = { ...CALM, hour: 22, lanternLit: true }
+  const cells = frame('full', 'idle', 0, night)
+  const clear = (x: number, r: number) => cells[(r * 72 + x) * 3] === 0x20 && cells[(r * 72 + x) * 3 + 2] === 0x01000000
+  expect(clear(8, 1)).toBe(false) // beside the lantern, its light on the wall
+  expect([...Array(72 - 54).keys()].every(i => clear(54 + i, 0))).toBe(true) // the sky over the yard stays the terminal's
+  const flat = frame('full', 'idle', 0, night, false)
+  expect(flat[(1 * 72 + 8) * 3]).toBe(0x20) // without light, no wall
+})
+
+test('the rack\'s rail keeps its colour while the fire wavers and the hammer flashes', () => {
+  // the rail is under the rack's first cell row; above the hearth's hood, out of the blow's reach
+  for (const x of [20, 24, 28]) {
+    const tints = new Set<number>()
+    for (let t = 0; t < 64; t++) {
+      const cells = frame('full', 'running', t, { ...CALM, hour: 15, effort: 2, flavor: 'forge', rack: ['sword'], clock: 100 + t })
+      const i = (5 * 72 + x) * 3 // the rail is the cell's lower pixel
+      tints.add((cells[i] === 0x2584 ? cells[i + 1] : cells[i + 2]) ?? 0)
+    }
+    expect(tints.size).toBeLessThanOrEqual(2)
+  }
+})
+
 test('his boots keep step with the ground as he walks', async () => {
   // the right boot, planted, under the same columns while he walks three pixels right over it
   const boots = (x: number) => {
@@ -990,7 +1022,7 @@ test('he dreams, once a conversation, of what it is about', { timeoutMs: 120_000
   expect(asked).toBe(1)
 })
 
-test('a long turn ending with green tests forges the masterpiece', { timeoutMs: 120_000 }, async ($, on) => {
+test('a long turn ending with green tests forges the masterpiece', { options: { lumiere: 'non' }, timeoutMs: 120_000 }, async ($, on) => {
   const { ui, clock } = await start($, on)
   await $.prompt.submit(typed('la grande refonte'))
   for (let i = 0; i < 4; i++) await clock.advance(4 * 60 * 1000) // sixteen minutes of work
@@ -1003,7 +1035,7 @@ test('a long turn ending with green tests forges the masterpiece', { timeoutMs: 
 const GOLD_CAT = 0xc99a3c
 const catShows = (b: string) => columnsWith(b, 72, GOLD_CAT, [2, 3, 4, 13, 14, 15]).length > 0
 
-test('the machine has one cat: a forge without it never shows it', { timeoutMs: 60_000 }, async ($, on) => {
+test('the machine has one cat: a forge without it never shows it', { options: { lumiere: 'non' }, timeoutMs: 60_000 }, async ($, on) => {
   const holder = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
   const { clock } = await start($, on, answerTools, { presence: { 'sess-0': holder }, cat: { host: 'sess-0', since: START } })
   for (let i = 0; i < 3; i++) {
@@ -1014,7 +1046,7 @@ test('the machine has one cat: a forge without it never shows it', { timeoutMs: 
   expect(shelf.get('cat')).toMatchObject({ host: 'sess-0' })
 })
 
-test("nobody's cat, or its forge closed: the first forge takes it in", { timeoutMs: 60_000 }, async ($, on) => {
+test("nobody's cat, or its forge closed: the first forge takes it in", { options: { lumiere: 'non' }, timeoutMs: 60_000 }, async ($, on) => {
   const { ui, clock } = await start($, on, answerTools, { cat: { host: 'sess-closed', since: START - 3600_000 } })
   await clock.advance(16_000)
   expect(shelf.get('cat')).toMatchObject({ host: 'sess-1' })
@@ -1022,7 +1054,7 @@ test("nobody's cat, or its forge closed: the first forge takes it in", { timeout
   expect(catShows(blits[blits.length - 1] ?? '')).toBe(true)
 })
 
-test('after a while, the cat goes round to the next forge', { timeoutMs: 120_000 }, async ($, on) => {
+test('after a while, the cat goes round to the next forge', { options: { lumiere: 'non' }, timeoutMs: 120_000 }, async ($, on) => {
   const next = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
   const { ui, clock } = await start($, on, answerTools, {
     presence: { 'sess-2': next },

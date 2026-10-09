@@ -218,7 +218,8 @@ export type Theme = {
   /** Letter -> 0xRRGGBB. */
   palette: Readonly<Record<string, number>>
   /** The scene for a moment, as Raster cells. */
-  frame(crop: Crop, activity: Activity, tick: number, world: World): Uint32Array
+  /** `lit` false: the palette's own colours, whatever light the theme casts. */
+  frame(crop: Crop, activity: Activity, tick: number, world: World, lit?: boolean): Uint32Array
   /** Where a moment holds the character (pixels from home), or undefined: free to wander. */
   anchorOf(activity: Activity, world: World): number | undefined
   /** Where things stand and go, pixels from the character's home spot. */

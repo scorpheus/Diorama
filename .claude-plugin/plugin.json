@@ -57,6 +57,16 @@
         "simple",
         "aucun"
       ]
+    },
+    "lumiere": {
+      "type": "string",
+      "title": "Lumière",
+      "description": "oui : la forge s'éclaire (foyer, lanterne, fenêtre, coups de marteau, ombres sur le forgeron, mur révélé par la lumière) ; non : les couleurs de la palette, à plat",
+      "default": "oui",
+      "options": [
+        "oui",
+        "non"
+      ]
     }
   }
 }

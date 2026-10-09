@@ -10,9 +10,9 @@
 // Every grid is one letter per pixel, '.' transparent; each letter must be in PALETTE.
 
 import type { Activity } from '../../types'
-import { BASE_PALETTE, BASE_VARIANTS, CLAWS, GIFTS, PUFF, RAVEN, SAYING, SPARKS, BUBBLE, THOUGHT, Z_BIG, Z_SMALL, drawDream, drawSky, drawSparks, feast, rareFor, season } from '../props.ts'
-import { erase, line, put, rand, stamp, toCells } from '../pixels.ts'
-import type { Grid } from '../pixels.ts'
+import { BASE_PALETTE, BASE_VARIANTS, CLAWS, GIFTS, PUFF, RAVEN, SAYING, SPARKS, BUBBLE, THOUGHT, drawDream, drawSky, drawSparks, drawZzz, feast, rareFor, season } from '../props.ts'
+import { erase, glyph, line, put, quad, rand, stamp, toCells } from '../pixels.ts'
+import type { Grid, Light } from '../pixels.ts'
 import { CALM } from '../world.ts'
 import type { Crop, Cub, Dream, Guest, Theme, Weapon, World } from '../world.ts'
 import { FORGE_WORDS } from './forge-words.ts'
@@ -98,10 +98,15 @@ const BODY = [
 // Seated on his stool: the cloak down to the pouches, then folded legs.
 const BODY_SEATED = [...BODY.slice(0, 7), '..kwwwwkkwwwwk..']
 
-// The tail, white with the blue band and the gold stripe; two sways.
+// The tail, white with the blue band and the gold stripe; a sway in four beats:
+// upright, to the right, upright, to the left.
+const TAIL_FOOT = ['.kwyBwk', 'kwwyBwk', 'kwwBbwk', '.kwbwk.', '.kwwk..', '..kk...']
+const TAIL_UP = ['....kk.', '...kwwk', '..kwbwk', '..kwBbk', '.kwwBbk', ...TAIL_FOOT]
 const TAIL = [
-  ['....kk.', '...kwwk', '..kwbwk', '..kwBbk', '.kwwBbk', '.kwyBwk', 'kwwyBwk', 'kwwBbwk', '.kwbwk.', '.kwwk..', '..kk...'],
-  ['.....kk', '....kwk', '...kwbk', '..kwBbk', '.kwwBbk', '.kwyBwk', 'kwwyBwk', 'kwwBbwk', '.kwbwk.', '.kwwk..', '..kk...'],
+  TAIL_UP,
+  ['.....kk', '....kwk', '...kwbk', '..kwBbk', '.kwwBbk', ...TAIL_FOOT],
+  TAIL_UP,
+  ['..kk...', '.kwwk..', '.kwbwk.', '..kwBbk', '.kwwBbk', ...TAIL_FOOT],
 ]
 
 const FURNACE = [
@@ -161,10 +166,16 @@ const SCRAPS: ReadonlyArray<readonly [number, number, string]> = [
   [17, 30, 'A'], [30, 31, 'r'], [27, 30, 'E'], [14, 31, 'a'], [16, 30, 'r'], [28, 30, 'a'],
 ]
 
-// The session's gold, bottom first: one coin per step of the cost's logarithm.
+// The session's gold, bottom first, in quarter blocks (two across a pixel): the
+// heap grows a step per step of the cost's logarithm, eleven steps in all.
 const COINS: ReadonlyArray<readonly [number, number]> = [
-  [49, 31], [50, 31], [51, 31], [52, 31], [53, 31], [50, 30], [51, 30], [52, 30], [51, 29], [52, 29], [51, 28],
+  ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => [98 + i, 31] as const),
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map(i => [98 + i, 30] as const),
+  ...[2, 3, 4, 5, 6, 7].map(i => [98 + i, 29] as const),
+  ...[3, 4, 5, 6].map(i => [98 + i, 28] as const),
+  [102, 27], [103, 27],
 ]
+const COIN_STEPS = 11
 
 // The workshop's window onto the world, between the bell and the furnace.
 const WINDOW = { x: 13, y: 0, w: 12, h: 10 } // frame included; panes x 14..23, y 1..8
@@ -222,7 +233,8 @@ export type Pose = {
   mouth: Mouth
   worried?: boolean
   focused?: boolean // brows drawn down: at the anvil, the bellows, the blade
-  ear?: boolean
+  ear?: boolean // the left ear flicks
+  earR?: boolean // the right one
   look?: number // head turn: -1 toward the forge .. +1 toward the words
   headDy?: number // head bob, pixels down
   dy?: number // whole Scorpheus, pixels down (negative: in the air)
@@ -230,7 +242,7 @@ export type Pose = {
   tap?: boolean // right foot up: tapping
   left: LeftArm
   right: RightArm
-  tail: 0 | 1
+  tail: 0 | 1 | 2 | 3 // its beat in TAIL
   fire: number // 0 embers .. 4 roaring
   ingot: 'cold' | 'hot' | 'flash' | 'none'
   smokeEvery: number // ticks between puffs, 0 none
@@ -382,6 +394,7 @@ function drawRack(g: Grid, w: World) {
     put(g, x - 1, RACK.y + 5, 'y')
     put(g, x + 1, RACK.y + 5, 'y')
     if (w.clock % 20 < 3) put(g, x, RACK.y + 1 + (w.clock % 4), 'w')
+    fineWeapon(g, 'sword', x, 'Y', w.clock % 20 < 3 ? Math.floor((w.clock % 4) / 2) : undefined) // the day's swords guard over it
   }
   w.rack.slice(-RACK.slots.length).forEach((weapon, i, all) => {
     const x = RACK.slots[i] ?? 0
@@ -389,7 +402,29 @@ function drawRack(g: Grid, w: World) {
     const { shaft, side } = WEAPONS[weapon]
     ;[...shaft].forEach((ch, j) => put(g, x, RACK.y + 1 + j, hot && (ch === 'A' || ch === 'w') ? (j % 2 ? 'H' : 'Y') : ch))
     for (const [dx, dy, ch] of side) put(g, x + dx, RACK.y + 1 + dy, hot && ch === 'A' ? 'H' : ch)
+    fineWeapon(g, weapon, x, hot ? 'H' : 'A')
   })
+}
+
+// The rack's blades in box strokes over their pixels: a thin tip, the blade, a
+// guard across the grip; axes and maces keep their heads, on a thin haft.
+// The rows under the rail are three cells: RACK.y + 1 is a cell's top.
+function fineWeapon(g: Grid, weapon: Weapon, x: number, steel: string, glint?: number) {
+  const cy = (RACK.y + 1) / 2
+  const hilt = 'y'
+  if (weapon === 'sword') {
+    glyph(g, x, cy, '╽', glint === 0 ? 'w' : steel)
+    glyph(g, x, cy + 1, '┃', glint === 1 ? 'w' : steel === 'Y' ? 'y' : steel)
+    glyph(g, x, cy + 2, '╁', hilt)
+    glyph(g, x - 1, cy + 2, '╶', hilt)
+    glyph(g, x + 1, cy + 2, '╴', hilt)
+  } else if (weapon === 'dagger') {
+    glyph(g, x, cy + 1, '╽', steel)
+    glyph(g, x, cy + 2, '╁', hilt)
+  } else {
+    glyph(g, x, cy + 1, '│', 'r')
+    glyph(g, x, cy + 2, '│', 'r')
+  }
 }
 
 function drawBanner(g: Grid, b: NonNullable<World['banner']>, tick: number) {
@@ -597,17 +632,35 @@ function drawCubs(g: Grid, cubs: readonly Cub[], puddle = false) {
   })
 }
 
-function drawHourglasses(g: Grid, n: number, clock: number) {
-  for (let i = 0; i < Math.min(n, HOURGLASS_X.length); i++) {
-    const x = HOURGLASS_X[i] ?? 0, y = 18
-    const phase = (clock + i * 13) % 40 // the sand runs for 6 s, then he turns it
-    const top = phase < 14 ? 's' : 'k'
-    const bottom = phase > 26 ? 's' : 'k'
-    stamp(g, x, y, ['aaa', `k${top}k`, '.k.', 'k.k', `k${bottom}k`, 'aaa'])
-    if (phase < 38) put(g, x + 1, y + 2 + (phase % 2), 's') // the falling grain
-    if (phase >= 14) put(g, x + 1, y + 4, 's')
+/** A jutting corner loses its outer quarter: a step of half a pixel instead of a whole one. */
+function chamfer(g: Grid, cx: number, cy: number) {
+  const at = (x: number, y: number) => g[y]?.[x] ?? '.'
+  const top = at(cx, 2 * cy), bottom = at(cx, 2 * cy + 1)
+  const clear = (x: number) => at(x, 2 * cy) === '.' && at(x, 2 * cy + 1) === '.'
+  if (top === '.' && bottom !== '.') {
+    if (clear(cx - 1) && at(cx + 1, 2 * cy) !== '.') glyph(g, cx, cy, '▗', bottom)
+    else if (clear(cx + 1) && at(cx - 1, 2 * cy) !== '.') glyph(g, cx, cy, '▖', bottom)
+  } else if (top !== '.' && bottom === '.') {
+    if (clear(cx - 1) && at(cx + 1, 2 * cy + 1) !== '.') glyph(g, cx, cy, '▝', top)
+    else if (clear(cx + 1) && at(cx - 1, 2 * cy + 1) !== '.') glyph(g, cx, cy, '▘', top)
   }
 }
+
+function drawHourglasses(g: Grid, n: number, clock: number) {
+  for (let i = 0; i < Math.min(n, HOURGLASS_X.length); i++) {
+    // a thin lid, the glass in box strokes, the sand in eighths of a cell, the
+    // foot in pixels on the anvil: rows 18..23 are cells 9..11, the foot row 24
+    const x = HOURGLASS_X[i] ?? 0
+    const phase = (clock + i * 13) % 40 // the sand runs for 4.5 s, rests, then he turns it
+    const left = Math.round((1 - Math.min(1, phase / 30)) * 8)
+    for (let k = 0; k < 3; k++) { glyph(g, x + k, 9, '▁', 'A'); put(g, x + k, 24, 'a') }
+    glyph(g, x, 10, '╲', 'A'); glyph(g, x + 2, 10, '╱', 'A')
+    glyph(g, x, 11, '╱', 'A'); glyph(g, x + 2, 11, '╲', 'A')
+    glyph(g, x + 1, 10, SAND[left] ?? ' ', 's')
+    glyph(g, x + 1, 11, SAND[8 - left] ?? ' ', 's')
+  }
+}
+const SAND = [...' ▁▂▃▄▅▆▇█']
 
 function drawBell(g: Grid, age: number) {
   const swing = age < 18 ? [0, 1, 0, -1][age % 4] ?? 0 : 0
@@ -647,6 +700,7 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   for (let i = 0; i < logs; i++) put(g, MOUTH.x + i, LOGS_Y, i % 3 === 1 ? 'r' : 'R')
   const pile = world.fuel7d === undefined ? WOODPILE.length : Math.round(WOODPILE.length * (1 - Math.min(100, world.fuel7d) / 100))
   WOODPILE.slice(0, pile).forEach(([wx, wy], i) => put(g, wx, wy, i % 2 ? 'V' : 'r'))
+  for (let cy = 5; cy <= 6; cy++) for (let cx = 0; cx <= 3; cx++) chamfer(g, cx, cy) // the stack reads round, not stepped
   drawFire(g, world.exhausted ? 0 : p.fire, tick)
   drawSmoke(g, world.exhausted ? 0 : p.smokeEvery, tick)
   if (p.embers) drawEmbers(g, tick)
@@ -668,8 +722,9 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   }
   const scraps = p.sweep !== undefined ? 0 : Math.round(Math.max(0, world.ctx - 50) / 50 * SCRAPS.length)
   SCRAPS.slice(0, scraps).forEach(([sx, sy, ch]) => put(g, sx, sy, ch))
-  const coins = world.usd === undefined || world.usd <= 0 ? 0 : Math.min(COINS.length, 1 + Math.floor(Math.log2(1 + world.usd) * 2))
-  COINS.slice(0, coins).forEach(([cx, cy], i) => put(g, cx, cy, (i + Math.floor(clock / 10)) % 7 === 0 ? 'Y' : i % 2 ? 's' : 'y'))
+  const coins = world.usd === undefined || world.usd <= 0 ? 0 : Math.min(COIN_STEPS, 1 + Math.floor(Math.log2(1 + world.usd) * 2))
+  COINS.slice(0, Math.round((coins / COIN_STEPS) * COINS.length))
+    .forEach(([qx, qy], i) => quad(g, qx, qy, (i + Math.floor(clock / 10)) % 13 === 0 ? 'Y' : (qx + qy) % 3 ? 'y' : 's'))
   if (world.hourglasses > 0) drawHourglasses(g, world.hourglasses, clock)
   if (world.exhausted && world.hourglasses === 0) drawSlate(g, clock)
   if (world.duck) stamp(g, DUCK_AT.x, DUCK_AT.y, DUCK)
@@ -741,6 +796,10 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   if (p.ear) {
     const r0 = head[0], r1 = head[1], r2 = head[2]
     if (r0 && r1 && r2) { r0[1] = '.'; r1[0] = '.'; r1[1] = 'k'; r1[2] = 'k'; r2[1] = 'k'; r2[2] = 'w' }
+  }
+  if (p.earR) {
+    const r0 = head[0], r1 = head[1], r2 = head[2]
+    if (r0 && r1 && r2) { r0[14] = '.'; r1[15] = '.'; r1[14] = 'k'; r1[13] = 'k'; r2[14] = 'k'; r2[13] = 'w' }
   }
   const hy = y + (p.headDy ?? 0)
   stamp(g, x, hy, head.map(r => r.join('')))
@@ -878,12 +937,7 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   }
   // over his head, clear of the z's on his right: the narrowest scene (to x 54) holds it whole
   if (p.zzz && world.dream) drawDream(g, x + 2, Math.max(0, hy - 9), world.dream)
-  if (p.zzz) {
-    for (let i = 0; i < 2; i++) {
-      const a = (tick + i * 10) % 20
-      stamp(g, x + 15 + Math.floor(a / 4), hy + 1 - Math.floor(a / 3), i ? Z_SMALL : Z_BIG)
-    }
-  }
+  if (p.zzz) drawZzz(g, x + 15, hy + 1, tick)
   if (p.sparksAge !== undefined && p.sparksAge < 6) {
     drawSparks(g, p.sparksAge, Math.floor(tick / 8), p.sparkCount ?? 12, IMPACT.x + 1, IMPACT.y, pal)
   }
@@ -934,7 +988,8 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
 // --- the moments, one entry per 150 ms tick (t counts from the moment's start) --
 
 const at = <T>(list: readonly T[], i: number): T => list[((i % list.length) + list.length) % list.length] as T
-const sway = (t: number, every: number) => (Math.floor(t / every) % 2) as 0 | 1
+// the tail's four beats over two `every`s; too quick for four, it just flicks left and right
+const sway = (t: number, every: number) => (every >= 2 ? Math.floor((2 * t) / every) % 4 : t % 2) as 0 | 1 | 2 | 3
 
 // Idle runs a 24 s cycle: he watches the fire, glances at the words, scratches
 // an ear and stretches, breathing and wagging all along. With jobs in the
@@ -947,7 +1002,8 @@ function idle(t: number, w: World): Pose {
     eyes: blink ? 'blink' : 'open',
     mouth: 'none',
     look: within(16, 32) || within(88, 102) ? -1 : within(44, 54) ? 1 : 0,
-    ear: within(52, 54),
+    ear: within(52, 54) || within(110, 112),
+    earR: within(30, 32) || c === 100 || within(52, 54),
     headDy: c % 16 < 8 ? 0 : 1,
     left: 'rest', right: 'rest',
     tail: sway(t, within(90, 100) ? 2 : 6),
@@ -1179,9 +1235,99 @@ export function poseOf(activity: Activity, tick: number, world: World = CALM): P
 
 // --- to the terminal ---------------------------------------------------------------
 
-export function frame(crop: Crop, activity: Activity, tick: number, world: World = CALM): Uint32Array {
+export function frame(crop: Crop, activity: Activity, tick: number, world: World = CALM, lit = true): Uint32Array {
   const [x0, x1] = CROPS[crop]
-  return toCells(compose(poseOf(activity, tick, world), world, tick), PALETTE, x0, x1)
+  const p = poseOf(activity, tick, world)
+  return toCells(compose(p, world, tick), PALETTE, x0, x1, lit ? lightOf(p, world, tick, compose(p, world, tick, true)) : undefined)
+}
+
+// What gives light glows on its own: flames, embers, sparks, hot metal; the sky keeps its own.
+const GLOWS = new Set('YfFEsSH')
+
+const FLAT = new Set('knBb')
+/**
+ * Scorpheus in the round: along each row of his own pixels, the side toward the
+ * hearth (left) takes the light, the far side the shade, and what faces up a
+ * rim of light. His outline, his bubbles, his blue crest (his emblem) and his
+ * boots (a planted boot must not change as the other passes it) keep their colour.
+ */
+function modelOf(actor: Grid, w: World, p: Pose): (x: number, y: number) => number {
+  const sx = C.x + w.x, sy = C.y + (p.dy ?? 0) + (p.seated ? 2 : 0), boots = C.y + (p.dy ?? 0) + 24
+  const at = (x: number, y: number) => actor[y]?.[x] ?? '.'
+  const k = new Float32Array(SW * SH).fill(1)
+  for (let y = 0; y < SH; y++) {
+    for (let x0 = 0; x0 < SW; x0++) {
+      if (at(x0, y) === '.') continue
+      let x1 = x0
+      while (at(x1 + 1, y) !== '.') x1++
+      for (let x = x0; x <= x1; x++) {
+        const ch = at(x, y), up = at(x, y - 1)
+        if (FLAT.has(ch) || y >= boots || (x >= sx + 17 && y < sy + 12)) continue
+        k[y * SW + x] = 1.16 - (0.32 * (x - x0)) / Math.max(1, x1 - x0) + (up === '.' || up === 'k' ? 0.08 : 0)
+      }
+      x0 = x1
+    }
+  }
+  return (x, y) => (x >= 0 && x < SW ? k[y * SW + x] ?? 1 : 1)
+}
+
+// The wall behind the scene, dark stone: it shows only where a light falls on it.
+const WALL = [74, 62, 70] as const
+
+/** A noise that drifts rather than jumps: a flame that wavers, not a strobe. */
+const drift = (t: number, every: number, seed: number) => {
+  const i = Math.floor(t / every), f = (t % every) / every
+  return rand(i * 7 + seed) * (1 - f) + rand((i + 1) * 7 + seed) * f
+}
+
+type Lamp = { x: number; y: number; reach: number; up: number; down: number; rgb: readonly number[]; power: number }
+
+/**
+ * The forge's light. The room is dim by day, blue by night; the hearth lights
+ * forward and down (its hood stops what would rise), the lantern its corner, a
+ * blow its flash, the window the floor under it in the hour's colour. Where
+ * Scorpheus faces the fire he warms, where he turns from it he cools; and the
+ * wall behind shows where a light falls.
+ */
+function lightOf(p: Pose, w: World, tick: number, actor: Grid): Light {
+  const night = w.hour < 6 || w.hour >= 21
+  const dusk = !night && (w.hour < 8 || w.hour >= 18)
+  const closed = w.hour >= 23 || w.hour < 6
+  const ambient = night ? [0.36, 0.4, 0.56] : dusk ? [0.74, 0.68, 0.7] : [0.8, 0.79, 0.77]
+  const fire = w.exhausted ? 0 : p.fire
+  const lamps: Lamp[] = [
+    { x: MOUTH.x + MOUTH.w / 2, y: MOUTH.y + MOUTH.h / 2, reach: 34, up: 2.2, down: 1, rgb: [1, 0.55, 0.25], power: 0.22 * fire * (0.85 + 0.15 * drift(tick, 3, 3)) },
+  ]
+  if (night && w.lanternLit) lamps.push({ x: LANTERN.x + 1, y: LANTERN.y + 4, reach: 13, up: 1, down: 1, rgb: [1, 0.75, 0.4], power: 0.55 * (0.92 + 0.08 * drift(tick, 4, 9)) })
+  if (p.sparksAge !== undefined && p.sparksAge < 3) lamps.push({ x: IMPACT.x, y: IMPACT.y, reach: 16, up: 1.6, down: 1, rgb: [1, 0.95, 0.7], power: 0.9 * (1 - p.sparksAge / 3) })
+  const sky = w.weather === 'storm' ? [0.55, 0.6, 0.7] : night ? [0.45, 0.55, 0.95] : dusk ? [1, 0.7, 0.45] : [1, 0.97, 0.88]
+  const daylight = closed ? 0 : w.weather === 'storm' ? 0.25 : night ? 0.3 : dusk ? 0.45 : 0.55
+  if (daylight > 0) lamps.push({ x: WINDOW.x + WINDOW.w / 2, y: WINDOW.y + WINDOW.h - 1, reach: 26, up: 3, down: 0.6, rgb: sky, power: daylight })
+  const gather = (x: number, y: number) => {
+    const k = [0, 0, 0]
+    for (const l of lamps) {
+      const f = Math.max(0, 1 - Math.hypot(x - l.x, (y - l.y) * (y < l.y ? l.up : l.down)) / l.reach) ** 2 * l.power
+      for (let j = 0; j < 3; j++) k[j] = (k[j] ?? 0) + f * (l.rgb[j] ?? 1)
+    }
+    return k
+  }
+  const shade = modelOf(actor, w, p)
+  const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
+  return (x, y, letter, c) => {
+    if (c === undefined) {
+      if (x >= YARD) return undefined // the yard is out of doors
+      const k = gather(x, y)
+      const r = byte(WALL[0] * (k[0] ?? 0)), g = byte(WALL[1] * (k[1] ?? 0)), b = byte(WALL[2] * (k[2] ?? 0))
+      return Math.max(r, g, b) < 12 ? undefined : (r << 16) | (g << 8) | b
+    }
+    if (GLOWS.has(letter) || (x >= WINDOW.x && x < WINDOW.x + WINDOW.w && y < WINDOW.y + WINDOW.h)) return c
+    const k = gather(x, y)
+    // his own pixels: warm toward the fire, cool away from it
+    const s = actor[y]?.[x] === letter ? shade(x, y) - 1 : 0
+    const m = s > 0 ? [1 + s * 1.25, 1 + s, 1 + s * 0.55] : [1 + s * 1.2, 1 + s, 1 + s * 0.3]
+    const lit = (v: number, j: number) => byte(v * ((ambient[j] ?? 1) + (k[j] ?? 0)) * (m[j] ?? 1))
+    return (lit(c >> 16, 0) << 16) | (lit((c >> 8) & 255, 1) << 8) | lit(c & 255, 2)
+  }
 }
 
 /** The forge as a theme: the engine's only way in. */

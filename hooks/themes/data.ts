@@ -7,7 +7,7 @@
 // with one, and refuses it rather than draw a broken scene.
 
 import type { Activity } from '../../types'
-import { BASE_PALETTE, BASE_VARIANTS, BUBBLE, CLAWS, GIFTS, PUFF, RAVEN, SAYING, SPARKS, THOUGHT, Z_BIG, Z_SMALL, drawDream, drawSky, drawSparks, rareFor } from '../props.ts'
+import { BASE_PALETTE, BASE_VARIANTS, BUBBLE, CLAWS, GIFTS, PUFF, RAVEN, SAYING, SPARKS, THOUGHT, drawDream, drawSky, drawSparks, drawZzz, rareFor } from '../props.ts'
 import { blank, mirror, put, rand, stamp, toCells } from '../pixels.ts'
 import type { Grid } from '../pixels.ts'
 import { CALM, CROP_ORDER } from '../world.ts'
@@ -453,10 +453,7 @@ export function dataTheme(spec: ThemeSpec, id: string): Theme {
       else if (w.speaking) stamp(g, bx, by + 1, SAYING)
       if (activity === 'sleep') {
         if (w.dream) drawDream(g, cx + Math.max(0, Math.floor((charW - 13) / 2)), Math.max(0, cy - 9), w.dream)
-        for (let i = 0; i < 2; i++) {
-          const a = (tick + i * 10) % 20
-          stamp(g, bx + Math.floor(a / 4), cy + 1 - Math.floor(a / 3), i ? Z_SMALL : Z_BIG)
-        }
+        drawZzz(g, bx, cy + 1, tick)
       }
       if (w.pressure >= 85 && activity !== 'sleep') {
         put(g, cx + charW, cy + 3 + (tick % 6 > 2 ? 1 : 0), 'c')

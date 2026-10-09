@@ -4,7 +4,7 @@
 
 import type { Flavor } from '../types'
 import type { Dream, World } from './world.ts'
-import { line, put, rand, stamp } from './pixels.ts'
+import { dot, glyph, line, put, quad, rand, stamp } from './pixels.ts'
 import type { Grid } from './pixels.ts'
 
 /** The default palette: every theme has these letters, and may change or add to them. */
@@ -186,8 +186,21 @@ export const SAYING = ['.kkkkk.', 'kwwwwwk', 'kwkwkwk', 'kwwwwwk', '.kkkkk.', 'k
 /** A gear turning in a cloud: thinking. */
 export const THOUGHT = [['.wwwww.', 'wwwwwww', 'ww.a.ww', 'wwaAaww', 'ww.a.ww', 'wwwwwww', '.wwwww.'],
   ['.wwwww.', 'wwwwwww', 'wwa.aww', 'ww.A.ww', 'wwa.aww', 'wwwwwww', '.wwwww.']]
-export const Z_BIG = ['uuuu', '..u.', '.u..', 'uuuu']
-export const Z_SMALL = ['uuu', '.u.', 'uuu']
+const Z_BIG = ['uuuu', '..u.', '.u..', 'uuuu']
+
+/**
+ * The z's of sleep, two at a time, rising from (x, y) and shrinking as they go:
+ * a Z in pixels, then the letters Z and z, then a z in braille (⠵), on clear cells only.
+ */
+export function drawZzz(g: Grid, x: number, y: number, tick: number) {
+  for (let i = 0; i < 2; i++) {
+    const a = (tick + i * 10) % 20
+    const zx = x + Math.floor(a / 4), zy = y - Math.floor(a / 3)
+    if (a < 6) { stamp(g, zx, zy - 1, Z_BIG); continue }
+    const cx = zx + 1, cy = Math.floor((zy + 1) / 2)
+    if (g[2 * cy]?.[cx] === '.' && g[2 * cy + 1]?.[cx] === '.') glyph(g, cx, cy, a < 11 ? 'Z' : a < 15 ? 'z' : '⠵', 'u')
+  }
+}
 /** A cloud of dust, in three ages: a failure, an arrival. */
 export const PUFF = [
   ['..xx..', '.xXXx.', '..xx..'],
@@ -281,17 +294,21 @@ export function drawSky(g: Grid, w: World, tick: number, panes: Panes, shutters:
       stamp(g, bx, by, ['YY', 'Yy'])
     }
   }
-  // each flake keeps its colour (`colours[i]`, cycling): a colour that changed
-  // every frame read as a blinking warning light, not a leaf
-  const fall = (colours: string, n: number, speed: number) => {
-    for (let i = 0; i < n; i++) {
-      const fx = ix + Math.floor(rand(i * 13) * iw) + Math.round(Math.sin((tick + i * 7) / 3))
-      const fy = iy + Math.floor((tick * speed + i * 5) % ih)
-      if (fx >= ix && fx < ix + iw) put(g, fx, fy, colours[i % colours.length] ?? 'w')
+  // What falls is finer than a pixel, laid on the sky alone (the frame drawn
+  // later hides it): rain in quarter blocks, snow and leaves in braille. Each
+  // flake keeps its colour: one that changed every frame read as a warning light.
+  const closed = shutters && (w.hour >= 23 || w.hour < 6)
+  const skyOf = 'cnxXBbfF'
+  const scale = (iw * ih) / 80 // as many as in the forge's ten by eight panes
+  if (w.weather === 'storm' && !closed) {
+    // rain: a streak a half pixel wide, two pixels long
+    for (let i = 0; i < Math.round(9 * scale); i++) {
+      const qx = 2 * (ix + rand(i * 13) * iw), qy = iy + ((tick * 1.5 + i * 5) % ih)
+      quad(g, qx, qy, 'c', skyOf)
+      quad(g, qx, qy - 1, 'c', skyOf)
     }
   }
   if (w.weather === 'storm') {
-    fall('c', 6, 1.5)
     if (tick % 23 < 2) {
       for (let j = 0; j < ih; j++) for (let i = 0; i < iw; i++) put(g, ix + i, iy + j, 'X')
       line(g, ix + 6, iy, ix + 4, iy + 3, 'Y')
@@ -308,9 +325,24 @@ export function drawSky(g: Grid, w: World, tick: number, panes: Panes, shutters:
     })
   }
   const sea = season(w)
-  if (sea === 'winter') fall('w', 5, 0.5)
-  if (sea === 'autumn') fall('Fy', 2, 0.35) // one russet leaf, one gold
-  if (sea === 'spring') fall('M', 2, 0.3)
+  if (sea === 'winter' && !closed) {
+    // snow in single dots, each flake at its own pace
+    for (let i = 0; i < Math.round(14 * scale); i++) {
+      const fx = ix + rand(i * 13) * iw + Math.sin((tick + i * 7) / 3) * 0.7
+      const fy = iy + ((tick * (0.35 + 0.3 * rand(i * 3)) + i * 5) % ih)
+      dot(g, 2 * fx, 2 * fy, 'w', skyOf)
+    }
+  }
+  if ((sea === 'autumn' || sea === 'spring') && !closed) {
+    // leaves (russet, gold, amber) or petals: three dots that tip over as they fall
+    const colours = sea === 'autumn' ? 'FyF' : 'MMi'
+    for (let i = 0; i < 3; i++) {
+      const fx = 2 * (ix + rand(i * 13) * iw + Math.sin((tick + i * 7) / 3))
+      const fy = 2 * (iy + ((tick * (sea === 'autumn' ? 0.35 : 0.3) + i * 5) % ih))
+      const shape = (Math.floor(tick / 3) + i) % 2 ? [[0, 0], [1, 1], [2, 1]] : [[0, 1], [1, 0], [2, 0]]
+      for (const [dx = 0, dy = 0] of shape) dot(g, fx + dx, fy + dy, colours[i] ?? 'F', skyOf)
+    }
+  }
   if (feast(w) === 'newyear' && night) drawSparks(g, tick % 6, Math.floor(tick / 6), 6, ix + 3 + (Math.floor(tick / 6) % 5), iy + 3, ['Y', 'M', 's', 'b'])
   if (w.rare?.kind === 'star') {
     // a shooting star crosses the panes, its trail behind it
