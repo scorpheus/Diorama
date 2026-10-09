@@ -13,7 +13,7 @@ import type { Act, Activity, Crew, Day, Experience, Flavor, Gauge, Job, Status, 
 import { DREAM_HINTS, DREAMS } from './props.ts'
 import { forge } from './themes/forge.ts'
 import { themeFile, themeFrom } from './themes/load.ts'
-import { CROP_ORDER, PERSONALITIES, fill } from './world.ts'
+import { CROP_ORDER, PERSONALITIES, fill, pace, wander } from './world.ts'
 import type { Crop, Cub, Dream, Guest, Lexicon, Personality, Theme, Weapon, World } from './world.ts'
 
 const usage = atom({ plugin: 'diorama', key: 'usage' } as const, null)
@@ -657,9 +657,9 @@ function cubsNow(): Cub[] {
 }
 
 /**
- * Where he heads next. A moment with a station holds him there; otherwise
- * idle he roams between his favourite spots, thinking he paces, sweeping he
- * sweeps the floor end to end, and the rest of the time he stays where he is.
+ * Where he heads next. A trip takes him out and home; a moment with a station
+ * holds him there; a free one sends him about its own way (wander, in world.ts),
+ * and the rest of the time he stays where he is.
  */
 function steer() {
   const anchor = theme.anchorOf(anim.current, worldNow())
@@ -671,22 +671,10 @@ function steer() {
   } else if (anchor !== undefined) {
     anim.target = anchor
   } else if (anim.x === anim.target && anim.clock >= anim.restUntil) {
-    if (anim.current === 'idle') {
-      const roll = anim.clock + anim.phase
-      anim.target = idleSpots[Math.floor(chance(roll) * idleSpots.length)] ?? 0
-      anim.restUntil = anim.clock + 80 + Math.floor(chance(roll * 7) * 120) // 12 to 30 s
-    } else if (anim.current === 'thinking') {
-      anim.target = anim.x <= -4 ? 3 : -6
-      anim.restUntil = anim.clock + 10
-    } else if (anim.current === 'sweep') {
-      anim.target = anim.x <= -8 ? 4 : -10
-      anim.restUntil = anim.clock + 2
-    }
+    Object.assign(anim, wander(anim.current, anim.x, anim.clock, anim.clock + anim.phase, idleSpots))
   }
   anim.target = Math.max(roam.min, Math.min(trip ? offstage : roam.max, anim.target))
-  // a pixel a tick, half that when he paces deep in thought
-  const slow = anim.current === 'thinking' && anim.clock % 2 === 1
-  if (anim.x !== anim.target && !slow) anim.x += anim.x < anim.target ? 1 : -1
+  anim.x = pace(anim.current, anim.x, anim.target, anim.clock)
   if (trip?.phase === 'back' && anim.x === 0) {
     anim.trip = undefined // home
     anim.lastTrip = anim.clock

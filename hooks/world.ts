@@ -7,6 +7,7 @@
 // read by themes/data.ts. Nothing in the engine knows what a forge is.
 
 import type { Activity, Flavor } from '../types'
+import { rand } from './pixels.ts'
 
 /** Horizontal windows over the scene, widest first: the band shows the widest that fits. */
 export type Crop = 'full' | 'compact' | 'solo'
@@ -127,6 +128,37 @@ export type Dream =
   | 'voiture' | 'fusee' | 'bug' | 'circuit' | 'livre' | 'montagne' | 'poisson' | 'etoile' | 'gateau' | 'dragon'
   | 'drapeau' | 'carburant' | 'cle' | 'ecran' | 'musique' | 'base' | 'reseau' | 'manette' | 'graphique' | 'photo'
   | 'carte' | 'maison' | 'horloge' | 'cadenas' | 'nuage' | 'ampoule' | 'engrenage' | 'robot' | 'plante' | 'cafe'
+
+/**
+ * The moments the engine walks the character in, its own way (wander below):
+ * idle he strolls to his favourite spots, thinking he paces, sweeping he goes
+ * along the floor. Walking, a theme shows its walk instead of the moment's pose,
+ * unless the moment draws its own steps.
+ */
+export const ROAMING: readonly Activity[] = ['idle', 'thinking', 'sweep']
+
+/**
+ * Where a free moment sends him next, once he has arrived and rested: idle one
+ * of his favourite spots (`roll` varies them from a session to the next),
+ * thinking he paces, sweeping he goes along the floor toward the yard, sends
+ * the pile out with a last stroke or two, and walks back for another pass.
+ * Unchanged for a moment that does not roam. Keep ROAMING in step with it.
+ */
+export function wander(activity: Activity, x: number, clock: number, roll: number, idleSpots: readonly number[]): { target: number; restUntil: number } | undefined {
+  switch (activity) {
+    case 'idle': return { target: idleSpots[Math.floor(rand(roll) * idleSpots.length)] ?? 0, restUntil: clock + 80 + Math.floor(rand(roll * 7) * 120) } // 12 to 30 s
+    case 'thinking': return { target: x <= -4 ? 3 : -6, restUntil: clock + 10 }
+    case 'sweep': return { target: x <= -8 ? -3 : -10, restUntil: clock + (x <= -8 ? 2 : 16) }
+    default: return undefined
+  }
+}
+
+/** His next x on the way to `target`: a pixel a tick, half that when he paces deep in thought or sweeps his way along. */
+export function pace(activity: Activity, x: number, target: number, clock: number): number {
+  const sweeping = activity === 'sweep' && target > x
+  const slow = (activity === 'thinking' || sweeping) && clock % 2 === 1
+  return x === target || slow ? x : x + (x < target ? 1 : -1)
+}
 
 export const CALM: World = {
   flavor: 'forge', pressure: 0, ctx: 0, apprentices: [], hourglasses: 0, turnTicks: 0, clock: 0,

@@ -18,7 +18,8 @@ type Rows = readonly string[]
 type Frames = readonly Rows[]
 type Point = readonly [number, number]
 type PoseName = Activity | 'walk'
-type PoseSpec = Frames | { frames: Frames; every?: number; at?: Point }
+// `walk`: the moment's own steps, when it walks him and its prop must stay in hand (a broom...)
+type PoseSpec = Frames | { frames: Frames; every?: number; at?: Point; walk?: Frames }
 
 type Effect =
   | { type: 'fire'; at: Point; size: Point; colors?: readonly string[] }
@@ -61,7 +62,7 @@ export type ThemeSpec = {
   words?: Partial<{ [K in keyof Lexicon]: Lexicon[K] extends string ? string : Partial<Lexicon[K]> }>
 }
 
-const ACTIVITIES: readonly Activity[] = ['idle', 'thinking', 'running', 'review', 'waiting', 'failed', 'jumping', 'waving', 'quench', 'ship', 'sweep', 'sleep', 'waking', 'away']
+export const ACTIVITIES: readonly Activity[] = ['idle', 'thinking', 'running', 'review', 'waiting', 'failed', 'jumping', 'waving', 'quench', 'ship', 'sweep', 'sleep', 'waking', 'away']
 
 /** The pose a moment falls back to when the theme did not draw its own. */
 const FALLBACK: Record<Activity, readonly PoseName[]> = {
@@ -96,7 +97,7 @@ const TROPHY: Record<Weapon, 'tests' | 'builds' | 'short' | 'other'> = { sword: 
 const DEFAULT_NAMES = ['Ada', 'Alan', 'Grace', 'Linus', 'Margaret', 'Dennis', 'Barbara', 'Ken', 'Hedy', 'Edsger', 'Frances', 'Niklaus']
 const DEFAULT_HELPER_NAMES = ['Pip', 'Bip', 'Zou', 'Tic', 'Tac', 'Lou', 'Mo', 'Kiwi', 'Pixel', 'Bulle', 'Nano', 'Plume']
 
-type Pose = { frames: Frames; every?: number; at?: Point }
+type Pose = { frames: Frames; every?: number; at?: Point; walk?: Frames }
 const posesOf = (p: PoseSpec | undefined): Pose | undefined =>
   p === undefined ? undefined : Array.isArray(p) ? { frames: p as Frames } : (p as Pose)
 
@@ -200,6 +201,10 @@ export function checkTheme(raw: unknown): string[] {
       }
       const pose = posesOf(p as PoseSpec)
       if (pose) frames(`character.poses.${name}`, pose.frames)
+      if (pose?.walk !== undefined) {
+        if (name === 'walk') errors.push("character.poses.walk.walk : la marche n'a pas de marche à elle ; « walk » se met dans la pose d'un moment")
+        else frames(`character.poses.${name}.walk`, pose.walk)
+      }
       if (pose?.at !== undefined) point(`character.poses.${name}.at`, pose.at)
     }
     if (ch.recolor && (!Array.isArray(ch.recolor) || ch.recolor.length !== 2)) errors.push('character.recolor : deux lettres, [sombre, claire]')
@@ -297,7 +302,8 @@ export function dataTheme(spec: ThemeSpec, id: string): Theme {
   function figure(activity: Activity, tick: number, w: World): { rows: Rows; at: Point } {
     let pose: Pose = posesOf(ch.poses[FALLBACK[activity].find(p => ch.poses[p] !== undefined) ?? 'idle']) ?? { frames: idle }
     let index = Math.floor(tick / (pose.every ?? every))
-    const walk = posesOf(ch.poses.walk)
+    // walking, the moment's own steps if it has them (its prop stays in hand), else the plain walk
+    const walk = pose.walk ? { frames: pose.walk, at: pose.at } : posesOf(ch.poses.walk)
     if (w.walking && walk) {
       pose = walk
       const dir = w.facing < 0 ? -1 : 1

@@ -155,8 +155,11 @@ const C = { x: 30, y: 6 } // Scorpheus' head, top-left
 const SCROLL = ['kWWWWWWk', 'kWVVVVWk', 'kWWWWWWk', 'kWVVVWWk', '.kkkkkk.']
 const BUCKET = ['kcccccck', 'kAAAAAAk', 'krRrRrRk', 'krRrRrRk', '.kkkkkk.']
 const BUCKET_AT = { x: 18, y: 27 }
-const CRATE = ['krrrrrrk', 'kRrRRrRk', 'krrrrrrk', 'kRrRRrRk', 'kkkkkkkk']
-const CRATE_AT = { x: 18, y: 19 }
+// The day's crate on the anvil, in light planks with steel corners, its lid on top.
+const CRATE_BOX = ['kArrRrrrAk', 'kVrrrrRrVk', 'kkkkkkkkkk']
+const CRATE_LID = { open: ['kk', 'kV', 'kV', 'kV', 'kV', 'kV', 'kV', 'kV'], closing: ['....kkkkkk', 'kkkkVVVVVk', 'kVVVkkkkkk'], shut: ['kkkkkkkkkk', 'kVVVVVVVVk'] }
+const CRATE_AT = { x: 17, y: 19 } // the rim, top-left; the box sits on the anvil
+const SEAL = { x: CRATE_AT.x + 3, y: CRATE_AT.y + 1 } // the gold wax across the lid's seam, three pixels wide
 const HOURGLASS_X = [17, 21, 25] // on the anvil, left to right
 const BELL_AT = { x: 25, y: 0 }
 
@@ -225,7 +228,7 @@ const VISIT_FOR = 56
 
 type Eyes = 'open' | 'look' | 'blink' | 'happy' | 'sad'
 type Mouth = 'none' | 'smile' | 'open' | 'frown' | 'grit'
-type LeftArm = 'rest' | 'raise' | 'strike' | 'scroll' | 'drop' | 'pull' | 'blade' | 'dip' | 'seal' | 'broom' | 'lap'
+type LeftArm = 'rest' | 'raise' | 'strike' | 'scroll' | 'drop' | 'pull' | 'blade' | 'dip' | 'stow' | 'lid' | 'stampUp' | 'stampDown' | 'broom' | 'lap'
 type RightArm = 'rest' | 'wave1' | 'wave2' | 'up' | 'scroll' | 'scratch' | 'wipe' | 'drink' | 'broom' | 'lap' | 'chin' | 'tea' | 'bread'
 
 export type Pose = {
@@ -263,10 +266,15 @@ export type Pose = {
   steam?: number // its age
   blade?: 'hot' | 'proven' | 'cracked'
   // git
-  crate?: 'open' | 'sealed' | 'gone'
+  crate?: 'open' | 'closing' | 'shut' | 'sealed' | 'gone'
+  stow?: number // the day's blade going down into the open crate, pixels above the rim
+  sealAge?: number // ticks since the seal came down
+  lidPuff?: boolean // the lid just shut: a puff of dust each side
   raven?: number // ticks since it took off
   // compaction
-  sweep?: number // the broom's swing
+  sweep?: number // the broom's reach along its stroke, 0..4
+  broomUp?: boolean // brought back for the next stroke, the bristles off the floor
+  dust?: number // the stroke's dust cloud, its age
   // sleep
   zzz?: boolean
   stool?: boolean
@@ -487,6 +495,41 @@ export function anchorOf(activity: Activity, w: World): number | undefined {
     case 'away': return undefined
     default: return undefined
   }
+}
+
+// The broom at his right, toward the yard: the handle over his shoulder, the
+// straw head on the floor. He pushes the dust out a stroke at a time.
+const BROOM_X = 20 // the handle's foot, from his left edge, at the start of a stroke
+const BROOM_HEAD = ['..RRR..', '.yRRRy.', 'yyVyVyy', 'yVyVyVy'] // the binding, then the straw fanning out
+
+function drawBroom(g: Grid, p: Pose, x: number, y: number, ls: { x: number; y: number }, rs: { x: number; y: number }, back: boolean) {
+  // walking back for another pass he carries it, the head well off the floor
+  const reach = back ? 0 : p.sweep ?? 0
+  const lift = back ? 2 : p.broomUp ? 1 : 0
+  const bx = x + BROOM_X + reach, by = C.y + 22 - lift // the handle's foot, on the head's binding
+  const tx = x + 14 + Math.round(reach / 2), ty = y + 11 // its top, past his shoulder
+  line(g, tx, ty, bx, by, 'r')
+  const head = BROOM_HEAD.map((r, j) => (j === 3 && lift === 0 && p.dust !== undefined ? `${r.slice(1)}${r[0]}` : r)) // pushed, the bristles drag
+  stamp(g, bx - 3, by, head)
+  // the paws on the handle, the upper one his left reaching across his chest
+  const along = (f: number) => [Math.round(tx + f * (bx - tx)), Math.round(ty + f * (by - ty))] as const
+  const [ux, uy] = along(0.2), [lx, ly] = along(0.5)
+  arm(g, ls.x, ls.y, ux, uy)
+  arm(g, rs.x, rs.y, lx, ly)
+}
+
+/** The dust a stroke raises ahead of the bristles, and the scraps it sends skidding toward the yard. */
+function drawDust(g: Grid, fx: number, age: number) {
+  const floor = C.y + 25
+  const cloud: ReadonlyArray<readonly [number, number]> = [
+    [0, 0], [1, 0], [0, -1], [1, -1], [2, -1], [2, 0], [1, -2], [3, -1], [2, -2], [3, -2], [4, -1], [2, -3], [3, -3], [4, -2],
+  ]
+  const drift = Math.floor(age / 2)
+  cloud.slice(0, Math.min(cloud.length, 4 + age * 3)).forEach(([dx, dy], i) => {
+    put(g, fx + dx + drift, floor + dy - drift, age > 3 ? 'x' : i < 6 ? 'X' : 'x')
+  })
+  // the swept scraps skid ahead along the floor
+  ;['a', 'r', 'E'].forEach((ch, i) => put(g, fx + 1 + age * (i + 1) + i, floor, ch))
 }
 
 /** A blade held by its hilt at (px, py), pointing up (dir -1) or down (dir 1). */
@@ -728,10 +771,7 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   if (world.hourglasses > 0) drawHourglasses(g, world.hourglasses, clock)
   if (world.exhausted && world.hourglasses === 0) drawSlate(g, clock)
   if (world.duck) stamp(g, DUCK_AT.x, DUCK_AT.y, DUCK)
-  if (p.crate && p.crate !== 'gone') {
-    stamp(g, CRATE_AT.x, CRATE_AT.y, CRATE)
-    if (p.crate === 'sealed') { put(g, CRATE_AT.x + 3, CRATE_AT.y + 2, 'y'); put(g, CRATE_AT.x + 4, CRATE_AT.y + 2, 'y') }
-  }
+  if (p.crate && p.crate !== 'gone') drawCrate(g, p.crate, p.sealAge ?? -1)
   }
 
   // Scorpheus, unless he is away visiting
@@ -819,8 +859,9 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
 
   // his left arm (screen left): hammer, lever, blade, seal, broom
   const ls = { x: x + 1, y: y + 15 }
-  const left = walking ? 'rest' : p.left
-  const right = walking ? 'rest' : p.right
+  // walking, his paws hang at rest; the broom stays in them, he sweeps as he goes
+  const left = walking && p.sweep === undefined ? 'rest' : p.left
+  const right = walking && p.sweep === undefined ? 'rest' : p.right
   switch (left) {
     case 'rest':
       arm(g, ls.x, ls.y, x, y + 18)
@@ -856,12 +897,23 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
       arm(g, ls.x, ls.y, BUCKET_AT.x + 4, BUCKET_AT.y - 6)
       blade(g, BUCKET_AT.x + 4, BUCKET_AT.y - 6, 1, p.blade ?? 'hot', tick)
       break
-    case 'seal':
-      arm(g, ls.x, ls.y, CRATE_AT.x + 5, CRATE_AT.y - 1 + (p.crate === 'sealed' ? 1 : 0))
+    case 'stow': {
+      // the day's blade, flat in his paw, lowered into the crate
+      const by = CRATE_AT.y - (p.stow ?? 0)
+      arm(g, ls.x, ls.y, CRATE_AT.x + 9, by)
+      if (by < CRATE_AT.y) stamp(g, CRATE_AT.x + 2, by, ['wAAAAyr'])
       break
-    case 'broom':
-      arm(g, ls.x, ls.y, x + 2, y + 17)
+    }
+    case 'lid': arm(g, ls.x, ls.y, CRATE_AT.x + 8, CRATE_AT.y - 1); break // his paw brings the lid down
+    case 'stampUp':
+    case 'stampDown': {
+      // the seal: a wooden handle, a gold foot
+      const fy = left === 'stampUp' ? SEAL.y - 6 : SEAL.y - 1
+      stamp(g, SEAL.x, fy - 3, ['.R.', '.r.', '.r.', 'yyy'])
+      arm(g, ls.x, ls.y, SEAL.x + 2, fy - 3)
       break
+    }
+    case 'broom': break // drawn with the right arm: both paws on one handle
     case 'lap':
       arm(g, ls.x, ls.y, x + 4, y + 19)
       break
@@ -881,14 +933,7 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
       arm(g, rs.x, rs.y, x + 11, hy + 13)
       stamp(g, x + 10, hy + 10, ['A', 'a', 'a']) // the flask, tipped to the muzzle
       break
-    case 'broom': {
-      // both paws on the handle, the bristles sweep left and right
-      const bx = x + 2 + (p.sweep ?? 0)
-      arm(g, rs.x, rs.y, x + 6, y + 19)
-      line(g, x + 6, y + 18, bx, C.y + 25, 'r')
-      stamp(g, bx - 1, C.y + 25, ['yVy'])
-      break
-    }
+    case 'broom': drawBroom(g, p, x, y, ls, rs, walking && world.facing < 0); break
     case 'lap': arm(g, rs.x, rs.y, x + 11, y + 19); break
     case 'chin': arm(g, rs.x, rs.y, x + 10, hy + 14); break
     case 'bread':
@@ -925,16 +970,15 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   if (p.bucket) stamp(g, BUCKET_AT.x, BUCKET_AT.y, BUCKET)
   if (p.steam !== undefined) drawSteam(g, p.steam, BUCKET_AT.x + 4, BUCKET_AT.y - 1)
   if (p.raven !== undefined && p.raven < 16) {
-    const rx = CRATE_AT.x + 2 - Math.round(p.raven * 1.4), ry = CRATE_AT.y - 4 - Math.round(p.raven * 1.3)
-    stamp(g, rx, ry, RAVEN[p.raven % RAVEN.length] ?? [])
-    stamp(g, rx + CLAWS.x, ry + CLAWS.y, ['rRr', 'kkk']) // the crate in its claws
+    // it drops from above (age below 0), clear of his head, takes the crate, and flies off up to the left
+    const a = p.raven
+    const rx = CRATE_AT.x + 1 - Math.round(a * (a < 0 ? 0.7 : 1.4)), ry = CRATE_AT.y - 6 - Math.round(Math.abs(a) * (a < 0 ? 3 : 1.3))
+    stamp(g, rx, ry, RAVEN[((a % RAVEN.length) + RAVEN.length) % RAVEN.length] ?? [])
+    if (a >= 0) stamp(g, rx + CLAWS.x - 2, ry + CLAWS.y, ['kVVVVk', 'kryyrk', 'kkkkkk']) // the sealed crate in its claws
   }
-  if (p.sweep !== undefined) {
-    for (let i = 0; i < 4; i++) {
-      const a = (tick + i * 3) % 8
-      put(g, x - 2 + i * 5 + Math.round(a * 0.4), C.y + 25 - Math.floor(a / 2), a < 4 ? 'X' : 'x')
-    }
-  }
+  if (p.sealAge !== undefined && p.sealAge >= 0 && p.sealAge < 6) drawSparks(g, p.sealAge, 7, 10, SEAL.x + 1, SEAL.y, SPARKS.git)
+  if (p.lidPuff) { stamp(g, CRATE_AT.x - 2, CRATE_AT.y - 1, ['x.', 'Xx']); stamp(g, CRATE_AT.x + 10, CRATE_AT.y - 1, ['.x', 'xX']) }
+  if (p.dust !== undefined && !(walking && world.facing < 0)) drawDust(g, x + BROOM_X + (p.sweep ?? 0) + 4, p.dust)
   // over his head, clear of the z's on his right: the narrowest scene (to x 54) holds it whole
   if (p.zzz && world.dream) drawDream(g, x + 2, Math.max(0, hy - 9), world.dream)
   if (p.zzz) drawZzz(g, x + 15, hy + 1, tick)
@@ -1172,23 +1216,53 @@ function quench(t: number, w: World): Pose {
     : { ...base, blade: 'cracked', eyes: 'sad', mouth: 'frown', worried: true, headDy: 1, steam: t - 3, puff: t - 9 }
 }
 
-// git: he seals the crate with gold wax; on a push the raven carries it off.
+// git: he lays the day's blade in the crate, shuts the lid and seals it with
+// gold wax, pleased with it; on a push the raven comes down and carries it off.
+// The story fits the 2.4 s a commit holds the stage.
 function ship(t: number, w: World): Pose {
   const base: Pose = {
     eyes: 'open', focused: true, mouth: 'none', look: -1,
-    left: 'seal', right: 'rest', crate: t < 3 ? 'open' : 'sealed',
+    left: 'rest', right: 'rest', crate: 'sealed', sealAge: t - 8,
     tail: sway(t, 4), fire: 2, ingot: 'none', smokeEvery: 4,
-    sparksAge: t >= 3 && t < 7 ? t - 3 : undefined, sparkCount: 6,
   }
-  if (w.ship !== 'push' || t < 6) return base
-  return { ...base, crate: 'gone', raven: t - 6, left: 'rest', right: Math.floor(t / 2) % 2 ? 'wave1' : 'wave2', eyes: 'happy', mouth: 'smile', look: 0, sparksAge: undefined }
+  if (t < 4) return { ...base, left: 'stow', stow: 4 - t, crate: 'open', sealAge: undefined } // the blade goes in
+  if (t < 6) return { ...base, left: 'lid', crate: t === 4 ? 'closing' : 'shut', lidPuff: t === 5, sealAge: undefined }
+  if (t < 8) return { ...base, left: 'stampUp', crate: 'shut', sealAge: undefined, eyes: t === 7 ? 'blink' : 'open' }
+  if (t < 10) return { ...base, left: 'stampDown', mouth: 'grit', headDy: 1 } // down it comes: the wax spreads, the sparks fly
+  const proud: Pose = { ...base, eyes: 'happy', mouth: 'smile', focused: false, look: 0, right: 'up' }
+  if (w.ship !== 'push' || t < 11) return proud
+  // the raven: down from the right in three ticks, then off with the crate
+  const raven = t - 14
+  return { ...proud, raven, crate: raven >= 0 ? 'gone' : 'sealed', right: raven >= 0 ? (Math.floor(t / 2) % 2 ? 'wave1' : 'wave2') : 'up' }
+}
+
+function drawCrate(g: Grid, state: 'open' | 'closing' | 'shut' | 'sealed', sealAge: number) {
+  const { x, y } = CRATE_AT
+  stamp(g, x, y + 2, CRATE_BOX)
+  if (state === 'open') {
+    stamp(g, x - 1, y - 6, CRATE_LID.open) // standing up on its hinges, at the left
+    stamp(g, x, y, ['kkkkkkkkkk', 'kzzzzzzzzk']) // the rim, the dark inside
+  } else {
+    if (state === 'closing') stamp(g, x, y + 1, ['kzzzzzzzzk'])
+    stamp(g, x, y - (state === 'closing' ? 1 : 0), state === 'closing' ? CRATE_LID.closing : CRATE_LID.shut) // falling shut, then down
+  }
+  if (state === 'sealed') {
+    // the wax across the seam, a glint going round it now and then
+    stamp(g, SEAL.x, SEAL.y, ['yYy', 'yEy'])
+    if (sealAge < 2) stamp(g, SEAL.x - 1, SEAL.y, ['y...y']) // the wax still spreading
+    else if (sealAge % 6 === 0) put(g, SEAL.x + 2, SEAL.y + 1, 'Y')
+  }
 }
 
 // The context is compacting: he sweeps the workshop clean.
+// A stroke in eight beats: the head pushed out across the floor, the dust flying
+// ahead of it, then lifted and brought back for the next.
 function sweep(t: number): Pose {
+  const c = t % 8
   return {
-    eyes: t % 20 === 7 ? 'blink' : 'open', mouth: 'none', look: -1,
-    left: 'broom', right: 'broom', sweep: at([-3, -2, 0, 2, 3, 2, 0, -2], t),
+    eyes: t % 20 === 7 ? 'blink' : 'open', mouth: c < 5 ? 'grit' : 'none', look: 1, focused: c < 5,
+    left: 'broom', right: 'broom', sweep: at([0, 1, 2, 3, 4, 3, 2, 1], c), broomUp: c >= 5,
+    dust: c >= 1 && c <= 5 ? c - 1 : undefined,
     tail: sway(t, 3), fire: 1, ingot: 'cold', smokeEvery: 5,
   }
 }

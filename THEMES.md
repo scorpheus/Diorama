@@ -7,7 +7,10 @@ Le plus simple est de laisser Claude le dessiner avec la compétence `/diorama:n
 - **Brancher un thème :** `/config`, ligne *Diorama · Thème*. On y met le chemin **absolu** du fichier, par exemple `C:/Users/moi/.claude/diorama/themes/pirate/theme.json`, ou le nom d'un thème livré (`forge`, `sorciere`).
 - **Voir ses changements :** dès que le fichier change, le bandeau se redessine en deux secondes environ.
 - **Si le thème est refusé :** le bandeau reprend la forge, et le journal sous les jauges dit pourquoi (`thème « … » refusé : …`).
-- **Aperçu sans lancer de session :** `node tools/apercu.mts theme.json apercu.png` vérifie le fichier et dessine une planche de vingt moments (il faut Node 22.6 ou plus).
+- **Aperçu sans lancer de session** (il faut Node 22.6 ou plus) :
+  - `node tools/apercu.mts theme.json apercu.png` vérifie le fichier et dessine une planche PNG : chaque moment du moteur, puis le décor dans ses situations ;
+  - `node tools/apercu.mts theme.json anim.png --anime balaie` déroule un moment image par image, à l'arrêt puis en marche ; `--anime tout` déroule tous les moments ;
+  - `node tools/mire.mts theme.json` joue le thème **en direct** dans un terminal, à son vrai rythme : on passe d'un moment à l'autre, on le fait marcher, on change l'heure. Avec plusieurs fichiers (`a.json b.json`), les variantes s'affichent côte à côte, nommées A, B, C, D, pour choisir. Voir « Relire chaque moment » plus bas.
 
 ## Les dessins
 
@@ -116,12 +119,13 @@ Avec `"shutters": true`, des volets ferment le ciel de 23 h à 6 h.
   "poses": {
     "idle": [ [ "…" ], [ "…" ] ],                    // obligatoire
     "walk": [ … ],                                   // une image par pixel parcouru
-    "running": { "frames": [ … ], "every": 2, "at": [-6, 0] }
+    "running": { "frames": [ … ], "every": 2, "at": [-6, 0] },
+    "sweep": { "frames": [ … ], "at": [-4, 0], "walk": [ … ] }   // ses propres pas : le balai reste en main
   }
 }
 ```
 
-Une pose s'écrit soit comme une liste d'images, soit comme `{ "frames", "every", "at" }`. Le décalage `at` permet à une pose de déborder de la place du personnage, par exemple un bras qui touille un chaudron à sa gauche.
+Une pose s'écrit soit comme une liste d'images, soit comme `{ "frames", "every", "at", "walk" }`. Le décalage `at` permet à une pose de déborder de la place du personnage, par exemple un bras qui touille un chaudron à sa gauche. `walk` donne au moment ses propres pas : voir « Ce que le moteur fait au personnage ».
 
 Voici les poses, et ce qu'affiche une pose absente :
 
@@ -149,6 +153,27 @@ Le moteur ajoute lui-même plusieurs éléments par-dessus les poses :
 - la poussière d'un échec, et le feu d'artifice d'une réussite.
 
 Laissez au moins 6 pixels libres au-dessus de la tête pour les bulles.
+
+### Ce que le moteur fait au personnage
+
+Une pose ne joue pas seule : le moteur déplace le personnage et le fait marcher. C'est là que se cachent les oublis.
+
+- **Trois moments le font marcher longtemps.** Au repos, il va d'un endroit favori à l'autre (`stage.idle`). Quand il réfléchit, il fait les cent pas. Quand il balaie, il avance pas à pas sur le plancher puis revient pour une autre passe. Dans les autres moments, il ne marche que le temps de rejoindre sa place (`stage.work`, `stage.build`).
+- **En marche, c'est la pose `walk` qui s'affiche**, pas celle du moment. Un objet tenu dans la pose (balai, livre, tasse) disparaît donc dès qu'il marche, et le geste du moment avec lui. Pour un moment qui marche longtemps, donnez à la pose ses propres pas avec `walk` : 4 images, comme la marche, mais l'objet en main. Le plus simple est de reprendre le haut des images du moment et les pieds des images de marche. Ces pas suivent le décalage `at` de la pose.
+- **Certains moments ne jouent qu'une fois**, puis le moteur revient au travail ou au repos : `failed` (2,5 s environ), `jumping` (1,8 s), `quench` (2,6 s), `ship` (2,4 s, 3,4 s pour un push), `waking` (1 s). Leur histoire doit se lire dans ce temps-là ; une pose plus longue est coupée.
+- **Les autres tournent en boucle** tant que le moment dure, parfois plusieurs minutes (`thinking`, `running`, `sleep`) : la boucle ne doit pas lasser, ni sauter d'une image à l'autre.
+- **Par-dessus, le moteur ajoute** les bulles, les `z` de la sieste et le rêve, la sueur, la poussière d'un échec et le feu d'artifice. Ne les dessinez pas dans les poses.
+
+### Relire chaque moment
+
+Une image fixe ne dit pas si une animation marche. Avant de livrer un thème, ouvrez la mire (`node tools/mire.mts theme.json`) et passez chaque moment en revue, à l'arrêt puis « comme en vrai » :
+
+1. **Le bon objet en main.** Ce que le personnage tient correspond au moment (le balai pour balayer, pas l'outil de travail). Rien ne reste d'une autre pose.
+2. **Le geste se lit.** On reconnaît l'action à la silhouette, sans lire le mot sous le nom : le balai va et vient, la louche touille, le livre se tourne.
+3. **L'action produit quelque chose.** Un geste qui ne change rien autour de lui ne se croit pas : la poussière se soulève, la vapeur monte, les étincelles jaillissent (un `effect` ou des pixels dans la pose).
+4. **En marche aussi.** Dans les moments qui marchent longtemps (repos, réflexion, balayage), le personnage garde son objet et son geste ; sinon, donnez à la pose ses propres pas (`walk`).
+5. **La durée tient.** Un moment joué une fois raconte son histoire avant d'être coupé ; une boucle se referme sans à-coup.
+6. **Le cadre tient.** L'objet, la poussière et les bulles restent dans la scène, y compris dans le cadrage le plus étroit (`--recadrage solo`).
 
 ### `accessories`, `variants` : la tenue de chaque session
 
@@ -296,6 +321,7 @@ Avant d'afficher un thème, le moteur le vérifie et le refuse au besoin. Il con
 - chaque lettre de chaque dessin existe dans la palette ;
 - les positions tombent dans la scène ;
 - les poses portent des noms connus ;
+- les pas propres à un moment (`walk` dans une pose) sont des images comme les autres ;
 - la pose de repos peint au moins 20 cases : un personnage hors du cadre est refusé, plutôt que d'afficher une scène vide.
 
 Chaque erreur dit où elle se trouve, par exemple :

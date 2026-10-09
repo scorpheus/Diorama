@@ -3,7 +3,9 @@ import type { Engine } from 'claude-code/testing'
 import type { AgentStatus, On, ToolCallInput, ToolCallResult } from 'claude-code'
 
 import { CALM, SMITHS, frame } from '../hooks/themes/forge.ts'
-import { checkTheme, dataTheme } from '../hooks/themes/data.ts'
+import { ACTIVITIES, checkTheme, dataTheme } from '../hooks/themes/data.ts'
+import { ROAMING, wander } from '../hooks/world.ts'
+import { MOMENTS, NOT_SHOWN } from '../tools/moments.mts'
 import type { ThemeSpec } from '../hooks/themes/data.ts'
 
 const BAND = {
@@ -300,7 +302,7 @@ test('every part of the world shows in the scene', () => {
     turnTicks5: paint('running', 1, { turnTicks: 2400 }) !== paint('running', 1, { turnTicks: 2410 }),
     turnTicks15: paint('running', 1, { turnTicks: 6400 }) !== paint('running', 1, { turnTicks: 6410 }),
     outcome: paint('quench', 10, { outcome: 'fail' }) !== paint('quench', 10, { outcome: 'pass' }),
-    ship: paint('ship', 8, { ship: 'push' }) !== paint('ship', 8, { ship: 'commit' }),
+    ship: paint('ship', 15, { ship: 'push' }) !== paint('ship', 15, { ship: 'commit' }), // the raven has taken the crate
     cubAge: paint('idle', 0, { apprentices: [{ seed: 3, colour: 'P', age: 10 }] }) !== paint('idle', 0, { apprentices: [{ seed: 3, colour: 'P', age: 19 }] }),
     facing: paint('idle', 1, { x: -6, walking: true, facing: -1 }) !== paint('idle', 1, { x: -6, walking: true, facing: 1 }),
     hour: paint('idle', 0, { hour: 23 }) !== paint('idle', 0, { hour: 12 }),
@@ -1115,6 +1117,32 @@ test('every pose a theme draws is reached by its moment', () => {
   delete (lean.character.poses as Record<string, unknown>).sleep
   const t2 = dataTheme(lean, 'lean')
   expect(Array.from(t2.frame('full', 'sleep', 0, CALM)).length).toBe(40 * 8 * 3)
+})
+
+test('a moment that walks him keeps its prop: its own steps, else the plain walk', () => {
+  const spec = miniTheme()
+  const poses = spec.character.poses as Record<string, unknown>
+  const broom = ['.kkkk.', 'kooook', 'kOOOOk', 'kOOOOk', '.kook.', '.kOOk.', '.k..ky', 'kk..ky']
+  poses.sweep = { frames: [broom], walk: [broom, broom] }
+  expect(checkTheme(spec)).toEqual([])
+  const walking = (t: ThemeSpec) => Array.from(dataTheme(t, 'broom').frame('full', 'sweep', 0, { ...CALM, x: 1, walking: true, facing: 1 })).join()
+  const plain = miniTheme()
+  ;(plain.character.poses as Record<string, unknown>).sweep = [broom]
+  const none = miniTheme()
+  delete (none.character.poses as Record<string, unknown>).sweep
+  expect(walking(plain)).toBe(walking(none)) // no steps of its own: the plain walk, the broom gone
+  expect(walking(spec)).not.toBe(walking(plain)) // its own steps: the broom stays in hand
+  // its steps are checked like any picture
+  poses.sweep = { frames: [broom], walk: [['.kk!k.']] }
+  expect(checkTheme(spec).join('\n')).toContain('character.poses.sweep.walk[0], ligne 1 : la lettre « ! »')
+})
+
+test('the previews show every moment the engine plays, and know which ones walk him', () => {
+  // coverage: each moment is in the previews, or exempted by name with why
+  const shown = new Set(MOMENTS.map(m => m.activity))
+  expect(ACTIVITIES.filter(a => !shown.has(a) && NOT_SHOWN[a] === undefined)).toEqual([])
+  // the moments the engine walks him in are the ones the previews and THEMES.md name
+  expect(ACTIVITIES.filter(a => wander(a, 0, 0, 0, [5]) !== undefined)).toEqual([...ROAMING])
 })
 
 /** The theme file on a fake disk: its text and when it last changed. */

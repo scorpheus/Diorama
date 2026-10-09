@@ -61,6 +61,12 @@ Le format est décrit dans [THEMES.md](THEMES.md), et l'antre de la sorcière ([
 node tools/apercu.mts mon-theme.json apercu.png
 ```
 
+Pour le voir jouer en direct dans un terminal, moment par moment, à son vrai rythme :
+
+```
+node tools/mire.mts mon-theme.json
+```
+
 Pour partager un thème, ouvrez une demande de fusion avec un dossier `themes/<nom>/`.
 
 ## Ce que le mod garde, et où
