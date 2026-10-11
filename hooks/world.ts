@@ -245,13 +245,16 @@ export type Theme = {
   /** The scene's size: pixels across, terminal rows (two pixels each) down. */
   width: number
   rows: number
+  /** How many columns past `width` the scene may take when the window has them to spare; none if unset. */
+  grow?: number
   /** The windows over the scene; `full` always, the narrower ones when the theme has them. */
   crops: Partial<Record<Crop, readonly [number, number]>> & { full: readonly [number, number] }
   /** Letter -> 0xRRGGBB. */
   palette: Readonly<Record<string, number>>
   /** The scene for a moment, as Raster cells. */
   /** `lit` false: the palette's own colours, whatever light the theme casts. */
-  frame(crop: Crop, activity: Activity, tick: number, world: World, lit?: boolean): Uint32Array
+  /** `extra`: columns to spare beside the scene; a theme that grows (`grow`) widens the crops that end at its right edge by as many. */
+  frame(crop: Crop, activity: Activity, tick: number, world: World, lit?: boolean, extra?: number): Uint32Array
   /** Where a moment holds the character (pixels from home), or undefined: free to wander. */
   anchorOf(activity: Activity, world: World): number | undefined
   /** Where things stand and go, pixels from the character's home spot. */

@@ -2,10 +2,14 @@
 // son vrai rythme (un tic de 150 ms), en vraies couleurs, comme dans le bandeau.
 // Plusieurs thèmes côte à côte, nommés A, B, C, D : pour choisir entre des variantes.
 //
-//   node tools/mire.mts <theme.json | forge> [autre.json ...] [--recadrage full]
+//   node tools/mire.mts <theme.json | forge> [autre.json ...] [--recadrage full] [--large N]
 //
 // Touches : ← → le moment · m la marche (comme en vrai, à l'arrêt, vers la droite,
-// vers la gauche) · h l'heure · espace pause · . un tic en pause · q quitter.
+// vers la gauche) · h l'heure · s la saison · o l'orage · v un visiteur arrive, V le
+// premier repart · a un louveteau arrive, A le premier a fini · espace pause · . un tic
+// en pause · q quitter. Visiteurs et louveteaux vont et viennent comme le moteur les mène.
+// Un thème seul qui s'élargit (la forge) prend toute la largeur du terminal, comme
+// le bandeau quand la fenêtre a de la place ; --large N fixe les colonnes en plus.
 // « Comme en vrai », le personnage se déplace exactement comme le moteur le fait
 // pendant ce moment. Node 22.6 ou plus. --test : quelques images, puis sortie.
 
@@ -21,6 +25,7 @@ const flag = (name: string, fallback: string) => {
 }
 const testing = args.includes('--test')
 const crop = flag('--recadrage', 'full') as Crop
+const large = flag('--large', '')
 const sources = args.filter(a => a !== '--test')
 if (sources.length === 0 || sources.length > 4) {
   console.error('usage : node tools/mire.mts <theme.json | forge> [autre.json ...] (quatre au plus) [--recadrage full]')
@@ -45,7 +50,25 @@ const HOURS: ReadonlyArray<[string, Partial<World>]> = [
   ['le soir', { hour: 19, lanternLit: true }],
   ['de nuit', { hour: 23, lanternLit: true }],
 ]
-const state = { moment: 0, mode: 0, hour: 0, paused: false, tick: 0, clock: 1 }
+const SEASONS: ReadonlyArray<[string, number]> = [['été', 7], ['automne', 10], ['hiver', 1], ['printemps', 4]]
+const state = {
+  moment: 0, mode: 0, hour: 0, season: 0, storm: false, paused: false, tick: 0, clock: 1,
+  guests: [] as Array<{ arrived: number; leaving?: number; n: number }>,
+  cubs: [] as Array<{ born: number; seed: number; colour: string; left?: number }>,
+  arrivals: 0,
+}
+const GUEST_WALK = 36 // as the engine (register.tsx): a guest crosses the yard in five seconds at most
+const LEAVE_TICKS = 40 // and a cub done with its work takes six seconds to walk out
+const CUB_COLOURS = ['P', 'b', 'G', 'M', 'y']
+/** The columns a theme grows by: the terminal's spare width when it is shown alone, or what --large says. */
+const extraOf = (t: Theme) => {
+  if (!t.grow) return 0
+  if (large !== '') return Math.min(t.grow, Math.max(0, Number(large)))
+  if (themes.length > 1) return 0
+  const [a, b] = t.crops[crop] ?? t.crops.full
+  return Math.min(t.grow, Math.max(0, (process.stdout.columns || 120) - (b - a) - 1))
+}
+const CAPES = [['N', 'L'], ['C', 'D'], ['o', 'O']] as const
 // where each theme's character stands and heads, as the engine moves it
 const walkers = themes.map(() => ({ x: 0, target: 0, restUntil: 0 }))
 
@@ -63,7 +86,28 @@ function restart() {
 function worldFor(t: Theme, i: number): World {
   const m = MOMENTS[state.moment]!
   const w = walkers[i]!
-  const world: World = { ...CALM, ...HOURS[state.hour]![1], ...m.world, clock: state.clock }
+  // the guests walk in from past the yard's edge and out again, the engine's way (guestsNow)
+  const off = t.stage.offstage + extraOf(t)
+  state.guests = state.guests.filter(g => g.leaving === undefined || state.clock - g.leaving <= GUEST_WALK + 1) // out of sight by then, as in the engine
+  const guests = state.guests.flatMap((g, k) => {
+    const spot = t.stage.guestSpots[Math.min(k, t.stage.guestSpots.length - 1)] ?? 20
+    const pace = Math.max(1, (off - spot) / GUEST_WALK), age = state.clock - g.arrived
+    let x = Math.max(spot, Math.round(off - age * pace)), facing = -1
+    if (g.leaving !== undefined) { x = Math.round(spot + (state.clock - g.leaving) * pace); facing = 1 }
+    if (x >= off && g.leaving !== undefined) return []
+    return [{
+      x, walking: x > spot, facing, cape: CAPES[g.n % CAPES.length]!, accessory: t.looks.accessories[(g.n % 3) + 1] ?? 'aucun',
+      tick: age + g.n * 37, waving: x === spot && age - (off - spot) / pace < 16,
+    }]
+  })
+  state.cubs = state.cubs.filter(c => c.left === undefined || state.clock - c.left < LEAVE_TICKS)
+  const apprentices = state.cubs.map(c => c.left === undefined
+    ? { seed: c.seed, colour: c.colour, age: state.clock - c.born }
+    : { seed: c.seed, colour: c.colour, age: c.left - c.born, leaving: state.clock - c.left })
+  const world: World = {
+    ...CALM, ...HOURS[state.hour]![1], month: SEASONS[state.season]![1], ...(state.storm ? { weather: 'storm' as const } : {}),
+    ...(guests.length ? { guests } : {}), ...(apprentices.length ? { apprentices } : {}), ...m.world, clock: state.clock,
+  }
   const mode = MODES[state.mode]
   const { min, max } = t.stage.roam
   if (mode === 'comme en vrai') {
@@ -88,10 +132,9 @@ const sgr = (fg: number, bg: number) =>
 
 function panel(t: Theme, i: number): string[] {
   const m = MOMENTS[state.moment]!
-  const [x0, x1] = t.crops[crop] ?? t.crops.full
-  const w = x1 - x0
   const tick = m.once ? state.tick % m.once : state.tick // a one-shot plays once in the band: here, over and over
-  const cells = t.frame(crop, m.activity, tick, worldFor(t, i))
+  const cells = t.frame(crop, m.activity, tick, worldFor(t, i), true, extraOf(t))
+  const w = cells.length / 3 / t.rows
   const rows: string[] = []
   for (let r = 0; r < t.rows; r++) {
     let line = ''
@@ -108,12 +151,12 @@ function panel(t: Theme, i: number): string[] {
 function screen(): string {
   const m = MOMENTS[state.moment]!
   const cols = process.stdout.columns || 120
-  const widths = themes.map(t => { const [a, b] = t.crops[crop] ?? t.crops.full; return b - a })
+  const widths = themes.map(t => { const [a, b] = t.crops[crop] ?? t.crops.full; return b - a + extraOf(t) })
   const side = widths.reduce((s, w) => s + w + 3, 0) <= cols
   const out: string[] = ['\x1b[H']
   const walk = roams(m) ? '  · le moteur fait marcher le personnage dans ce moment' : ''
   const once = m.once ? `  · joué une fois (${(m.once * 0.15).toFixed(1)} s), ici en boucle` : ''
-  out.push(`\x1b[1m${state.moment + 1}/${MOMENTS.length}  ${m.label}\x1b[0m  · ${MODES[state.mode]}  · ${HOURS[state.hour]![0]}${state.paused ? '  · \x1b[7m en pause \x1b[0m' : ''}\x1b[K`)
+  out.push(`\x1b[1m${state.moment + 1}/${MOMENTS.length}  ${m.label}\x1b[0m  · ${MODES[state.mode]}  · ${HOURS[state.hour]![0]}  · ${SEASONS[state.season]![0]}${state.storm ? '  · orage' : ''}${state.guests.length ? `  · ${state.guests.length} visiteur${state.guests.length > 1 ? 's' : ''}` : ''}${state.cubs.length ? `  · ${state.cubs.length} louveteau${state.cubs.length > 1 ? 'x' : ''}` : ''}${state.paused ? '  · \x1b[7m en pause \x1b[0m' : ''}\x1b[K`)
   out.push(`\x1b[2m${walk}${once}\x1b[0m\x1b[K`)
   const panels = themes.map(panel)
   if (side) {
@@ -131,7 +174,7 @@ function screen(): string {
     line += item
   }
   out.push(line + '\x1b[K')
-  out.push('\x1b[2m← → le moment · m la marche · h l\'heure · espace pause · . un tic · q quitter\x1b[0m\x1b[K')
+  out.push('\x1b[2m← → le moment · m la marche · h l\'heure · s la saison · o l\'orage · v/V un visiteur · a/A un louveteau · espace pause · . un tic · q quitter\x1b[0m\x1b[K')
   return out.join('\n') + '\x1b[J'
 }
 
@@ -175,6 +218,14 @@ process.stdin.on('data', (data: Buffer) => {
   else if (key === '\u001b[D' || key === 'j') { state.moment = (state.moment + MOMENTS.length - 1) % MOMENTS.length; restart() }
   else if (key === 'm') { state.mode = (state.mode + 1) % MODES.length; restart() }
   else if (key === 'h') state.hour = (state.hour + 1) % HOURS.length
+  else if (key === 's') state.season = (state.season + 1) % SEASONS.length
+  else if (key === 'o') state.storm = !state.storm
+  else if (key === 'v' && state.guests.filter(g => g.leaving === undefined).length < 3) state.guests.push({ arrived: state.clock, n: state.arrivals++ })
+  else if (key === 'V') { const g = state.guests.find(g => g.leaving === undefined); if (g) g.leaving = state.clock }
+  else if (key === 'a' && state.cubs.filter(c => c.left === undefined).length < 5) {
+    const n = state.cubs.length + state.arrivals++
+    state.cubs.push({ born: state.clock, seed: 7 + n * 13, colour: CUB_COLOURS[n % CUB_COLOURS.length]! })
+  } else if (key === 'A') { const c = state.cubs.find(c => c.left === undefined); if (c) c.left = state.clock }
   else if (key === ' ') state.paused = !state.paused
   else if (key === '.' && state.paused) advance()
 })

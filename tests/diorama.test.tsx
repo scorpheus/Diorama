@@ -37,8 +37,12 @@ let duringCompact: (() => Promise<void>) | undefined
 const shelf = new Map<string, unknown>()
 let listed: Array<{ id: string; description: string; type: string; status: AgentStatus }> = []
 let sessionId = 'sess-1'
+// the compaction window the next engine's settings set (autoCompactWindow), taken by that engine alone
+let compactSetting: number | undefined
 function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
   blits.length = 0
+  const compact = compactSetting
+  compactSetting = undefined
   duringCompact = undefined
   on('session.compact', async () => {
     await duringCompact?.()
@@ -52,7 +56,16 @@ function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
     return { value: {} }
   })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: [] } }))
+  on('session.usage', (_$, e) => ({
+    value: {
+      startedAt: 0,
+      context: {
+        window: compact === undefined ? 200_000 : 1_000_000,
+        breakdown: e.breakdown ? { rawMaxTokens: compact ?? 200_000, autocompactSource: compact === undefined ? 'auto' : 'settings' } as never : undefined,
+      },
+      rateLimits: [],
+    },
+  }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.id', () => ({ value: sessionId }))
@@ -487,6 +500,18 @@ test('experience rises with the work, and a level is said aloud', async ($, on) 
   for (let i = 0; i < 4; i++) await $.tool.call({ tool: 'Edit', file_path: 'a.ts', old_string: 'a', new_string: 'b' })
   expect((await ui.find({ text: /niv\. 2/ }))?.text).toMatch(/niv\. 2 · 8 xp/)
   expect((await ui.find({ text: /^« / }))?.text).toMatch(/niveau 2/i)
+})
+
+test("the context gauge fills toward the compaction window the settings set, not the model's", async ($, on) => {
+  compactSetting = 400_000
+  const { ui } = await start($, on)
+  await $.session.measure({
+    context: { percent: 20, tokens: 200_000, window: 1_000_000 },
+    rateLimits: [],
+    changed: ['context'],
+  })
+  expect(await ui.find({ text: ' 50%' })).toBeDefined()
+  expect(await ui.find({ text: '  200k/400k' })).toBeDefined()
 })
 
 test("the project's name is on the forge's line", async ($, on) => {
@@ -976,14 +1001,43 @@ test('the forge is lit: the day through the window, a darker night, the palette 
   expect(bright(steel(23))).toBeLessThan(bright(steel(12))) // and darker by night
 })
 
-test('the light shows the wall behind the forge, never the yard', () => {
+test('the light shows the wall behind the forge; past the door, the yard is out of doors', () => {
   const night = { ...CALM, hour: 22, lanternLit: true }
   const cells = frame('full', 'idle', 0, night)
   const clear = (x: number, r: number) => cells[(r * 72 + x) * 3] === 0x20 && cells[(r * 72 + x) * 3 + 2] === 0x01000000
   expect(clear(8, 1)).toBe(false) // beside the lantern, its light on the wall
-  expect([...Array(72 - 54).keys()].every(i => clear(54 + i, 0))).toBe(true) // the sky over the yard stays the terminal's
+  expect(clear(40, 0)).toBe(true) // the dark of the room, out of any light's reach
+  // the yard's sky at night: never the terminal's, a deep blue (row 1, clear of the eave)
+  const sky = cells[(1 * 72 + 64) * 3 + 1] ?? 0
+  expect(clear(64, 1)).toBe(false)
+  expect(sky & 255).toBeGreaterThan(sky >> 16)
   const flat = frame('full', 'idle', 0, night, false)
   expect(flat[(1 * 72 + 8) * 3]).toBe(0x20) // without light, no wall
+  expect(flat[(1 * 72 + 64) * 3]).toBe(0x20) // and no sky
+})
+
+test('the yard widens with the window: the crops that end with it, as far as it may', () => {
+  const width = (crop: 'full' | 'compact' | 'solo', extra: number) => frame(crop, 'idle', 0, CALM, true, extra).length / 3 / 16
+  expect(width('full', 0)).toBe(72)
+  expect(width('full', 30)).toBe(102)
+  expect(width('compact', 30)).toBe(88)
+  expect(width('solo', 30)).toBe(25) // Scorpheus alone has no yard to widen
+  expect(width('full', 500)).toBe(72 + 72) // GROW at most
+  // three guests stand side by side in a wide yard: the farthest one is drawn there, not cut at the old edge
+  const guest = { x: 26, walking: false, facing: -1, cape: ['N', 'L'] as const, accessory: 'aucun', tick: 3, waving: false }
+  const three = { ...CALM, guests: [guest, { ...guest, x: 12 }, { ...guest, x: 12 }] }
+  const far = (w: typeof CALM) => Array.from(frame('full', 'idle', 0, w, false, 72)).slice(10 * 144 * 3 + 100 * 3, 10 * 144 * 3 + 112 * 3).join()
+  expect(far(three)).not.toBe(far({ ...CALM, guests: [guest] }))
+})
+
+test('in a wide yard the cubs go to their chores, across it', () => {
+  const cubs = [3, 7, 11, 17].map((seed, i) => ({ seed, colour: 'P', age: 200 + i * 30 }))
+  // the cells a cub may stand in (rows 12 to 15), past the door's first twenty pixels
+  const out = (extra: number, apprentices: typeof cubs) => {
+    const cells = frame('full', 'idle', 0, { ...CALM, apprentices }, false, extra), w = 72 + extra
+    return Array.from({ length: 4 * (w - 74) }, (_, k) => cells[((12 + Math.floor(k / (w - 74))) * w + 74 + (k % (w - 74))) * 3]).join()
+  }
+  expect(out(72, cubs)).not.toBe(out(72, []))
 })
 
 test('the rack\'s rail keeps its colour while the fire wavers and the hammer flashes', () => {

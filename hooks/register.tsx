@@ -28,6 +28,7 @@ const KEY = 'diorama'
 // the `decor` option of /config: the widest window of the scene allowed
 const DECOR_OF: Record<string, Crop> = { complet: 'full', compact: 'compact', seul: 'solo' }
 const WORDS = 44 // columns kept for the words beside the scene: the gauges, the info line, the log
+const WORDS_ROOMY = 58 // the words with gauges of a fair length: past it, a scene that grows takes the rest
 const TICK_MS = 150
 const SLEEP_TICKS = Math.round((10 * 60 * 1000) / TICK_MS) // ten idle minutes
 const TEA_TICKS = Math.round((2 * 60 * 60 * 1000) / TICK_MS) // two hours into the session
@@ -137,9 +138,12 @@ function forgeLabel(p: { project: string; name?: string; title?: string }, withT
 }
 const CAT_KEY = 'cat'
 // where the pet comes in and goes out, and how far behind him it follows: the theme's
+/** Out of the scene: past the yard's edge, however wide the window made it. */
+const offstageNow = () => theme.stage.offstage + anim.extra
 const petAt = () => theme.pet ?? { gate: 14, away: theme.width + 12, follow: 21 }
 const HANDOFF_TICKS = 13 // every two seconds, the visits and the cat are looked at
 const HANDOFF_WAIT = 60 // nine seconds for the host to say he is gone, then home anyway
+const GUEST_WALK = 36 // a guest crosses the yard in five seconds at most: a wide one, he hurries (inside the handoff)
 
 const VISIT_PREFIX = 'visit:' // $.store: one key per visiting session, so no two writers share one
 const TRIP_MS = 90_000 // a visit lasts a minute and a half
@@ -238,6 +242,13 @@ function fitCrop(allowed: Crop | undefined, columns: number): Crop | undefined {
   return order.find(c => cropWidth(c) + 2 + WORDS <= columns)
 }
 
+/** The columns a theme that grows takes past its crop, when the window spares them and the crop ends at its edge. */
+function growOf(crop: Crop, columns: number): number {
+  const [, x1] = theme.crops[crop] ?? theme.crops.full
+  if (!theme.grow || x1 !== theme.width) return 0
+  return clamp(columns - cropWidth(crop) - 2 - WORDS_ROOMY, 0, theme.grow)
+}
+
 const short = (path: unknown) => (typeof path === 'string' ? path.split(/[\\/]/).pop() ?? '' : '')
 const firstWord = (command: string) => short(command.trim().split(/\s+/)[0] ?? '')
 
@@ -251,11 +262,14 @@ function describe(tool: string, input: Record<string, unknown>): string {
 }
 
 function toUsage(e: { context: { percent?: number; tokens?: number; window: number }; rateLimits: SessionRateLimit[]; cost?: { usd: number } }, startedAt?: number): Usage {
+  // the context fills toward the compaction window when one is set below the model's own
+  const window = Math.min(e.context.window, anim.compactWindow ?? Infinity)
+  const tokens = e.context.tokens
   return {
     startedAt,
-    ctx: e.context.percent,
-    tokens: e.context.tokens,
-    window: e.context.window,
+    ctx: tokens !== undefined && window < e.context.window ? Math.round((tokens / window) * 100) : e.context.percent,
+    tokens,
+    window,
     limits: e.rateLimits.map(r => ({ kind: r.kind, percent: r.percentUsed, resetsAt: r.resetsAt })),
     usd: e.cost?.usd,
   }
@@ -279,6 +293,7 @@ const effortOf = (effort: string | number | undefined): number =>
 const anim = {
   bandId: undefined as string | undefined,
   crop: undefined as Crop | undefined, // the window the mounted Raster was drawn at
+  extra: 0, // and the columns its scene grew by
   tick: 0, // since the moment began
   clock: 0, // since the session began
   current: 'waving' as Activity,
@@ -292,6 +307,8 @@ const anim = {
   ship: undefined as 'commit' | 'push' | undefined,
   pressure: 0,
   ctx: 0,
+  compactWindow: undefined as number | undefined, // tokens, when the engine says it
+  compactWindowAt: -Infinity, // when it was last asked, local ms
   fuel5h: undefined as number | undefined,
   fuel7d: undefined as number | undefined,
   apprentices: 0,
@@ -663,7 +680,8 @@ function cubsNow(): Cub[] {
  */
 function steer() {
   const anchor = theme.anchorOf(anim.current, worldNow())
-  const { roam, idleSpots, offstage } = theme.stage
+  const { roam, idleSpots } = theme.stage
+  const offstage = offstageNow()
   const trip = anim.trip
   if (trip) {
     anim.target = trip.phase === 'back' ? 0 : offstage
@@ -689,17 +707,19 @@ const poseTick = () => anim.tick + (LOOPING.has(anim.current) ? anim.phase : 0)
 /** The guests in the yard: walking in, greeting, standing about, walking out. */
 function guestsNow(): Guest[] {
   const out: Guest[] = []
-  const { guestSpots, offstage } = theme.stage
+  const { guestSpots } = theme.stage
+  const offstage = offstageNow()
   let i = 0
   for (const [id, g] of anim.guests) {
     const spot = guestSpots[Math.min(i, guestSpots.length - 1)] ?? 0
     i += 1
     const age = anim.clock - g.arrived
-    let x = Math.max(spot, offstage - age)
+    const pace = Math.max(1, (offstage - spot) / GUEST_WALK)
+    let x = Math.max(spot, Math.round(offstage - age * pace))
     let walking = x > spot
     let facing = -1
     if (g.leaving !== undefined) {
-      x = spot + (anim.clock - g.leaving)
+      x = Math.round(spot + (anim.clock - g.leaving) * pace)
       if (x >= offstage) {
         anim.guests.delete(id)
         anim.hostAcks.push(id) // walked out: his session may bring him home now
@@ -713,7 +733,7 @@ function guestsNow(): Guest[] {
       cape: colorsOf(g.cape),
       accessory: g.accessory,
       tick: age + (hashOf(id) % 997),
-      waving: !walking && age - (offstage - spot) < 16,
+      waving: !walking && age - (offstage - spot) / pace < 16,
     })
   }
   return out
@@ -856,7 +876,7 @@ async function comeHome($: EngineInterface) {
   const trip = anim.trip
   if (!trip || trip.phase !== 'leaving') return
   trip.phase = 'back'
-  anim.x = theme.stage.offstage
+  anim.x = offstageNow()
   await $.store.delete(VISIT_PREFIX + anim.sessionId)
   await note($, fill(words().notes.tripBack, { who: trip.name }))
   if (trip.idleAfter) await setAct($, 'idle')
@@ -1141,6 +1161,18 @@ async function syncClock($: EngineInterface) {
   anim.nowMs = await $.clock.now()
 }
 
+/**
+ * The compaction window as /context settles it: the settings' `autoCompactWindow` (for the
+ * model or for all), CLAUDE_CODE_AUTO_COMPACT_WINDOW, the account's. Asked again once a minute
+ * at most, so a setting changed or a model switched shows without a restart.
+ */
+async function readCompactWindow($: EngineInterface) {
+  if (anim.nowMs - anim.compactWindowAt < 60_000) return
+  anim.compactWindowAt = anim.nowMs
+  const now = await $.session.usage({ breakdown: 'summary' }).catch(() => undefined)
+  anim.compactWindow = now?.context.breakdown?.rawMaxTokens
+}
+
 /** A request to the model on the main thread: he thinks, with that model's hammer. */
 async function noteStep($: EngineInterface, model: string, effort: string | number | undefined) {
   anim.hammer = hammerOf(model)
@@ -1289,6 +1321,9 @@ export const register: Register = (on, options) => {
 
     for (const t of anim.timers) t.cancel()
     await useTheme($, themeWanted)
+    await syncClock($)
+    anim.compactWindowAt = -Infinity
+    await readCompactWindow($)
     const now = await $.session.usage()
     const u = toUsage(now, now.startedAt)
     learn(u)
@@ -1300,7 +1335,6 @@ export const register: Register = (on, options) => {
         .map(a => ({ id: a.id, agentId: a.id, type: a.type, description: a.description, background: true })),
       jobs: [],
     }))
-    await syncClock($)
     anim.hammer = hammerOf(await $.session.model())
     anim.project = short(await $.session.cwd())
     anim.banner = bannerOf(anim.project)
@@ -1345,7 +1379,7 @@ export const register: Register = (on, options) => {
         }
         // he walks toward where the moment wants him, or where he fancies
         steer()
-        if (anim.trip?.phase === 'out' && anim.x >= theme.stage.offstage) void arriveAway($).catch(() => undefined)
+        if (anim.trip?.phase === 'out' && anim.x >= offstageNow()) void arriveAway($).catch(() => undefined)
         if (anim.trip?.phase === 'away' && anim.nowMs >= anim.trip.until) void endTrip($, true).catch(() => undefined)
         if ((anim.clock + anim.phase) % HANDOFF_TICKS === 0) {
           void awaitHandoff($).catch(() => undefined)
@@ -1388,7 +1422,7 @@ export const register: Register = (on, options) => {
         }
         if (!anim.bandId || !anim.crop) return
         // a band not mounted (a survey, a narrow terminal) answers deny or rejects: nothing to do
-        $.ui.blit({ requestId: anim.bandId, key: KEY, cells: encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit)) })
+        $.ui.blit({ requestId: anim.bandId, key: KEY, cells: encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit, anim.extra)) })
           .catch(() => undefined)
       }),
       // the countdowns move by the minute; the local time is set again
@@ -1591,6 +1625,7 @@ export const register: Register = (on, options) => {
 
   on('session.measure', async ($, e, next) => {
     const before = await read($, usage)
+    await readCompactWindow($)
     const u = toUsage(e, before?.startedAt)
     const wasCold = anim.exhausted
     learn(u)
@@ -1644,7 +1679,8 @@ export const register: Register = (on, options) => {
     // The sprite needs the terminal's Raster and room beside the words; else the words alone.
     const ROWS = theme.rows
     const crop = e.surface === 'terminal' && e.props.maxRows >= ROWS ? fitCrop(allowed, columns) : undefined
-    const sceneColumns = crop ? cropWidth(crop) + 2 : 0
+    const extra = crop ? growOf(crop, columns) : 0
+    const sceneColumns = crop ? cropWidth(crop) + extra + 2 : 0
     const room = columns - sceneColumns
     const barWidth = clamp(room - 34, 8, 40)
     const roomy = room >= 40 // the info line under the gauges
@@ -1768,10 +1804,11 @@ export const register: Register = (on, options) => {
 
     anim.bandId = e.requestId
     anim.crop = crop
+    anim.extra = extra
     const { Raster } = $.ui.resolve(e)
     return (
       <Box flexDirection="row" gap={2}>
-        <Raster key={KEY} columns={cropWidth(crop)} rows={ROWS} cells={encode(theme.frame(crop, anim.current, poseTick(), worldNow(), lit))} />
+        <Raster key={KEY} columns={cropWidth(crop) + extra} rows={ROWS} cells={encode(theme.frame(crop, anim.current, poseTick(), worldNow(), lit, extra))} />
         {panel}
       </Box>
     )

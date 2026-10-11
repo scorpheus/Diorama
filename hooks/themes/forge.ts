@@ -16,6 +16,7 @@ import type { Grid, Light } from '../pixels.ts'
 import { CALM } from '../world.ts'
 import type { Crop, Cub, Dream, Guest, Theme, Weapon, World } from '../world.ts'
 import { FORGE_WORDS } from './forge-words.ts'
+import { drawYardWeather, layout, outdoors } from './forge-yard.ts'
 
 export { CALM }
 export const PALETTE = BASE_PALETTE
@@ -36,6 +37,7 @@ export const ACCESSORIES: readonly Accessory[] = ['aucun', 'lunettes', 'tablier'
 
 export const SW = 72 // scene width in pixels (= columns): the forge, then the apprentices' yard
 export const YARD = 54 // where the yard begins, past the banner
+export const GROW = 72 // the most the yard widens past the scene's edge, when the window has room
 export const SH = 32 // scene height in pixels (two per row)
 export const ROWS = SH / 2
 
@@ -50,6 +52,22 @@ export const cropWidth = (c: Crop) => CROPS[c][1] - CROPS[c][0]
 /** Where a guest stands, from the anvil: the yard; and where anyone leaves the scene. */
 export const GUEST_SPOT = 26
 export const OFFSTAGE = 44
+const GUEST_STEP = 19 // a guest's width and a step: side by side in a wide yard
+
+/** The scene's right edge in this frame: the yard runs out to it. Set by compose. */
+let EDGE: number = SW
+
+/**
+ * Where a guest stands in this frame's yard: the engine walks guests between their
+ * spot and the offstage; a wider yard spreads them side by side, as many as fit,
+ * and they come in from its own edge. Those that do not fit keep the engine's place.
+ */
+function guestX(x: number, i: number, fit: number): number {
+  if (i >= fit) return x
+  // the engine's offstage is past this yard's edge too: OFFSTAGE and what the yard grew by
+  const spot = GUEST_SPOT - (i > 0 ? 14 : 0), at = GUEST_SPOT + i * GUEST_STEP, off = EDGE - C.x + 2
+  return Math.round(at + ((x - spot) * (off - at)) / (off - spot))
+}
 
 // --- the cast -----------------------------------------------------------------
 
@@ -470,7 +488,7 @@ function drawVisitor(g: Grid, w: World, clock: number) {
   if (kind === undefined) return
   const age = clock % VISIT_EVERY
   if (kind === 'raven') {
-    const x = SW - Math.round(age * 1.3), y = 1 + Math.round(Math.sin(age / 3))
+    const x = EDGE - Math.round(age * 1.3), y = 1 + Math.round(Math.sin(age / 3))
     stamp(g, x, y, RAVEN[age % RAVEN.length] ?? [])
   } else {
     // a moth around the lantern
@@ -610,7 +628,7 @@ function drawGift(g: Grid, gift: NonNullable<World['gift']>) {
 
 function drawMessenger(g: Grid, m: NonNullable<World['messenger']>) {
   // from the other forge, right to left over the room, the news in its claws
-  const x = SW - Math.round(m.age * 1.6), y = Math.round(Math.sin(m.age / 3))
+  const x = EDGE - Math.round(m.age * 1.6), y = Math.round(Math.sin(m.age / 3))
   stamp(g, x, y, RAVEN[m.age % RAVEN.length] ?? [])
   stamp(g, x + CLAWS.x, y + CLAWS.y, m.kind === 'waiting' ? ['WFW', '.F.'] : ['WWV'])
 }
@@ -641,38 +659,134 @@ function drawWolf(g: Grid, x: number, y: number, dir: 1 | -1, step: number, scar
   stamp(g, x, y, rows)
 }
 
-function drawCubs(g: Grid, cubs: readonly Cub[], puddle = false) {
-  // three at most in the yard, each at its place; the farther back drawn first
-  const live = cubs.filter(c => c.leaving === undefined).slice(0, SLOTS.length)
-  const going = cubs.filter(c => c.leaving !== undefined).slice(0, 2)
-  const pack = [...live.map((c, i) => ({ c, slot: i })), ...going.map(c => ({ c, slot: c.seed % SLOTS.length }))]
-  pack.sort((a, b) => (SLOTS[b.slot]?.back ?? 0) - (SLOTS[a.slot]?.back ?? 0))
-  pack.forEach(({ c, slot }) => {
-    const at = cubPlace(c, slot)
-    let x = at.x, dir = at.dir, working = at.working && c.leaving === undefined, travel = at.travel
-    if (c.leaving !== undefined) {
-      // its work is done: it trots out to the right, the scroll in its mouth
-      x = at.x + Math.round(c.leaving * 1.3)
-      dir = 1
-      working = false
-      travel = c.leaving * 1.3
+// In a wide yard each cub has a chore of its own, at its own place: one draws water at the
+// well and carries it to the door, one fetches ore from the yard's far end, one reads its
+// scroll in the tree's shade, the others hammer near the door as in a narrow yard.
+type Chore = 'hammer' | 'water' | 'ore' | 'read'
+const WIDE_YARD = 40 // past this many pixels from the door, the cubs spread out to their chores
+
+/** The chores this yard offers, in the order the cubs take them; none in a narrow yard. */
+function choresOf(edge: number): Chore[] {
+  if (edge - YARD < WIDE_YARD) return []
+  return ['hammer', ...(layout(YARD, edge).well !== undefined ? ['water' as const] : []), 'ore', 'read', 'hammer']
+}
+
+type CubAt = {
+  x: number; y: number; dir: 1 | -1
+  travel: number // pixels walked so far: the legs keep step with the ground
+  doing?: 'hammer' | 'crank' | 'pour' | 'pick' | 'drop' | 'read'
+  since?: number // ticks into what it is doing
+  carry?: readonly string[] // in its mouth, on the way back
+  trips?: number // round trips done
+}
+
+/** Back and forth between a and b at the cub's own pace, pausing `atB` ticks at b and `atA` at a. */
+function shuttle(c: Cub, a: number, b: number, atB: number, atA: number) {
+  const pace = 0.4 + rand(c.seed) * 0.3
+  const span = Math.abs(b - a), leg = span / pace, round = 2 * leg + atB + atA
+  const trips = Math.floor(c.age / round), p = c.age % round
+  const dir: 1 | -1 = b >= a ? 1 : -1
+  const done = trips * 2 * span
+  if (p < leg) return { x: a + dir * p * pace, dir, travel: done + p * pace, at: 'going' as const, since: p, trips }
+  if (p < leg + atB) return { x: b, dir, travel: done + span, at: 'b' as const, since: p - leg, trips }
+  if (p < 2 * leg + atB) {
+    const q = p - leg - atB
+    return { x: b - dir * q * pace, dir: -dir as 1 | -1, travel: done + span + q * pace, at: 'back' as const, since: q, trips }
+  }
+  return { x: a, dir: -dir as 1 | -1, travel: done + 2 * span, at: 'a' as const, since: p - 2 * leg - atB, trips: trips + 1 }
+}
+
+function choreAt(c: Cub, chore: Chore, hammerSlot: number): CubAt {
+  const { well, tree } = layout(YARD, EDGE)
+  const y = LANE.y
+  if (chore === 'water' && well !== undefined) {
+    const s = shuttle(c, YARD + 3, well - CUB_W, 24, 8)
+    return {
+      x: Math.round(s.x), y: y - 1, dir: s.dir, travel: s.travel, since: s.since, trips: s.trips,
+      doing: s.at === 'b' ? 'crank' : s.at === 'a' ? 'pour' : undefined,
+      carry: s.at === 'back' ? ['cc', 'aa'] : undefined,
     }
-    const y = at.y - (puddle && !working && c.age % 6 < 2 ? 1 : 0) // splashing in the puddle
+  }
+  if (chore === 'ore') {
+    const s = shuttle(c, YARD + 8, EDGE - CUB_W - 1, 10, 6)
+    return {
+      x: Math.round(s.x), y, dir: s.dir, travel: s.travel, since: s.since, trips: s.trips,
+      doing: s.at === 'b' ? 'pick' : s.at === 'a' ? 'drop' : undefined,
+      carry: s.at === 'back' ? (s.trips % 2 ? ['RV'] : ['qA']) : undefined, // ore one trip, a log the next
+    }
+  }
+  if (chore === 'read') {
+    // in the shade, left of the trunk: it reads a long while, stretches its legs, reads on
+    const s = shuttle(c, tree.x - CUB_W - 7, tree.x - CUB_W - 1, 70, 70)
+    return { x: Math.round(s.x), y: y - 2, dir: s.dir, travel: s.travel, since: s.since, doing: s.at === 'a' || s.at === 'b' ? 'read' : undefined }
+  }
+  const at = cubPlace(c, hammerSlot)
+  return { x: at.x, y: at.y, dir: at.dir, travel: at.travel, doing: at.working ? 'hammer' : undefined }
+}
+
+function drawCubs(g: Grid, cubs: readonly Cub[], puddle = false) {
+  // three at most in a narrow yard, each at its place; in a wide one, one to a chore
+  const chores = choresOf(EDGE)
+  const live = cubs.filter(c => c.leaving === undefined).slice(0, Math.max(SLOTS.length, chores.length))
+  const going = cubs.filter(c => c.leaving !== undefined).slice(0, 2)
+  let hammers = 0
+  const placed = live.map((c, i) => {
+    const chore = chores[i] ?? 'hammer'
+    return { c, at: choreAt(c, chore, chore === 'hammer' ? hammers++ : i) }
+  })
+  for (const c of going) {
+    const chore = chores[c.seed % Math.max(1, chores.length)] ?? 'hammer'
+    const from = choreAt({ ...c, leaving: undefined }, chore, c.seed % SLOTS.length)
+    // its work is done: it trots out to the right, the scroll in its mouth, past the yard's edge in time
+    const pace = Math.max(1.3, (EDGE + 1 - from.x) / 36)
+    const gone = c.leaving ?? 0
+    placed.push({ c, at: { x: from.x + Math.round(gone * pace), y: from.y, dir: 1, travel: gone * pace } })
+  }
+  // the farther back drawn first
+  placed.sort((a, b) => a.at.y - b.at.y)
+  for (const { c, at } of placed) {
+    const { x, dir } = at
+    const sitting = at.doing !== undefined
+    const y = at.y - (puddle && !sitting && c.age % 6 < 2 ? 1 : 0) // splashing in the puddle
     // a step for each pixel walked, so a paw set down stays where it is
-    const step = working ? CUB_SIT : Math.floor(travel) % 4
+    const step = sitting ? CUB_SIT : Math.floor(at.travel) % 4
     drawWolf(g, x, y, dir, step, c.colour)
     const nose = dir > 0 ? x + CUB_W - 1 : x
-    if (working) {
+    const mouth = dir > 0 ? nose + 1 : nose - 2
+    const since = at.since ?? 0
+    if (at.doing === 'hammer') {
       // sitting, its little hammer goes up and down, sparks in its colour
       const up = c.age % 4 < 2
       const hx = dir > 0 ? x + CUB_W : x - 1
       put(g, hx, y + (up ? 1 : 3), 'A')
       put(g, hx, y + (up ? 2 : 4), 'r')
       if (!up) { put(g, hx + dir, y + 4, c.colour); put(g, hx + 2 * dir, y + 3, 'Y') }
+    } else if (at.doing === 'crank') {
+      // a paw on the windlass: the crank goes round, the bucket comes up the shaft, full
+      const { well } = layout(YARD, EDGE)
+      if (well !== undefined) {
+        put(g, well + (since % 8 < 4 ? 7 : 8), since % 8 < 4 ? 19 : 20, 'R')
+        stamp(g, well + 3, 23 - Math.min(2, Math.floor(since / 8)), ['aca'])
+      }
+    } else if (at.doing === 'pour') {
+      // at the door, the bucket tipped out: water splashes down
+      stamp(g, mouth, y + 3, ['ac'])
+      for (let k = 0; k < 3; k++) put(g, mouth - dir * k, y + 4 + ((since + k) % 3), 'c')
+    } else if (at.doing === 'pick' || at.doing === 'drop') {
+      // nose down to the heap: ore, or a log
+      stamp(g, mouth, y + 4, at.doing === 'pick' ? ['qAq'] : (at.trips ?? 0) % 2 ? ['qA'] : ['RV']) // what it carried in: trips counts this one
+    } else if (at.doing === 'read') {
+      // the scroll open before it, a page turned now and then
+      stamp(g, dir > 0 ? mouth : mouth - 1, y + 3, Math.floor(since / 24) % 2 ? ['WVW'] : ['WWV'])
     }
-    if (c.leaving !== undefined) stamp(g, dir > 0 ? nose + 1 : nose - 2, y + 3, ['WV']) // the scroll
+    if (at.carry) stamp(g, mouth, y + 3, at.carry)
+    if (c.leaving !== undefined) stamp(g, mouth, y + 3, ['WV']) // the scroll
     if (c.age < 8 && c.leaving === undefined) stamp(g, x + 3, y + 1, PUFF[Math.min(2, c.age >> 2)] ?? [])
-  })
+  }
+  // what the ore cub has brought in, piled by the door
+  const ore = live.find((_, i) => chores[i] === 'ore')
+  const brought = Math.min(3, placed.find(p => p.c === ore)?.at.trips ?? 0)
+  if (brought > 0) stamp(g, YARD + 3, SH - 1 - (brought > 2 ? 1 : 0), brought > 2 ? ['.qA.', 'qAVR'] : brought > 1 ? ['qAVR'] : ['qA'])
 }
 
 /** A jutting corner loses its outer quarter: a step of half a pixel instead of a whole one. */
@@ -721,9 +835,10 @@ function drawBell(g: Grid, age: number) {
  * The scene for a frame. `actorOnly` draws Scorpheus alone, without the room or
  * the moment's effects: how a guest is drawn into another forge.
  */
-export function compose(p: Pose, world: World, tick: number, actorOnly = false): Grid {
+export function compose(p: Pose, world: World, tick: number, actorOnly = false, width = SW): Grid {
   const pal = SPARKS[world.flavor]
-  const g: Grid = Array.from({ length: SH }, () => Array<string>(SW).fill('.'))
+  const g: Grid = Array.from({ length: SH }, () => Array<string>(width).fill('.'))
+  if (!actorOnly) EDGE = width
   const clock = world.clock
   HEAD_OF = HAMMERS[world.hammer]
   CAPE = world.cape
@@ -991,7 +1106,7 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   if (p.puff !== undefined) stamp(g, IMPACT.x - 2, IMPACT.y - 4 - Math.min(2, p.puff >> 1), PUFF[Math.min(2, p.puff >> 1)] ?? [])
   if (p.stars) {
     for (let i = 0; i < 6; i++) {
-      const sx = Math.floor(rand(Math.floor(tick / 2) * 11 + i) * SW)
+      const sx = Math.floor(rand(Math.floor(tick / 2) * 11 + i) * EDGE)
       const sy = Math.floor(rand(Math.floor(tick / 2) * 23 + i) * 12)
       put(g, sx, sy, i % 2 ? 's' : 'Y')
       if (i % 3 === 0) { put(g, sx - 1, sy, 's'); put(g, sx + 1, sy, 's'); put(g, sx, sy - 1, 's'); put(g, sx, sy + 1, 's') }
@@ -1010,14 +1125,20 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   if (world.gift) drawGift(g, world.gift)
 
   // guests from other sessions: the same Scorpheus, each in his own look, in the yard
-  for (const v of world.guests.slice(0, 2)) {
+  const fit = Math.max(1, Math.floor((EDGE - (C.x + GUEST_SPOT) - 17) / GUEST_STEP) + 1)
+  for (const [i, v] of world.guests.slice(0, Math.max(2, fit)).entries()) {
     const gw: World = {
-      ...world, x: v.x, walking: v.walking, facing: v.facing, cape: v.cape, accessory: v.accessory,
+      ...world, x: guestX(v.x, i, fit), walking: v.walking, facing: v.facing, cape: v.cape, accessory: v.accessory,
       absent: false, guests: [], speaking: false, hammer: 'normal', routine: undefined, dream: undefined,
       hourglasses: 0, exhausted: false, tea: false, duck: false, pressure: 0, personality: 'calme',
     }
-    const guest = compose(poseOf(v.waving ? 'waving' : 'idle', v.tick, gw), gw, v.tick, true)
-    guest.forEach((row, gy) => row.forEach((ch, gx) => { if (ch !== '.') put(g, gx, gy, ch) }))
+    // across a wide yard he hurries, more than a pixel a tick: his legs then keep time (a step
+    // a tick), not the ground, else they would skip steps; drawn where that step falls, then moved
+    const sign = v.facing < 0 ? -1 : 1
+    const shift = v.walking && EDGE > SW ? sign * ((((gw.x * sign - v.tick) % 4) + 4) % 4) : 0
+    const at = { ...gw, x: gw.x - shift }
+    const guest = compose(poseOf(v.waving ? 'waving' : 'idle', v.tick, at), at, v.tick, true, EDGE)
+    guest.forEach((row, gy) => row.forEach((ch, gx) => { if (ch !== '.') put(g, gx + shift, gy, ch) }))
   }
   if (world.banquet) drawBanquet(g, clock)
   if (world.messenger) drawMessenger(g, world.messenger)
@@ -1026,6 +1147,7 @@ export function compose(p: Pose, world: World, tick: number, actorOnly = false):
   drawVisitor(g, world, clock)
   if (world.bellAge !== undefined && world.bellAge < 40) drawBell(g, world.bellAge)
   drawCubs(g, world.apprentices, world.weather === 'storm')
+  drawYardWeather(g, world, YARD, EDGE)
   return g
 }
 
@@ -1309,14 +1431,19 @@ export function poseOf(activity: Activity, tick: number, world: World = CALM): P
 
 // --- to the terminal ---------------------------------------------------------------
 
-export function frame(crop: Crop, activity: Activity, tick: number, world: World = CALM, lit = true): Uint32Array {
+/** `extra`: columns the window has to spare, for a crop that ends with the yard: it widens by as many (GROW at most). */
+export function frame(crop: Crop, activity: Activity, tick: number, world: World = CALM, lit = true, extra = 0): Uint32Array {
   const [x0, x1] = CROPS[crop]
+  const width = x1 === SW ? SW + Math.max(0, Math.min(GROW, Math.floor(extra))) : SW
   const p = poseOf(activity, tick, world)
-  return toCells(compose(p, world, tick), PALETTE, x0, x1, lit ? lightOf(p, world, tick, compose(p, world, tick, true)) : undefined)
+  const scene = compose(p, world, tick, false, width)
+  return toCells(scene, PALETTE, x0, x1 === SW ? width : x1, lit ? lightOf(p, world, tick, compose(p, world, tick, true), activity === 'running', width) : undefined)
 }
 
 // What gives light glows on its own: flames, embers, sparks, hot metal; the sky keeps its own.
 const GLOWS = new Set('YfFEsSH')
+// Out of doors no flame burns: only sparks and white heat (a cub's hammer) glow; a red leaf does not.
+const GLOWS_OUT = new Set('YsS')
 
 const FLAT = new Set('knBb')
 /**
@@ -1363,7 +1490,7 @@ type Lamp = { x: number; y: number; reach: number; up: number; down: number; rgb
  * Scorpheus faces the fire he warms, where he turns from it he cools; and the
  * wall behind shows where a light falls.
  */
-function lightOf(p: Pose, w: World, tick: number, actor: Grid): Light {
+function lightOf(p: Pose, w: World, tick: number, actor: Grid, working: boolean, edge: number): Light {
   const night = w.hour < 6 || w.hour >= 21
   const dusk = !night && (w.hour < 8 || w.hour >= 18)
   const closed = w.hour >= 23 || w.hour < 6
@@ -1387,9 +1514,15 @@ function lightOf(p: Pose, w: World, tick: number, actor: Grid): Light {
   }
   const shade = modelOf(actor, w, p)
   const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
+  const yard = outdoors(w, working, YARD, edge)
+  const pack = (c: readonly number[]) => (byte(c[0] ?? 0) << 16) | (byte(c[1] ?? 0) << 8) | byte(c[2] ?? 0)
   return (x, y, letter, c) => {
+    if (x >= YARD) {
+      // out of doors: the sky behind, the hour's light on whoever stands there, the forge's at the door
+      if (c === undefined) { const b = yard.back(x, y); return b && pack(b) }
+      return GLOWS_OUT.has(letter) ? c : pack(yard.light([c >> 16, (c >> 8) & 255, c & 255], x, y))
+    }
     if (c === undefined) {
-      if (x >= YARD) return undefined // the yard is out of doors
       const k = gather(x, y)
       const r = byte(WALL[0] * (k[0] ?? 0)), g = byte(WALL[1] * (k[1] ?? 0)), b = byte(WALL[2] * (k[2] ?? 0))
       return Math.max(r, g, b) < 12 ? undefined : (r << 16) | (g << 8) | b
@@ -1415,8 +1548,9 @@ export const forge: Theme = {
   frame,
   anchorOf,
   stage: { roam: ROAM, idleSpots: [-12, -8, -4, 0, 0, 3, 5], offstage: OFFSTAGE, guestSpots: [GUEST_SPOT, GUEST_SPOT - 14] },
-  // the cat jumps down from the sill at 14, goes off past the yard, and walks a little behind him
-  pet: { gate: 14, away: SW + 12, follow: 21 },
+  // the cat jumps down from the sill at 14, goes off past the widest yard, and walks a little behind him
+  pet: { gate: 14, away: SW + GROW + 12, follow: 21 },
+  grow: GROW,
   sky: crop => crop !== 'solo', // the narrowest scene has no window
   rareFor: RARE_FOR,
   looks: { variants: BASE_VARIANTS, accessories: ACCESSORIES },

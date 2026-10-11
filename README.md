@@ -9,7 +9,7 @@ Un personnage suit le travail de Claude, sans qu'on ait rien à faire :
 
 Chaque sous-agent arrive en petite créature, puis repart sa mission faite. Les sessions ouvertes sur la même machine se rendent visite et s'envoient des nouvelles, et un animal unique passe de l'une à l'autre.
 
-À côté de la scène s'affichent les jauges de contexte, de la fenêtre de 5 h et de celle de 7 jours, avec l'heure de leur remise à zéro. Il y a aussi l'expérience gagnée, ce que fait Claude en ce moment et un journal court.
+À côté de la scène s'affichent les jauges de contexte, de la fenêtre de 5 h et de celle de 7 jours, avec l'heure de leur remise à zéro. Le contexte se mesure à la fenêtre de compaction quand les réglages en fixent une (`autoCompactWindow`, ou `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), sinon à celle du modèle. Il y a aussi l'expérience gagnée, ce que fait Claude en ce moment et un journal court.
 
 | La forge (thème par défaut) | L'antre de la sorcière |
 |---|---|

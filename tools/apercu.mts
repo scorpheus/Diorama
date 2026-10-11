@@ -1,8 +1,9 @@
 // Aperçu d'un thème Diorama : vérifie le fichier, puis dessine une planche PNG,
 // exactement comme le bandeau la dessinerait.
 //
-//   node tools/apercu.mts <theme.json | forge> <sortie.png> [--echelle 4] [--recadrage full]
-//       la planche : chaque moment du moteur, puis le décor dans ses situations
+//   node tools/apercu.mts <theme.json | forge> <sortie.png> [--echelle 4] [--recadrage full] [--large 0]
+//       la planche : chaque moment du moteur, puis le décor dans ses situations ;
+//       --large : les colonnes qu'une fenêtre large donne en plus (la cour de la forge s'élargit d'autant)
 //   node tools/apercu.mts <theme.json | forge> <sortie.png> --anime <moment | tout> [--images 8]
 //       l'animation déroulée, image par image : à l'arrêt, puis en marche vers la
 //       droite et vers la gauche (les moments où le moteur fait marcher le personnage)
@@ -29,6 +30,7 @@ const scale = Number(flag('--echelle', '4'))
 const anime = flag('--anime', '')
 const images = Math.max(1, Number(flag('--images', '8')))
 const crop = flag('--recadrage', 'full') as Crop
+const extra = Number(flag('--large', '0'))
 const [source, out] = args
 if (!source || !out) {
   console.error('usage : node tools/apercu.mts <theme.json | forge> <sortie.png> [--echelle 4] [--recadrage full] [--anime <moment | tout> [--images 8]]')
@@ -95,18 +97,19 @@ if (anime) {
     ['soir, trophées, jauges', 'idle', 0, { hour: 20, lanternLit: true, rack: ['sword', 'axe', 'dagger', 'mace'], masterpiece: true, ctx: 80, fuel5h: 40, fuel7d: 70, usd: 6 }],
     ['orage, sous pression', 'idle', 0, { weather: 'storm', pressure: 92 }],
     ['fête, messager', 'idle', 0, { banquet: true, messenger: { kind: 'waiting', age: 12 }, gift: { kind: 'coin', age: 1 } }],
+    ['hiver', 'idle', 0, { month: 1, hour: 11 }],
+    ['visite à trois, le soir', 'idle', 0, { hour: 19, month: 10, lanternLit: true, guests: [guest, ...[['C', 'D', 'bandeau', 40], ['o', 'O', 'tablier', 90]].map(([a, b, accessory, tick]) => ({ ...guest, x: theme.stage.guestSpots[1] ?? guest.x, cape: [a, b] as const, accessory: String(accessory), tick: Number(tick), waving: false }))] }],
   ]
 }
 
-const [x0, x1] = theme.crops[crop] ?? theme.crops.full
-const fw = x1 - x0, fh = theme.rows * 2
+const fw = theme.frame(crop, 'idle', 0, CALM, true, extra).length / 3 / theme.rows, fh = theme.rows * 2
 const gap = 2
 const W = (fw + gap) * cols + gap, H = (fh + gap) * Math.ceil(scenes.length / cols) + gap
 const pixels = new Uint8Array(W * H * 3).fill(0x16) // the terminal's dark background
 scenes.forEach(([, activity, tick, world], n) => {
   if (tick < 0) return // an empty place in a strip
   const ox = gap + (n % cols) * (fw + gap), oy = gap + Math.floor(n / cols) * (fh + gap)
-  const words = theme.frame(crop, activity, tick, { ...CALM, clock: tick * 7 + 1, ...world })
+  const words = theme.frame(crop, activity, tick, { ...CALM, clock: tick * 7 + 1, ...world }, true, extra)
   for (let r = 0; r < theme.rows; r++) {
     for (let x = 0; x < fw; x++) {
       const i = (r * fw + x) * 3
