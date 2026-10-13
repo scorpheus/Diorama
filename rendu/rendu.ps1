@@ -57,7 +57,11 @@ function Build {
     try { Invoke-WebRequest -UseBasicParsing -Method Post -Uri "http://127.0.0.1:$port/" -Body 'quitter' -TimeoutSec 2 | Out-Null } catch { }
     for ($i = 0; $i -lt 30 -and (Running); $i++) { Start-Sleep -Milliseconds 100 }
   }
-  Copy-Item (Join-Path $target 'release\rendu.exe') $exe -Force
+  # son mutex rendu, Windows tient encore un instant l'exécutable de l'appli qui s'en va
+  for ($i = 0; ; $i++) {
+    try { Copy-Item (Join-Path $target 'release\rendu.exe') $exe -Force -ErrorAction Stop; break }
+    catch { if ($i -ge 50) { Note "l'appli ne se remplace pas : $($_.Exception.Message)"; return $false }; Start-Sleep -Milliseconds 100 }
+  }
   Set-Content -Path $print -Value $hash -Encoding ascii
   Note 'appli refaite'
   return $true
