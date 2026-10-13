@@ -927,6 +927,43 @@ async function awaitHandoff($: EngineInterface) {
   if (!v || v.phase === 'gone' || anim.clock - (trip.leavingSince ?? anim.clock) > HANDOFF_WAIT) await comeHome($)
 }
 
+// --- the store read whole -------------------------------------------------------
+
+/**
+ * The store's file. `$.store.get` reads and parses the whole file for every key it is
+ * asked (and touches it): a look at twenty keys read it twenty times. Found once, by the
+ * presence this session wrote in it; then read once a look, every key at once.
+ */
+let storePath: string | undefined
+let storeTries = 0
+const STORE_TRIES = 10 // looks at the store's folder before falling back on `$.store` for good
+
+async function storeFile($: EngineInterface): Promise<string | undefined> {
+  if (storePath !== undefined || storeTries >= STORE_TRIES || !anim.sessionId) return storePath
+  storeTries++
+  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${(await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? ''}/.claude`
+  const dir = `${config}/plugins/store`
+  for (const f of await $.fs.list(dir).catch(() => [])) {
+    if (f.kind !== 'file' || !f.name.startsWith($.plugin.name) || !f.name.endsWith('.json')) continue
+    const all = await readStore($, `${dir}/${f.name}`)
+    const presence = all?.[PRESENCE_KEY]
+    if (typeof presence === 'object' && presence !== null && anim.sessionId in presence) return (storePath = `${dir}/${f.name}`)
+  }
+  return undefined
+}
+
+/** Every key of the store at once, or undefined when its file cannot be read (then `$.store`, key by key). */
+async function readStore($: EngineInterface, path?: string): Promise<Record<string, unknown> | undefined> {
+  const file = path ?? (await storeFile($))
+  if (file === undefined) return undefined
+  try {
+    const all: unknown = JSON.parse(await $.fs.read(file))
+    return typeof all === 'object' && all !== null ? (all as Record<string, unknown>) : undefined
+  } catch {
+    return undefined // written over meanwhile, or gone: key by key this once
+  }
+}
+
 /** Whether another session's Scorpheus is visiting this forge: one key per visitor. */
 async function pollVisits($: EngineInterface, voice: string) {
   // guests walked out since the last look: tell their sessions they are gone
@@ -934,15 +971,17 @@ async function pollVisits($: EngineInterface, voice: string) {
     const v = (await $.store.get(VISIT_PREFIX + id)) as Visit | undefined
     if (v && v.host === anim.sessionId) await $.store.set(VISIT_PREFIX + id, { ...v, phase: 'gone' } satisfies Visit)
   }
-  // a key read is a call through the engine, and the store keeps those of sessions long gone:
-  // most looks read only the keys of the sessions alive and of the guests here; every so
-  // often, all of them, for a session not yet among the neighbours
-  const keys = anim.visitLooks++ % SWEEP_LOOKS === 0 ? await $.store.keys()
+  // the whole store in one read; else key by key, a call through the engine each, and the
+  // store keeps those of sessions long gone: then most looks read only the keys of the
+  // sessions alive and of the guests here, and every so often all of them
+  const whole = await readStore($)
+  const read = (key: string) => (whole ? whole[key] : $.store.get(key))
+  const keys = whole ? Object.keys(whole) : anim.visitLooks++ % SWEEP_LOOKS === 0 ? await $.store.keys()
     : [...new Set([...anim.neighbours.map(n => n.id), ...anim.guests.keys()])].flatMap(id => [VISIT_PREFIX + id, NEWS_PREFIX + id])
   const here = new Map<string, Visit>()
   for (const key of keys) {
     if (key.startsWith(VISIT_PREFIX) && key !== VISIT_PREFIX + anim.sessionId) {
-      const v = (await $.store.get(key)) as Visit | undefined
+      const v = (await read(key)) as Visit | undefined
       // the visitor decides when he leaves; this forge's clock only guards against a session that died
       const staying = v && v.host === anim.sessionId && (v.phase ?? 'there') === 'there' && v.until + 60_000 > anim.nowMs
       if (staying) here.set(key.slice(VISIT_PREFIX.length), v)
@@ -951,7 +990,7 @@ async function pollVisits($: EngineInterface, voice: string) {
     }
     // news by raven from the other forges, newer than this session and not seen yet
     if (key.startsWith(NEWS_PREFIX) && key !== NEWS_PREFIX + anim.sessionId) {
-      const n = (await $.store.get(key)) as News | undefined
+      const n = (await read(key)) as News | undefined
       const sender = key.slice(NEWS_PREFIX.length)
       if (n && n.at > Math.max(anim.startedMs, anim.newsSeen.get(sender) ?? 0)) {
         anim.newsSeen.set(sender, n.at)

@@ -38,6 +38,11 @@ let duringCompact: (() => Promise<void>) | undefined
 const shelf = new Map<string, unknown>()
 /** How many times the plugin read each key of the store, this test. */
 const reads = new Map<string, number>()
+/** The store as a file in a fake config folder, which the plugin may read whole; `storeOnDisk` false hides it. */
+const STORE_DIR = 'C:/fake/.claude/plugins/store'
+const STORE_FILE = `${STORE_DIR}/diorama_inline-test.json`
+let storeOnDisk = true
+let wholeReads = 0
 let listed: Array<{ id: string; description: string; type: string; status: AgentStatus }> = []
 let sessionId = 'sess-1'
 // the compaction window the next engine's settings set (autoCompactWindow), taken by that engine alone
@@ -96,6 +101,26 @@ function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
     return { value: undefined }
   })
   on('store.keys', () => ({ value: [...shelf.keys()] }))
+  const onDisk = storeOnDisk
+  storeOnDisk = true
+  wholeReads = 0
+  const themed = disk.active // a theme file set up for this test (fakeDisk), served beside the store
+  disk.active = false
+  on('env.get', (_$, e) => ({ value: e.name === 'CLAUDE_CONFIG_DIR' ? 'C:/fake/.claude' : undefined }))
+  // the engine hands paths over with backslashes on Windows
+  on('fs.list', (_$, e) => ({ value: onDisk && e.path.replace(/\\/g, '/') === STORE_DIR ? [{ name: 'diorama_inline-test.json', kind: 'file', size: 1, mtimeMs: 1, isLink: false }] : [] }))
+  on('fs.read', (_$, e) => {
+    const path = e.path.replace(/\\/g, '/')
+    if (onDisk && path === STORE_FILE) {
+      wholeReads++
+      return { value: JSON.stringify(Object.fromEntries(shelf)) }
+    }
+    if (themed) {
+      disk.asked.push(path)
+      return { value: disk.text }
+    }
+    throw new Error(`ENOENT: ${path}`)
+  })
   on('ui.toast', () => ({ value: undefined }))
   on('session.cwd', () => ({ value: 'C:/projets/vehigraph' }))
   on('turn.step', async function* () {
@@ -828,12 +853,29 @@ test('ravens carry the news between forges', async ($, on) => {
   expect(shelf.has('news:sess-1')).toBe(false)
 })
 
-test('the visits are looked for under the live sessions\' keys, and under every key now and then', { timeoutMs: 120_000 }, async ($, on) => {
+test('the visits are looked for in the store read whole, once a look', { timeoutMs: 120_000 }, async ($, on) => {
+  // forty ravens of sessions long gone: in the file, never asked for one by one
+  const old = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`news:old-${i}`, { kind: 'done', project: 'Vieux', at: START - 86_400_000 }]))
+  const neighbour = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
+  const { ui, clock } = await start($, on, answerTools, { ...old, presence: { 'sess-dev': neighbour } })
+  await clock.advance(20_000)
+  expect(wholeReads).toBeGreaterThanOrEqual(9) // one read of the file a look
+  const asked = [...reads].filter(([key]) => key.startsWith('news:') || key.startsWith('visit:')).reduce((n, [, k]) => n + k, 0)
+  expect(asked).toBe(0)
+  // a session not yet among the neighbours: seen at the next look, no sweep to wait for
+  shelf.set('news:sess-new', { kind: 'done', project: 'Neuf', at: clock.now() })
+  await clock.advance(4000)
+  expect(await ui.find({ text: /corbeau : la forge Neuf/ })).toBeDefined()
+})
+
+test('without the store\'s file, the visits are looked for under the live sessions\' keys, and under every key now and then', { timeoutMs: 120_000 }, async ($, on) => {
+  storeOnDisk = false
   // forty ravens of sessions long gone: read at the sweep, not at every look
   const old = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`news:old-${i}`, { kind: 'done', project: 'Vieux', at: START - 86_400_000 }]))
   const neighbour = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
   const { ui, clock } = await start($, on, answerTools, { ...old, presence: { 'sess-dev': neighbour } })
   await clock.advance(20_000)
+  expect(wholeReads).toBe(0)
   const stale = [...reads].filter(([key]) => key.startsWith('news:old-')).reduce((n, [, k]) => n + k, 0)
   expect(stale).toBe(40) // one sweep in twenty seconds, not one at every look
   // a live neighbour's raven is seen at the next look
@@ -1265,17 +1307,14 @@ test('the previews show every moment the engine plays, and know which ones walk 
   expect(ACTIVITIES.filter(a => wander(a, 0, 0, 0, [5]) !== undefined)).toEqual([...ROAMING])
 })
 
-/** The theme file on a fake disk: its text and when it last changed. */
-const disk = { text: '', mtime: 1, asked: [] as string[] }
+/** The theme file on a fake disk: its text and when it last changed (the engine's `fs.read` serves it). */
+const disk = { text: '', mtime: 1, asked: [] as string[], active: false }
 function fakeDisk(on: On, text: string) {
   disk.text = text
   disk.mtime = 1
+  disk.active = true
   on('fs.stat', () => ({ value: { kind: 'file', size: disk.text.length, mtimeMs: disk.mtime, isLink: false } }))
   disk.asked = []
-  on('fs.read', (_$, e) => {
-    disk.asked.push(e.path.replace(/\\/g, '/'))
-    return { value: disk.text }
-  })
 }
 
 test('the theme option draws a theme of one\'s own, with its words', { options: { theme: 'C:/themes/mini.json' } }, async ($, on) => {
