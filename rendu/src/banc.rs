@@ -145,6 +145,11 @@ pub fn banc(messages: HWND, secondes: u64) {
 fn forge(activite: Activite) -> SceneForge {
     let mut monde = Monde { clock: 1, ..Monde::default() };
     monde.apprentices = (0..3).map(|i| Petit { seed: 3 + 4 * i, colour: Lettre(b"PbG"[i as usize]), age: 20 + 30 * i, leaving: None }).collect();
+    // les cases du pet, faites une fois pour toute l'appli : hors de la mesure
+    let t = std::time::Instant::now();
+    if crate::forge::pet::cases(19).is_some() && t.elapsed().as_millis() > 1 {
+        note(&format!("banc : la planche du pet décodée et mise à l'échelle, une fois : {} ms", t.elapsed().as_millis()));
+    }
     let mut s = SceneForge::new();
     s.recevoir(Etat { recadrage: Recadrage::Full, extra: 72, lit: true, activite, tick: 0, monde });
     s

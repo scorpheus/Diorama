@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use super::atelier::{C, IMPACT, LANTERN, MOUTH, SH, SW, WINDOW, YARD};
 use super::cour::{pack, Dehors};
 use super::monde::{Monde, Temps};
+use super::pet::Eclairage;
 use super::pixels::{arrondi, hasard, Grille, Lumiere};
 use super::poses::Pose;
 
@@ -193,6 +194,19 @@ impl<'a> LumiereForge<'a> {
             })
             .collect();
         LumiereForge { lamps, amb, actor, shade: model_of(actor, w, p), dehors }
+    }
+
+    /// L'ambiance et les lampes sur chaque pixel de forge d'un rectangle (borné à la pièce) :
+    /// la lumière que pet.rs pose sur Scorpheus.
+    pub fn eclairage(&self, x0: i32, y0: i32, w: i32, h: i32) -> Eclairage {
+        let mut k = Vec::with_capacity((w * h).max(0) as usize);
+        for y in y0..y0 + h {
+            for x in x0..x0 + w {
+                let g = self.gather(x.clamp(0, YARD - 1), y.clamp(0, SH - 1));
+                k.push([(self.amb[0] + g[0]) as f32, (self.amb[1] + g[1]) as f32, (self.amb[2] + g[2]) as f32]);
+            }
+        }
+        Eclairage { x0, y0, w, h, k }
     }
 
     /// Ce que toutes les lampes posent sur un pixel de la pièce.

@@ -111,11 +111,21 @@ pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
     let lignes = scenes.len().div_ceil(par_ligne) as i32;
     let (w, h) = (ECART + (fw + ECART) * par_ligne as i32, ECART + (fh + ECART) * lignes);
     let mut pixels = vec![0xFF16_1616u32; (w * h) as usize];
-    let mut cible = Cible { pixels: &mut pixels, w: w as usize, h: h as usize };
+    let cases = super::pet::cases(CH as u32);
+    let mut scene = vec![0u32; (fw * fh) as usize];
     for (n, (a, t, monde)) in scenes.iter().enumerate() {
-        let cells = forge.frame(Recadrage::Full, *a, *t, monde, true, extra);
+        // chaque scène peinte à part, Scorpheus par-dessus comme dans l'appli, puis posée
+        let (cells, acteur, _) = forge.image(Recadrage::Full, *a, *t, monde, true, extra, cases.is_some());
+        scene.fill(0);
+        peindre(&mut Cible { pixels: &mut scene, w: fw as usize, h: fh as usize }, &cells, None, cols, 0, 0, CW, CH);
+        if let (Some(cases), Some(acteur)) = (&cases, &acteur) {
+            super::pet::peindre(cases, acteur, &mut scene, fw as usize, fh as usize, 0, CW, CH);
+        }
         let (ox, oy) = (ECART + (n % par_ligne) as i32 * (fw + ECART), ECART + (n / par_ligne) as i32 * (fh + ECART));
-        peindre(&mut cible, &cells, None, cols, ox, oy, CW, CH);
+        for y in 0..fh {
+            let d = ((oy + y) * w + ox) as usize;
+            pixels[d..d + fw as usize].copy_from_slice(&scene[(y * fw) as usize..((y + 1) * fw) as usize]);
+        }
     }
     // le fond du terminal, là où la scène est transparente
     for p in pixels.iter_mut() {
@@ -175,6 +185,41 @@ fn crc32(d: &[u8]) -> u32 {
         }
     }
     !c
+}
+
+#[cfg(test)]
+mod film {
+    use super::super::monde::*;
+    use super::super::{Etat, SceneForge};
+    use crate::scene::{Image, Scene};
+
+    /// Des images qui se suivent, comme l'appli les peint (le pet, la gerbe), côte à côte :
+    /// FILM=<sortie.png> cargo test --release film -- --ignored
+    #[test]
+    #[ignore]
+    fn film() {
+        let (cw, ch, cols) = (9i32, 19i32, 144i32);
+        let (w, h) = (cols * cw, 16 * ch);
+        let mut s = SceneForge::new();
+        s.recevoir(Etat { recadrage: Recadrage::Full, extra: 72, lit: true, activite: Activite::Running, tick: 0, monde: Monde { clock: 1, ..Monde::default() } });
+        let mut px = vec![0u32; (w * h) as usize];
+        let (vue, n) = (300i32, 12i32); // le coin de l'enclume et de Scorpheus, douze images
+        let mut out = vec![0xFF16_1616u32; ((vue + 4) * n * h) as usize];
+        for k in 0..16 + n {
+            s.peindre(&mut Image { pixels: &mut px, w: w as u32, h: h as u32, cellule: (cw as u32, ch as u32) }, 0.15, k == 0);
+            let i = k - 16;
+            if i < 0 {
+                continue;
+            }
+            for y in 0..h {
+                for x in 0..vue {
+                    let p = px[(y * w + 60 + x) as usize];
+                    out[(y * (vue + 4) * n + i * (vue + 4) + x) as usize] = if p >> 24 == 0 { 0xFF0C_0C0C } else { p };
+                }
+            }
+        }
+        std::fs::write(std::env::var("FILM").unwrap(), super::png(&out, ((vue + 4) * n) as u32, h as u32)).unwrap();
+    }
 }
 
 #[cfg(test)]
@@ -243,5 +288,17 @@ mod chrono {
             println!("{a:?} : {:.0} % des cellules changent ; par tranche de 8 colonnes (%) : {}", 100.0 * ch as f64 / tot as f64, bandes.join(" "));
         }
         println!("peindre : {:.3} ms, {:.1} zones, {:.0} % de l'image", tp * 1000.0 / n as f64, nz as f64 / n as f64, 100.0 * aire as f64 / n as f64 / (cols * 9 * 16 * 19) as f64);
+        // Scorpheus d'après son pet : l'image avec lui, puis lui seul peint
+        let cases = super::super::pet::cases(19).unwrap();
+        let (mut ti, mut tpet) = (0.0, 0.0);
+        for k in 0..n {
+            let t = Instant::now();
+            let (_, a, _) = f.image(Recadrage::Full, Activite::Running, k, &w.plus_tard(k), true, 72, true);
+            ti += t.elapsed().as_secs_f64();
+            let t = Instant::now();
+            super::super::pet::peindre(&cases, a.as_ref().unwrap(), &mut px, cols * 9, 16 * 19, 0, cw, ch);
+            tpet += t.elapsed().as_secs_f64();
+        }
+        println!("image avec le pet : {:.3} ms ; le pet peint : {:.3} ms", ti * 1000.0 / n as f64, tpet * 1000.0 / n as f64);
     }
 }

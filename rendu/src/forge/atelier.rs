@@ -25,13 +25,15 @@ const GUEST_STEP: i32 = 19;
 /// de la scène, la tête du marteau, la cape de la session.
 pub struct Contexte {
     pub edge: i32,
+    /// Scorpheus est peint d'après son pet (pet.rs) : la scène ne dessine que ce qui l'entoure
+    pub pet: bool,
     tete: &'static [&'static str],
     cape: [u8; 2],
 }
 
 impl Default for Contexte {
     fn default() -> Self {
-        Contexte { edge: SW, tete: &HAMMER_NORMAL, cape: *b"oO" }
+        Contexte { edge: SW, pet: false, tete: &HAMMER_NORMAL, cape: *b"oO" }
     }
 }
 
@@ -1299,6 +1301,8 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
         if p.stool {
             g.stamp(x + 1, C.1 + 23, &["RRRRRRRRRRRRRR", ".R..........R.", ".R..........R."]);
         }
+        let hy = y + p.head_dy;
+        if !ctx.pet {
         if let Some(tail) = TAIL.get(p.tail) {
             g.stamp(x + 13, y + 13, tail);
         }
@@ -1406,7 +1410,6 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
             head[2][14] = b'k';
             head[2][13] = b'w';
         }
-        let hy = y + p.head_dy;
         for (j, row) in head.iter().enumerate() {
             for (i, &ch) in row.iter().enumerate() {
                 g.put(x + i as i32, hy + j as i32, ch);
@@ -1519,13 +1522,14 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
                 g.put(x + 11 + (a % 2) as i32, y + 14 - a.div_euclid(2) as i32, if a < 3 { b'X' } else { b'x' }); // sa vapeur
             }
         }
+        if p.scroll {
+            g.stamp(x + 4, y + 16, &SCROLL);
+        }
+        }
         if p.thought {
             g.put(x + 15, hy + 3, b'w');
             g.put(x + 16, hy + 1, b'w');
             g.stamp(x + 17, (hy - 6).max(0), &THOUGHT[(tick.div_euclid(3) % 2) as usize]);
-        }
-        if p.scroll {
-            g.stamp(x + 4, y + 16, &SCROLL);
         }
         if p.glints {
             for i in 0..3i64 {
@@ -1578,7 +1582,8 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
                 }
                 draw_zzz(&mut g, x + 15, hy + 1, tick);
             }
-            if let Some(age) = p.sparks_age.filter(|&a| a < 6) {
+            // d'après son pet, la gerbe se peint au vrai pixel (gerbe.rs)
+            if let Some(age) = p.sparks_age.filter(|&a| a < 6 && !ctx.pet) {
                 draw_sparks(&mut g, age, tick.div_euclid(8), p.spark_count.unwrap_or(12), IMPACT.0 + 1, IMPACT.1, pal);
             }
             if let Some(f) = p.fireworks {
@@ -1653,7 +1658,9 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
             ..world.clone()
         };
         let pose = pose_of(if v.waving { Activite::Waving } else { Activite::Idle }, v.tick, &at);
+        let pet = std::mem::replace(&mut ctx.pet, false);
         let guest = compose(ctx, cour, &pose, &at, v.tick, true, edge);
+        ctx.pet = pet;
         for gy in 0..guest.h {
             for gxx in 0..guest.w {
                 let ch = guest.at(gxx, gy);

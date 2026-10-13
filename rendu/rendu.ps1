@@ -25,10 +25,12 @@ function Note([string]$line) {
   Add-Content -Path $log -Value "$(Get-Date -Format 'HH:mm:ss') rendu.ps1 : $line" -Encoding UTF8
 }
 
-# l'empreinte de la source : Cargo.toml, Cargo.lock et les .rs de src, sous-dossiers compris
+# l'empreinte de la source : Cargo.toml, Cargo.lock, les .rs de src (sous-dossiers compris) et
+# les images que l'appli embarque (pet/)
 function Print {
   $files = @('Cargo.toml', 'Cargo.lock' | ForEach-Object { Join-Path $PSScriptRoot $_ }) +
-    @(Get-ChildItem (Join-Path $PSScriptRoot 'src') -Filter *.rs -Recurse | Sort-Object FullName | ForEach-Object FullName)
+    @(Get-ChildItem (Join-Path $PSScriptRoot 'src') -Filter *.rs -Recurse | Sort-Object FullName | ForEach-Object FullName) +
+    @(Get-ChildItem (Join-Path $PSScriptRoot 'pet') -File -ErrorAction SilentlyContinue | Sort-Object FullName | ForEach-Object FullName)
   $all = ($files | Where-Object { Test-Path $_ } | ForEach-Object { (Get-FileHash $_ -Algorithm SHA256).Hash }) -join ''
   $sha = [System.Security.Cryptography.SHA256]::Create()
   ($sha.ComputeHash([System.Text.Encoding]::ASCII.GetBytes($all)) | ForEach-Object { $_.ToString('x2') }) -join ''

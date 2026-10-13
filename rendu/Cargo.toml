@@ -6,6 +6,7 @@ description = "Diorama : l'appli qui dessine les bandeaux, en vrais pixels, par-
 license = "MIT"
 
 [dependencies]
+image-webp = "0.2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
