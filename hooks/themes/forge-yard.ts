@@ -14,7 +14,17 @@ import type { World } from '../world.ts'
 
 type RGB = readonly [number, number, number]
 
-const hex = (n: number): RGB => [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+/** A colour by its number: always the same one for the same number, so what is worked out from it can be kept. */
+const hex = (n: number): RGB => {
+  let c = hexes.get(n)
+  if (c === undefined) {
+    hexes.set(n, (c = [(n >> 16) & 255, (n >> 8) & 255, n & 255]))
+    named.add(c)
+  }
+  return c
+}
+const hexes = new Map<number, RGB>()
+const named = new WeakSet<RGB>()
 const mix = (a: RGB, b: RGB, k: number): RGB => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]
 const mul = (a: RGB, m: RGB): RGB => [a[0] * m[0], a[1] * m[1], a[2] * m[2]]
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
@@ -34,11 +44,20 @@ const HEIGHT = 32
 const GROUND = 28 // the yard's floor, from this row down
 const HORIZON = 25
 
+/** A function of the column, worked out once a column: the land does not move. */
+const once = (f: (x: number) => number) => {
+  const known = new Map<number, number>()
+  return (x: number) => {
+    let v = known.get(x)
+    if (v === undefined) known.set(x, (v = f(x)))
+    return v
+  }
+}
 /** The two ranges' ridges at column x: the far one, then the near one. */
-const farRidge = (x: number) => 8 + roll(x / 9, 1) * 6 + roll(x / 4, 2) * 2
-const nearRidge = (x: number) => 15 + roll(x / 6, 3) * 5
+const farRidge = once(x => 8 + roll(x / 9, 1) * 6 + roll(x / 4, 2) * 2)
+const nearRidge = once(x => 15 + roll(x / 6, 3) * 5)
 /** Where the firs at the foot of the near range begin, at column x: a fir every five columns. */
-const firTop = (x: number) => { const fir = Math.round(x / 5) * 5; return 27 - (5 + Math.floor(rand(fir) * 4)) + Math.abs(x - fir) * 2 }
+const firTop = once(x => { const fir = Math.round(x / 5) * 5; return 27 - (5 + Math.floor(rand(fir) * 4)) + Math.abs(x - fir) * 2 })
 
 /** The hour and the weather out of doors: the sky's two ends, the light things take, the forge's glow at the door. */
 type Sky = { top: RGB; low: RGB; amb: RGB; spill: number; night: boolean; dusk: boolean; storm: boolean; flash: boolean }
@@ -60,8 +79,17 @@ function skyOf(w: World): Sky {
   return { ...base, night, dusk, storm, flash }
 }
 
-/** Where things stand in a yard from the door (`from`) to the scene's edge (`to`): the more room, the more things. */
-export function layout(from: number, to: number) {
+/** Where things stand in a yard from the door (`from`) to the scene's edge (`to`): the more room, the more things. Worked out once a width. */
+export function layout(from: number, to: number): Layout {
+  const key = `${from},${to}`
+  let known = layouts.get(key)
+  if (known === undefined) layouts.set(key, (known = placeAll(from, to)))
+  return known
+}
+type Layout = { wheel: number | undefined; tree: { x: number; r: number }; well: number | undefined; falls: Array<{ x: number; near: boolean }> }
+const layouts = new Map<string, Layout>()
+
+function placeAll(from: number, to: number): Layout {
   const room = to - from
   const wheel = room >= 62 ? to - 11 : undefined
   // a narrow yard has only the edge of a crown peeking in, high on the right
@@ -104,7 +132,18 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
   const se = season(w), winter = se === 'winter'
   const t = w.clock
   const { wheel, tree, well, falls } = layout(from, to)
-  const lit = (c: RGB, far = 0): RGB => mix(mul(c, sky.amb), sky.low, far)
+  // a named colour under this frame's light, worked out once a frame
+  const known = new Map<number, Map<RGB, RGB>>()
+  const lit = (c: RGB, far = 0): RGB => {
+    let byColour = known.get(far)
+    if (byColour === undefined) known.set(far, (byColour = new Map()))
+    let v = byColour.get(c)
+    if (v === undefined) {
+      v = mix(mul(c, sky.amb), sky.low, far)
+      if (named.has(c)) byColour.set(c, v)
+    }
+    return v
+  }
 
   /**
    * Water falling past (x, y), seen through by `alpha`: streaks of foam going down
@@ -126,7 +165,7 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
   const jog = (y: number, seed: number) => Math.round((roll(y / 3, seed) - 0.5) * 3.2)
   const fallsAt = (x: number, y: number, c: RGB, near: boolean): RGB => {
     for (const f of falls) {
-      if (near !== f.near) continue
+      if (near !== f.near || x < f.x - 3 || x > f.x + 4) continue
       const top = near ? nearRidge(f.x) + 1.5 : farRidge(f.x) + 1.5
       if (y < top - 1 || y > 26) continue
       const at = f.x + jog(y, f.x * 7 + (near ? 3 : 0)), far = near ? 0.12 : 0.3
@@ -139,10 +178,11 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
     return c
   }
   /** And the spray where the near one lands, among the firs' tips. */
+  const spray = falls.find(f => f.near)
+  const sprayBase = spray === undefined ? 0 : firTop(spray.x), sprayAt = spray === undefined ? 0 : spray.x + jog(sprayBase, spray.x * 7 + 3) + 0.5
   const mist = (x: number, y: number, c: RGB): RGB => {
-    const f = falls.find(f => f.near)
-    if (f === undefined || winter) return c
-    const base = firTop(f.x), d = Math.hypot((x - f.x - jog(base, f.x * 7 + 3) - 0.5) / 2.6, (y - base) / 1.3)
+    if (spray === undefined || winter || Math.abs(y - sprayBase) >= 1.3) return c
+    const base = sprayBase, d = Math.hypot((x - sprayAt) / 2.6, (y - base) / 1.3)
     return d < 1 ? mix(c, lit(hex(0xf4f9fc), 0.2), (1 - d) * 0.6 * (0.7 + 0.3 * Math.sin(t / 3 + x))) : c
   }
 
@@ -202,6 +242,7 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
   const crown = (x: number, y: number, c: RGB): RGB => {
     const { x: tx, r } = tree, ty = r + 0.5
     const gust = sky.storm ? 1.4 : 0.6
+    if (Math.abs(x - tx) >= (r + 2.5) / 0.85 + gust) return c
     const sway = Math.sin(t / (sky.storm ? 3 : 7) + y / 3) * gust * clamp01((ty + r - y) / (2 * r))
     const sx = x - sway
     const reach = r + roll(Math.atan2(y - ty, sx - tx) * 3 + 5, 5) * 2.5

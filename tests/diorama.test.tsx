@@ -542,7 +542,8 @@ test('three failures running bring out the duck', async ($, on) => {
   expect((await ui.find({ text: /^ · / }))?.text).toBe(' · parle au canard')
 })
 
-test('two hours in, tea', { timeoutMs: 120_000 }, async ($, on) => {
+// two hours of ticks: some ninety seconds alone, more on a machine busy with other sessions
+test('two hours in, tea', { timeoutMs: 240_000 }, async ($, on) => {
   const { ui, clock } = await start($, on)
   for (let i = 0; i < 5; i++) await clock.advance(24 * 60 * 1000 + 200) // in steps the mocked clock takes
   await $.prompt.submit(typed('go')) // wakes him from his nap
