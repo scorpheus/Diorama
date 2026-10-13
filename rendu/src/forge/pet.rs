@@ -6,9 +6,19 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use super::monde::{Activite, Monde};
+use super::monde::{Accessoire, Activite, Monde};
 
 const PLANCHES: [&[u8]; 2] = [include_bytes!("../../pet/scorpheus.webp"), include_bytes!("../../pet/forge.webp")];
+/// Les accessoires, chacun un calque posé sur les cases (tools/pet/chatgpt.py --tenue) : les
+/// rangées 0 à 8 de la première planche, puis les six de la seconde. Une image d'un pixel :
+/// pas encore dessiné, le pet sans.
+const CALQUES: [(Accessoire, &[u8]); 3] = [
+    (Accessoire::Lunettes, include_bytes!("../../pet/lunettes.webp")),
+    (Accessoire::Tablier, include_bytes!("../../pet/tablier.webp")),
+    (Accessoire::Bandeau, include_bytes!("../../pet/bandeau.webp")),
+];
+/// Les rangées de la première planche que le calque couvre.
+const RANGEES_PET: usize = 9;
 const CASE: (usize, usize) = (192, 208);
 const COLONNES: usize = 8;
 /// Le point de la case qui se pose au sol : sous ses pattes, au milieu.
@@ -170,15 +180,21 @@ impl Cases {
 }
 
 /// Les cases, à la hauteur de cellule `ch`, à la cape `cape` (sa lettre claire, 'O' : la verte
-/// du pet) : faites une fois pour toutes les bandes de cette taille et de cette tenue, la
-/// planche décodée seulement le temps de les faire.
-pub fn cases(ch: u32, cape: u8) -> Option<Arc<Cases>> {
-    static FAITES: OnceLock<Mutex<HashMap<(u32, u8), Arc<Cases>>>> = OnceLock::new();
+/// du pet), avec l'accessoire `acc` : faites une fois pour toutes les bandes de cette taille et
+/// de cette tenue, la planche décodée seulement le temps de les faire.
+pub fn cases(ch: u32, cape: u8, acc: Accessoire) -> Option<Arc<Cases>> {
+    static FAITES: OnceLock<Mutex<HashMap<(u32, u8, u8), Arc<Cases>>>> = OnceLock::new();
     let mut faites = FAITES.get_or_init(Default::default).lock().ok()?;
-    if let Some(c) = faites.get(&(ch, cape)) {
+    if let Some(c) = faites.get(&(ch, cape, acc as u8)) {
         return Some(c.clone());
     }
     let mut planches = PLANCHES.iter().map(|p| decoder(p)).collect::<Option<Vec<_>>>()?;
+    // l'accessoire avant la cape : le bandeau, de son vert, en prend la teinte
+    if let Some((_, calque)) = CALQUES.iter().find(|(a, _)| *a == acc) {
+        if let Some(calque) = decoder(calque) {
+            habiller(&mut planches, &calque);
+        }
+    }
     for (_, rgba) in &mut planches {
         teindre(rgba, cape);
     }
@@ -192,8 +208,38 @@ pub fn cases(ch: u32, cape: u8) -> Option<Arc<Cases>> {
         }
     }
     let c = Arc::new(Cases(toutes));
-    faites.insert((ch, cape), c.clone());
+    faites.insert((ch, cape, acc as u8), c.clone());
     Some(c)
+}
+
+/// Le calque d'un accessoire posé sur les planches, par-dessus (en prémultiplié) ; un calque
+/// d'une autre taille que (8 cases, 9 + 6 rangées) n'est pas encore dessiné.
+fn habiller(planches: &mut [(usize, Vec<[f32; 4]>)], (w, calque): &(usize, Vec<[f32; 4]>)) {
+    let largeur = COLONNES * CASE.0;
+    if *w != largeur || calque.len() != largeur * CASE.1 * (RANGEES_PET + 6) {
+        return;
+    }
+    for (k, (pw, rgba)) in planches.iter_mut().enumerate() {
+        if *pw != largeur {
+            continue;
+        }
+        // ses rangées dans le calque : les neuf de la première planche, puis la seconde
+        let (debut, n) = if k == 0 { (0, RANGEES_PET) } else { (RANGEES_PET, 6) };
+        let n = (n * CASE.1).min(rgba.len() / largeur);
+        for y in 0..n {
+            for x in 0..largeur {
+                let c = calque[(debut * CASE.1 + y) * largeur + x];
+                if c[3] <= 0.0 {
+                    continue;
+                }
+                let d = &mut rgba[y * largeur + x];
+                let inv = 1.0 - c[3] / 255.0;
+                for i in 0..4 {
+                    d[i] = c[i] + d[i] * inv;
+                }
+            }
+        }
+    }
 }
 
 /// La couleur claire de la cape forêt (accessoires::PALETTE, 'O') : celle du pet, à peu près.
@@ -397,14 +443,15 @@ pub struct Acteur {
     pub x: f32,
     pub y: f32,
     pub eclairage: Option<Eclairage>,
-    /// la lettre claire de sa cape (Monde.cape[1])
+    /// la lettre claire de sa cape (Monde.cape[1]), son accessoire
     pub cape: u8,
+    pub accessoire: Accessoire,
 }
 
 /// Peint `a` dans `pixels` (0xAARRGGBB prémultiplié, `w` × `h`) ; `x0` : la première colonne
 /// de forge montrée ; (cw, ch) : la cellule. Rend le rectangle peint.
 pub fn peindre(a: &Acteur, pixels: &mut [u32], w: usize, h: usize, x0: i32, cw: i32, ch: i32) -> Option<(i32, i32, i32, i32)> {
-    let cases = cases(ch as u32, a.cape)?;
+    let cases = cases(ch as u32, a.cape, a.accessoire)?;
     let c = cases.case(a.rangee, a.image)?;
     if c.w == 0 {
         return None;
@@ -473,7 +520,7 @@ mod tests {
 
     #[test]
     fn la_planche_se_decoupe_en_cases_a_la_taille_du_personnage() {
-        let c = cases(19, b'O').expect("la planche se décode");
+        let c = cases(19, b'O', Accessoire::Aucun).expect("la planche se décode");
         let repos = c.case(Rangee::Repos, 0).unwrap();
         // 26 pixels de forge de 9,5 px : ~247 px de haut, posés au sol
         assert!((235..=260).contains(&repos.h), "hauteur {}", repos.h);
@@ -482,6 +529,18 @@ mod tests {
             for i in 0..n {
                 assert!(c.case(r, i).is_some_and(|k| k.w > 0), "{r:?} {i}");
             }
+        }
+    }
+
+    #[test]
+    fn un_accessoire_dessine_se_pose_sur_le_pet() {
+        let nu = cases(19, b'O', Accessoire::Aucun).unwrap();
+        for (acc, calque) in CALQUES {
+            let dessine = decoder(calque).is_some_and(|(w, px)| w == COLONNES * CASE.0 && px.iter().any(|p| p[3] > 0.0));
+            let habille = cases(19, b'O', acc).unwrap();
+            let pareil = |r: Rangee, i: usize| nu.case(r, i).map(|c| &c.px) == habille.case(r, i).map(|c| &c.px);
+            let change = RANGEES.iter().flat_map(|&r| (0..r.ou().2).map(move |i| (r, i))).filter(|&(r, i)| !pareil(r, i)).count();
+            assert_eq!(change > 0, dessine, "{acc:?} : {change} cases changées");
         }
     }
 }

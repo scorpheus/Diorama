@@ -16,7 +16,7 @@ pub mod poses;
 
 
 use atelier::{compose, Contexte, C, GROW, IMPACT, ROWS, SH, SW, YARD};
-use monde::{Activite, Monde, Recadrage};
+use monde::{Accessoire, Activite, Monde, Recadrage};
 
 /// Les fenêtres sur la scène, de la plus large : le bandeau montre la plus large qui tient.
 pub const fn crop(c: Recadrage) -> (i32, i32) {
@@ -61,7 +61,7 @@ impl Forge {
         // invités ensuite, par-dessus lui, comme la scène les dessinait
         let acteur = |a: Activite, t: i64, w: &Monde, x: i32| {
             let (rangee, image) = pet::moment(a, t, w);
-            pet::Acteur { rangee, image, x: (x + 8) as f32 + pet::decalage(a, w), y: SH as f32, eclairage: None, cape: w.cape[1].0 }
+            pet::Acteur { rangee, image, x: (x + 8) as f32 + pet::decalage(a, w), y: SH as f32, eclairage: None, cape: w.cape[1].0, accessoire: w.accessory }
         };
         let mut acteurs: Vec<pet::Acteur> = Vec::new();
         if pet {
@@ -181,7 +181,7 @@ impl crate::scene::Scene for SceneForge {
         let (cw, ch) = (image.cellule.0 as i32, image.cellule.1 as i32);
         let tick = etat.tick + e;
         // les cases du pet, faites une fois par hauteur de cellule et par cape
-        let pet = pet::cases(image.cellule.1, b'O').is_some();
+        let pet = pet::cases(image.cellule.1, b'O', Accessoire::Aucun).is_some();
         let (cells, acteurs, coup) = self.forge.image(etat.recadrage, etat.activite, tick, &monde, etat.lit, etat.extra, pet);
         let (x0, x1) = crop(etat.recadrage);
         // le coup tombe sur l'enclume : la gerbe part de là, et retombe au sol de la forge

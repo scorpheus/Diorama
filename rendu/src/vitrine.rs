@@ -17,7 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::forge::atelier::ROWS;
-use crate::forge::monde::Activite;
+use crate::forge::monde::{Accessoire, Activite, Lettre};
 use crate::forge::{planche, Etat, SceneForge};
 use crate::scene::{Image, Scene};
 
@@ -43,12 +43,22 @@ struct Vitrine {
     scene: SceneForge,
     tics: i64,
     pause: bool,
+    /// sa tenue, essayée par-dessus celle de la scène (C, A) : l'une de CAPES, l'un de ACCESSOIRES
+    cape: usize,
+    acc: usize,
 }
+
+const CAPES: [(&str, [u8; 2]); 6] = [("forêt", *b"oO"), ("braise", *b"CD"), ("nuit", *b"NL"), ("prune", *b"UI"), ("ocre", *b"TJ"), ("ardoise", *b"Zv")];
+const ACCESSOIRES: [(&str, Accessoire); 4] =
+    [("sans accessoire", Accessoire::Aucun), ("lunettes", Accessoire::Lunettes), ("bandeau", Accessoire::Bandeau), ("tablier", Accessoire::Tablier)];
 
 impl Vitrine {
     fn montrer(&mut self, n: usize) {
         self.n = n % self.scenes.len();
-        let (activite, _, monde) = self.scenes[self.n].clone();
+        let (activite, _, mut monde) = self.scenes[self.n].clone();
+        let cape = CAPES[self.cape].1;
+        monde.cape = [Lettre(cape[0]), Lettre(cape[1])];
+        monde.accessory = ACCESSOIRES[self.acc].1;
         self.scene = SceneForge::new();
         self.scene.recevoir(Etat { recadrage: crate::forge::monde::Recadrage::Full, extra: COLONNES - 72, lit: true, activite, tick: 0, monde });
         self.tics = 0;
@@ -72,9 +82,11 @@ impl Vitrine {
             }
         }
         format!(
-            "Diorama · vitrine · {}/{} · {quoi}{}   (← → moments, espace pause, R reprendre)",
+            "Diorama · vitrine · {}/{} · {quoi} · cape {}, {}{}   (← → moments, espace pause, R reprendre, C cape, A accessoire)",
             self.n + 1,
             self.scenes.len(),
+            CAPES[self.cape].0,
+            ACCESSOIRES[self.acc].0,
             if self.pause { " · en pause" } else { "" }
         )
     }
@@ -110,7 +122,7 @@ pub fn vitrine(cadence_ms: u32) -> Result<()> {
             None,
         )?;
         let _ = ShowWindow(fenetre, SW_SHOW);
-        let mut v = Vitrine { scenes: planche::scenes(), n: 0, scene: SceneForge::new(), tics: 0, pause: false };
+        let mut v = Vitrine { scenes: planche::scenes(), n: 0, scene: SceneForge::new(), tics: 0, pause: false, cape: 0, acc: 0 };
         v.montrer(0);
         let _ = SetWindowTextW(fenetre, &HSTRING::from(v.titre()));
         let mut pixels = vec![0u32; (w * h) as usize];
@@ -137,9 +149,17 @@ pub fn vitrine(cadence_ms: u32) -> Result<()> {
                     0x27 => v.montrer(v.n + 1),                  // →
                     0x20 => v.pause = !v.pause,                  // espace
                     0x52 => v.montrer(v.n),                      // R
+                    0x43 => {
+                        v.cape = (v.cape + 1) % CAPES.len(); // C
+                        v.montrer(v.n);
+                    }
+                    0x41 => {
+                        v.acc = (v.acc + 1) % ACCESSOIRES.len(); // A
+                        v.montrer(v.n);
+                    }
                     _ => {}
                 }
-                if avant != (v.n, v.pause) || msg.wParam.0 == 0x52 {
+                if avant != (v.n, v.pause) || [0x52, 0x43, 0x41].contains(&msg.wParam.0) {
                     neuve = true;
                     let _ = SetWindowTextW(fenetre, &HSTRING::from(v.titre()));
                 }

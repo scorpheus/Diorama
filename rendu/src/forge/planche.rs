@@ -111,7 +111,7 @@ pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
     let lignes = scenes.len().div_ceil(par_ligne) as i32;
     let (w, h) = (ECART + (fw + ECART) * par_ligne as i32, ECART + (fh + ECART) * lignes);
     let mut pixels = vec![0xFF16_1616u32; (w * h) as usize];
-    let pet = super::pet::cases(CH as u32, b'O').is_some();
+    let pet = super::pet::cases(CH as u32, b'O', Accessoire::Aucun).is_some();
     let mut scene = vec![0u32; (fw * fh) as usize];
     for (n, (a, t, monde)) in scenes.iter().enumerate() {
         // chaque scène peinte à part, Scorpheus par-dessus comme dans l'appli, puis posée
