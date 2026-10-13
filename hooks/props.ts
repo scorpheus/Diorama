@@ -7,6 +7,10 @@ import type { Dream, World } from './world.ts'
 import { dot, glyph, line, put, quad, rand, stamp } from './pixels.ts'
 import type { Grid } from './pixels.ts'
 
+// The engine runs this module in a vm context, where every read of a global (Math, Map…) costs
+// several times a local's: bound once here, they are read as locals.
+const { Math } = globalThis
+
 /** The default palette: every theme has these letters, and may change or add to them. */
 export const BASE_PALETTE: Record<string, number> = {
   k: 0x1b1a24, // outline

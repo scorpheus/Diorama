@@ -12,6 +12,10 @@ import type { Grid } from '../pixels.ts'
 import { season } from '../props.ts'
 import type { World } from '../world.ts'
 
+// The engine runs this module in a vm context, where every read of a global (Math, Map…) costs
+// several times a local's: bound once here, they are read as locals.
+const { Math, Int32Array, Float64Array, Map, Array } = globalThis
+
 type RGB = readonly [number, number, number]
 
 /** A colour by its number: always the same one for the same number, so what is worked out from it can be kept. */

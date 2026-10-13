@@ -8,6 +8,10 @@
 import type { Activity } from '../types'
 import type { Theme, World } from './world.ts'
 
+// The engine runs this module in a vm context, where every read of a global (Math, Map…) costs
+// several times a local's: bound once here, they are read as locals.
+const { Math, Array } = globalThis
+
 /**
  * The character walking right, a frame a tick: `w` x `h` pixels each, read row
  * by row, one letter per pixel (`.` clear) whose colour is `colours[letter]`

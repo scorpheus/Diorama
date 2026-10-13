@@ -1,6 +1,10 @@
 // Drawing on a grid of letters, one per pixel ('.' transparent), and turning it
 // into terminal cells: half blocks, two stacked pixels per cell.
 
+// The engine runs this module in a vm context, where every read of a global (Math, Map…) costs
+// several times a local's: bound once here, they are read as locals.
+const { Math, Uint32Array, Map, Array } = globalThis
+
 export type Grid = string[][] & { over?: Map<number, Over> }
 
 /**

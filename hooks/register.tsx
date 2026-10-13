@@ -18,6 +18,10 @@ import { themeFile, themeFrom } from './themes/load.ts'
 import { CROP_ORDER, PERSONALITIES, fill, pace, wander } from './world.ts'
 import type { Crop, Cub, Dream, Guest, Lexicon, Personality, Theme, Weapon, World } from './world.ts'
 
+// The engine runs this module in a vm context, where every read of a global (Math, Map…) costs
+// several times a local's: bound once here, they are read as locals.
+const { Math, String, Set, Object, Date, JSON, Array, Uint8Array } = globalThis
+
 const usage = atom({ plugin: 'diorama', key: 'usage' } as const, null)
 const act = atom({ plugin: 'diorama', key: 'act' } as const, { activity: 'waving', detail: '' })
 const crew = atom({ plugin: 'diorama', key: 'crew' } as const, { apprentices: [], jobs: [] })

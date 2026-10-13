@@ -9,6 +9,10 @@
 import type { Activity, Flavor } from '../types'
 import { rand } from './pixels.ts'
 
+// The engine runs this module in a vm context, where every read of a global (Math, Map…) costs
+// several times a local's: bound once here, they are read as locals.
+const { Math, JSON, String } = globalThis
+
 /** Horizontal windows over the scene, widest first: the band shows the widest that fits. */
 export type Crop = 'full' | 'compact' | 'solo'
 export const CROP_ORDER: readonly Crop[] = ['full', 'compact', 'solo']

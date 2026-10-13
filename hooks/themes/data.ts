@@ -14,6 +14,10 @@ import { CALM, CROP_ORDER } from '../world.ts'
 import type { Crop, Lexicon, Theme, Variant, Weapon, World } from '../world.ts'
 import { NEUTRAL_WORDS } from './neutral-words.ts'
 
+// The engine runs this module in a vm context, where every read of a global (Math, Map…) costs
+// several times a local's: bound once here, they are read as locals.
+const { Math, Array, Object, Number, String, JSON } = globalThis
+
 type Rows = readonly string[]
 type Frames = readonly Rows[]
 type Point = readonly [number, number]

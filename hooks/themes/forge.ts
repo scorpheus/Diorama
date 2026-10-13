@@ -18,6 +18,10 @@ import type { Crop, Cub, Dream, Guest, Theme, Weapon, World } from '../world.ts'
 import { FORGE_WORDS } from './forge-words.ts'
 import { drawYardWeather, layout, outdoors } from './forge-yard.ts'
 
+// The engine runs this module in a vm context, where every read of a global (Math, Map…) costs
+// several times a local's: bound once here, they are read as locals.
+const { Math, Object, Set, Float64Array, Uint32Array, JSON, Float32Array, Array } = globalThis
+
 export { CALM }
 export const PALETTE = BASE_PALETTE
 
