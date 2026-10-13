@@ -2,7 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { AgentStatus, On, ToolCallInput, ToolCallResult } from 'claude-code'
 
-import { CALM, SMITHS, frame } from '../hooks/themes/forge.ts'
+import { spriteOf } from '../hooks/flight.ts'
+import { CALM, SMITHS, forge, frame } from '../hooks/themes/forge.ts'
 import { ACTIVITIES, checkTheme, dataTheme } from '../hooks/themes/data.ts'
 import { ROAMING, wander } from '../hooks/world.ts'
 import { MOMENTS, NOT_SHOWN } from '../tools/moments.mts'
@@ -708,6 +709,13 @@ test('idle, he goes to visit another forge, and work calls him home', { options:
   }
   expect(shelf.get('visit:sess-1')).toMatchObject({ host: 'sess-dev', project: 'vehigraph' })
   expect(await ui.find({ text: /part rendre visite à la forge Dev/ })).toBeDefined()
+  // the passeur's share: his walk, cut out of the scene, and where his scene stands in the window
+  const visit = shelf.get('visit:sess-1') as { sprite?: { w: number; h: number; frames: string[] }; scene?: { cols: number; rows: number } }
+  const sprite = visit.sprite
+  expect(sprite?.frames.length).toBe(8)
+  expect(sprite?.frames.every(f => f.length === sprite.w * sprite.h && /[^.]/.test(f))).toBe(true)
+  expect(visit.scene?.rows).toBe(16)
+  expect((shelf.get('presence') as Record<string, { scene?: unknown }>)['sess-1']?.scene).toEqual(visit.scene)
   expect(await label()).toBe(' · en visite')
   blits.length = 0
   await clock.advance(1000)
@@ -1159,6 +1167,18 @@ test('a theme file is checked, and what is wrong is said where it is', () => {
   const away = miniTheme()
   away.character = { ...away.character, home: [200, 8] }
   expect(checkTheme(away).length).toBeGreaterThan(0)
+})
+
+test('the character cuts out of his scene for the passeur, in the forge as in a theme file', () => {
+  for (const theme of [forge, dataTheme(miniTheme(), 'mini')]) {
+    const sprite = spriteOf(theme, { ...CALM, hour: 12 })
+    expect(sprite).toBeDefined()
+    if (!sprite) continue
+    expect(sprite.w).toBeLessThan(40) // him alone, not some of the scene with him
+    expect(sprite.frames.length).toBe(8)
+    if (theme === forge) expect(new Set(sprite.frames).size).toBeGreaterThan(1) // he walks (the little theme has no steps)
+    for (const f of sprite.frames) expect([...f].every(l => l === '.' || sprite.colours[l] !== undefined)).toBe(true)
+  }
 })
 
 test('every pose a theme draws is reached by its moment', () => {

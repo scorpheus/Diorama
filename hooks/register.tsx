@@ -10,6 +10,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 
 import type { Act, Activity, Crew, Day, Experience, Flavor, Gauge, Job, Status, Usage } from '../types'
+import { spriteOf } from './flight.ts'
+import type { Sprite } from './flight.ts'
 import { DREAM_HINTS, DREAMS } from './props.ts'
 import { forge } from './themes/forge.ts'
 import { themeFile, themeFrom } from './themes/load.ts'
@@ -96,7 +98,11 @@ type Presence = {
   title?: string // the conversation's title: several share a project
   personality?: Personality
   idleSince?: number // since when this forge has had nothing to do: three at once make a banquet
+  scene?: Scene // where its scene stands in its window, for the passeur
 }
+
+/** The scene as the band draws it, for the passeur (passeur/passeur.ps1): its columns from the left, its rows. */
+type Scene = { cols: number; rows: number }
 
 /**
  * News a forge sends the others by raven: a long task done, or the person needed.
@@ -125,6 +131,8 @@ type Visit = {
   // the handover: 'there' while he visits; 'leaving' when he means to go (the
   // visitor writes it); 'gone' once the host has walked him out (the host writes it)
   phase?: 'there' | 'leaving' | 'gone'
+  // for the passeur, who flies him from his window to the host's and back: his walk, his scene
+  sprite?: Sprite; scene?: Scene
 }
 
 /** The machine's one cat: which forge has it, since when, and where it came from. */
@@ -570,6 +578,7 @@ async function heartbeat($: EngineInterface) {
   all[anim.sessionId] = {
     project: anim.project, cape: anim.cape, accessory: anim.accessory, seen: now, away: anim.trip?.phase === 'away',
     personality: anim.personality, idleSince: anim.idleSince, name: anim.name, ...(anim.title || anim.goal ? { title: anim.title || anim.goal } : {}),
+    ...sceneField(),
   }
   for (const [id, p] of Object.entries(all)) if (now - p.seen > 24 * 60 * 60 * 1000) delete all[id] // a day gone: forgotten
   await $.store.set(PRESENCE_KEY, all)
@@ -826,6 +835,20 @@ async function catPoll($: EngineInterface) {
   }
 }
 
+/** The scene as the band last drew it; nothing while the band shows no scene. */
+const sceneField = (): { scene?: Scene } =>
+  anim.bandId !== undefined && anim.crop !== undefined ? { scene: { cols: cropWidth(anim.crop) + anim.extra, rows: theme.rows } } : {}
+
+/** His walk, cut out of the scene for the passeur; nothing when the theme does not lend itself to it. */
+function spriteField(): { sprite?: Sprite } {
+  try {
+    const sprite = spriteOf(theme, worldNow())
+    return sprite ? { sprite } : {}
+  } catch {
+    return {}
+  }
+}
+
 /** He sets off to another session's forge: out through the yard first. */
 async function startTrip($: EngineInterface, host: Presence & { id: string }, voice: string) {
   anim.trip = { phase: 'out', host: host.id, project: host.project, name: host.name ?? host.project, until: 0 }
@@ -843,7 +866,7 @@ async function arriveAway($: EngineInterface) {
   const title = anim.title || anim.goal
   const visit: Visit = {
     host: trip.host, until: trip.until, project: anim.project, cape: anim.cape, accessory: anim.accessory, phase: 'there',
-    name: anim.name, ...(title ? { title } : {}),
+    name: anim.name, ...(title ? { title } : {}), ...spriteField(), ...sceneField(),
   }
   await $.store.set(VISIT_PREFIX + anim.sessionId, visit)
   await setAct($, 'away', trip.name)

@@ -7,7 +7,7 @@ Un personnage suit le travail de Claude, sans qu'on ait rien à faire :
 - il éprouve les tests, scelle les commits, attend la personne quand Claude a une question ;
 - il fait la sieste après dix minutes de calme.
 
-Chaque sous-agent arrive en petite créature, puis repart sa mission faite. Les sessions ouvertes sur la même machine se rendent visite et s'envoient des nouvelles, et un animal unique passe de l'une à l'autre.
+Chaque sous-agent arrive en petite créature, puis repart sa mission faite. Les sessions ouvertes sur la même machine se rendent visite et s'envoient des nouvelles, et un animal unique passe de l'une à l'autre. Sous Windows, le visiteur traverse l'écran en vol, d'une fenêtre de terminal à l'autre (voir [Le passeur](#le-passeur-windows)).
 
 À côté de la scène s'affichent les jauges de contexte, de la fenêtre de 5 h et de celle de 7 jours, avec l'heure de leur remise à zéro. Le contexte se mesure à la fenêtre de compaction quand les réglages en fixent une (`autoCompactWindow`, ou `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), sinon à celle du modèle. Il y a aussi l'expérience gagnée, ce que fait Claude en ce moment et un journal court.
 
@@ -43,6 +43,20 @@ Ouvrez ensuite une nouvelle session : le bandeau apparaît au-dessus du prompt. 
 
 Chaque appel coûte quelques centaines de jetons, sur votre compte. Pour n'en faire aucun : *Statut* `simple` ou `aucun`, et *Répliques* `local` ou `aucune`. Il restera tout de même les appels pour la tenue, le nom des aides et le rêve. Haiku reçoit le début de la conversation, des extraits de réponses et les noms des actions en cours.
 
+## Le passeur (Windows)
+
+Quand un personnage part en visite, le passeur le fait voler pour de vrai : il saute du bord de sa scène, traverse l'écran en arc, par-dessus les autres fenêtres, sans monter plus haut que le tiers bas de l'écran, et se pose au bord de la scène de son hôte. Au retour, il refait le chemin dans l'autre sens. C'est le personnage du thème, dans sa tenue, au quart de sa taille, qui marche en l'air. Il vole dans les couleurs de la palette, sans la lumière de la scène.
+
+- **Lancement** : un hook `SessionStart` le démarre, caché, s'il ne tourne pas déjà. Il n'y en a qu'un par machine. C'est un petit programme compilé une fois dans `%LOCALAPPDATA%\Diorama\passeur.exe`, puis de nouveau quand `passeur/passeur.cs` change. Il s'arrête seul une minute après la fermeture de la dernière session, ou quand son code change (le lancement suivant prend la nouvelle version).
+- **Ce qu'il coûte** : au repos, 0,1 à 0,3 % d'un cœur et 30 Mo de mémoire, avec une dizaine de sessions ouvertes. Il regarde la date du stockage quatre fois par seconde, et quand elle change, il n'en décode que les visites qui ont changé. Un vol coûte environ 0,3 s de processeur, réparties sur ses deux secondes.
+- **Ce qu'il faut** : Windows, avec Windows PowerShell 5.1, celui de Windows, et rien d'autre à installer. Il fonctionne avec Windows Terminal et avec la console classique (conhost).
+- **Quand il ne vole pas** : une session sans fenêtre (lancée en fond), une fenêtre réduite ou cachée par une autre à l'endroit de sa scène, deux sessions dans deux onglets d'une même fenêtre, ou une session qui n'affiche pas la scène (fenêtre trop étroite). La visite a lieu quand même, comme avant.
+- **Ce qu'il lit**, sans rien écrire : le stockage du mod (les visites, et la scène de chaque session), et `~/.claude/sessions/` pour savoir quel processus porte quelle session. La fenêtre d'une session, il la trouve en s'attachant un instant à sa console.
+- **Son journal** : `%TEMP%\diorama-passeur.log` dit chaque vol, ou pourquoi il n'a pas eu lieu.
+- **La géométrie** suit les réglages par défaut de Windows Terminal : onglets dans la barre de titre, marge de 8 px, police quelconque. Avec d'autres réglages, le point de départ peut tomber à côté. Les constantes sont en tête de `passeur/passeur.cs` (classe `Places`).
+
+Pour voir un vol sans attendre une visite : `node tools/envol.mts forge --de <session | pid> --vers <session | pid>`. Sans arguments, l'outil liste les sessions ouvertes.
+
 ## Un thème à soi
 
 Le forgeron n'est qu'un thème. Un personnage différent, avec son décor et ses mots, tient dans **un seul fichier JSON**.
@@ -74,7 +88,7 @@ Pour partager un thème, ouvrez une demande de fusion avec un dossier `themes/<n
 - **L'état de la session** (jauges, équipe, journal) vit en mémoire dans Claude Code.
 - **Le stockage local du plugin** est partagé entre les sessions de la machine. Il contient ce qui fait vivre les échanges entre sessions :
   - la présence et la tenue de chaque session ;
-  - les visites en cours et les nouvelles envoyées ;
+  - les visites en cours et les nouvelles envoyées (une visite porte aussi le personnage découpé et la largeur de sa scène, pour le passeur) ;
   - l'animal et le banquet du jour ;
   - les trophées de chaque conversation et ses chefs-d'œuvre.
 - Rien ne sort de la machine, sauf les appels à Haiku décrits plus haut.
@@ -97,6 +111,9 @@ Le code se répartit ainsi :
 | `hooks/themes/forge.ts` | la forge, dessinée en code |
 | `hooks/themes/data.ts` | lit un thème JSON et le vérifie |
 | `hooks/props.ts` | ce que tous les thèmes partagent : palette, bulles, ciel, rêves |
+| `hooks/flight.ts` | découpe le personnage de sa scène, pour le passeur |
+| `passeur/passeur.ps1`, `passeur/passeur.cs` | le passeur : lancement en PowerShell, cœur en C# compilé à la volée |
+| `tools/envol.mts` | un vol d'essai entre deux sessions |
 
 ## Licence
 
