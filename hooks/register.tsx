@@ -151,6 +151,7 @@ const CAT_KEY = 'cat'
 const offstageNow = () => theme.stage.offstage + anim.extra
 const petAt = () => theme.pet ?? { gate: 14, away: theme.width + 12, follow: 21 }
 const HANDOFF_TICKS = 13 // every two seconds, the visits and the cat are looked at
+const SWEEP_LOOKS = 15 // and every fifteenth look (thirty seconds), the keys of every session, not only the live ones
 const HANDOFF_WAIT = 60 // nine seconds for the host to say he is gone, then home anyway
 const GUEST_WALK = 36 // a guest crosses the yard in five seconds at most: a wide one, he hurries (inside the handoff)
 
@@ -306,6 +307,7 @@ const anim = {
   crop: undefined as Crop | undefined, // the window the mounted Raster was drawn at
   extra: 0, // and the columns its scene grew by
   shown: undefined as string | undefined, // the cells it shows, as last sent
+  visitLooks: 0, // looks for visits so far: every SWEEP_LOOKS-th reads every key
   shownAt: 0, // and when (the clock)
   tick: 0, // since the moment began
   clock: 0, // since the session began
@@ -926,7 +928,11 @@ async function pollVisits($: EngineInterface, voice: string) {
     const v = (await $.store.get(VISIT_PREFIX + id)) as Visit | undefined
     if (v && v.host === anim.sessionId) await $.store.set(VISIT_PREFIX + id, { ...v, phase: 'gone' } satisfies Visit)
   }
-  const keys = await $.store.keys()
+  // a key read is a call through the engine, and the store keeps those of sessions long gone:
+  // most looks read only the keys of the sessions alive and of the guests here; every so
+  // often, all of them, for a session not yet among the neighbours
+  const keys = anim.visitLooks++ % SWEEP_LOOKS === 0 ? await $.store.keys()
+    : [...new Set([...anim.neighbours.map(n => n.id), ...anim.guests.keys()])].flatMap(id => [VISIT_PREFIX + id, NEWS_PREFIX + id])
   const here = new Map<string, Visit>()
   for (const key of keys) {
     if (key.startsWith(VISIT_PREFIX) && key !== VISIT_PREFIX + anim.sessionId) {

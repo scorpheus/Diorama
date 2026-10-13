@@ -36,12 +36,15 @@ const IN_TWO_HOURS = new Date(Date.UTC(2026, 9, 2, 14, 0)).toISOString()
 const blits: string[] = []
 let duringCompact: (() => Promise<void>) | undefined
 const shelf = new Map<string, unknown>()
+/** How many times the plugin read each key of the store, this test. */
+const reads = new Map<string, number>()
 let listed: Array<{ id: string; description: string; type: string; status: AgentStatus }> = []
 let sessionId = 'sess-1'
 // the compaction window the next engine's settings set (autoCompactWindow), taken by that engine alone
 let compactSetting: number | undefined
 function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
   blits.length = 0
+  reads.clear()
   const compact = compactSetting
   compactSetting = undefined
   duringCompact = undefined
@@ -80,7 +83,10 @@ function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
   listed = []
   sessionId = 'sess-1'
   for (const [k, v] of Object.entries(stored)) shelf.set(k, v)
-  on('store.get', (_$, e) => ({ value: shelf.get(e.key) }))
+  on('store.get', (_$, e) => {
+    reads.set(e.key, (reads.get(e.key) ?? 0) + 1)
+    return { value: shelf.get(e.key) }
+  })
   on('store.set', (_$, e) => {
     shelf.set(e.key, e.value)
     return { value: undefined }
@@ -820,6 +826,24 @@ test('ravens carry the news between forges', async ($, on) => {
   expect(shelf.get('news:sess-1')).toMatchObject({ kind: 'waiting', project: 'vehigraph' })
   await $.prompt.submit(typed('vas-y'))
   expect(shelf.has('news:sess-1')).toBe(false)
+})
+
+test('the visits are looked for under the live sessions\' keys, and under every key now and then', { timeoutMs: 120_000 }, async ($, on) => {
+  // forty ravens of sessions long gone: read at the sweep, not at every look
+  const old = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`news:old-${i}`, { kind: 'done', project: 'Vieux', at: START - 86_400_000 }]))
+  const neighbour = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
+  const { ui, clock } = await start($, on, answerTools, { ...old, presence: { 'sess-dev': neighbour } })
+  await clock.advance(20_000)
+  const stale = [...reads].filter(([key]) => key.startsWith('news:old-')).reduce((n, [, k]) => n + k, 0)
+  expect(stale).toBe(40) // one sweep in twenty seconds, not one at every look
+  // a live neighbour's raven is seen at the next look
+  shelf.set('news:sess-dev', { kind: 'waiting', project: 'Dev', at: clock.now() })
+  await clock.advance(4000)
+  expect(await ui.find({ text: /corbeau : la forge Dev attend ton feu vert/ })).toBeDefined()
+  // a session not yet among the neighbours: at the next sweep
+  shelf.set('news:sess-new', { kind: 'done', project: 'Neuf', at: clock.now() })
+  await clock.advance(32_000)
+  expect(await ui.find({ text: /corbeau : la forge Neuf/ })).toBeDefined()
 })
 
 test("a raven names the conversation, not only its project", async ($, on) => {
