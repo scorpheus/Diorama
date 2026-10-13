@@ -60,7 +60,7 @@ impl Forge {
         let acteur = (pet && !world.absent).then(|| {
             let (rangee, image) = pet::moment(activity, tick, world);
             // au milieu de la place du personnage en lettres (16 de large), les pattes au sol
-            pet::Acteur { rangee, image, x: (C.0 + world.x + 8) as f32, y: SH as f32, eclairage: None }
+            pet::Acteur { rangee, image, x: (C.0 + world.x + 8) as f32 + rangee.decalage(), y: SH as f32, eclairage: None }
         });
         if !lit {
             return (pixels::to_cells(&scene, &accessoires::PALETTE, x0, fin, None), acteur, coup);

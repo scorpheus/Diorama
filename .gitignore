@@ -3,3 +3,4 @@
 node_modules/
 apercu*.png
 rendu/target/
+__pycache__/

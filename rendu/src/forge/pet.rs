@@ -1,13 +1,14 @@
 //! Scorpheus d'après son pet de Codex (rendu/pet/scorpheus.webp : 8 × 11 cases de 192 × 208,
-//! une rangée par état, cf. pet.json) : peint au vrai pixel de l'écran par-dessus la forge, à la
-//! place du personnage en lettres, de la taille de celui-ci, et sous les mêmes lampes.
+//! une rangée par état, cf. pet.json), et ce que la forge lui demande en plus, dessiné au pixel
+//! dans son style (rendu/pet/forge.webp, mêmes cases) : peint au vrai pixel de l'écran par-dessus
+//! la forge, à la place du personnage en lettres, de la taille de celui-ci, et sous les mêmes lampes.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use super::monde::{Activite, Monde};
 
-const PLANCHE: &[u8] = include_bytes!("../../pet/scorpheus.webp");
+const PLANCHES: [&[u8]; 2] = [include_bytes!("../../pet/scorpheus.webp"), include_bytes!("../../pet/forge.webp")];
 const CASE: (usize, usize) = (192, 208);
 const COLONNES: usize = 8;
 /// Le point de la case qui se pose au sol : sous ses pattes, au milieu.
@@ -17,31 +18,75 @@ const PIED: (f32, f32) = (96.0, 203.0);
 const HAUTEUR_CASE: f32 = 198.0;
 pub const HAUTEUR: f32 = 26.0;
 
-/// Les rangées de la planche, et combien d'images chacune tient.
+/// Les rangées des planches.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Rangee {
-    Repos = 0,
-    Droite = 1,
-    Gauche = 2,
-    Salut = 3,
-    Saut = 4,
-    Echec = 5,
-    Attente = 6,
-    Travail = 7,
-    Relecture = 8,
+    Repos,
+    Droite,
+    Gauche,
+    Salut,
+    Saut,
+    Echec,
+    Attente,
+    Travail,
+    Relecture,
+    /// le coup de marteau sur l'enclume : au repos, levé, abattu, la frappe
+    Frappe,
 }
-const IMAGES: [usize; 9] = [6, 8, 8, 4, 5, 8, 6, 6, 6];
+
+const RANGEES: [Rangee; 10] = [
+    Rangee::Repos,
+    Rangee::Droite,
+    Rangee::Gauche,
+    Rangee::Salut,
+    Rangee::Saut,
+    Rangee::Echec,
+    Rangee::Attente,
+    Rangee::Travail,
+    Rangee::Relecture,
+    Rangee::Frappe,
+];
+
+impl Rangee {
+    /// Sa planche, sa rangée dans la planche, et combien d'images elle tient.
+    const fn ou(self) -> (usize, usize, usize) {
+        match self {
+            Rangee::Repos => (0, 0, 6),
+            Rangee::Droite => (0, 1, 8),
+            Rangee::Gauche => (0, 2, 8),
+            Rangee::Salut => (0, 3, 4),
+            Rangee::Saut => (0, 4, 5),
+            Rangee::Echec => (0, 5, 8),
+            Rangee::Attente => (0, 6, 6),
+            Rangee::Travail => (0, 7, 6),
+            Rangee::Relecture => (0, 8, 6),
+            Rangee::Frappe => (1, 0, 4),
+        }
+    }
+
+    /// De combien de pixels de forge il se décale de sa place : à l'enclume, il s'en approche
+    /// assez pour que la tête du marteau tombe sur le lingot.
+    pub const fn decalage(self) -> f32 {
+        match self {
+            Rangee::Frappe => -4.0,
+            _ => 0.0,
+        }
+    }
+}
 
 /// L'image du moment : sa rangée et sa case.
 pub fn moment(a: Activite, tick: i64, w: &Monde) -> (Rangee, usize) {
     use Rangee::*;
-    let boucle = |r: Rangee, tics: i64| (r, (tick.div_euclid(tics) as usize) % IMAGES[r as usize]);
+    let boucle = |r: Rangee, tics: i64| (r, (tick.div_euclid(tics) as usize) % r.ou().2);
     if w.walking {
         // un pas d'image par pixel marché : ses pattes suivent le sol
         let r = if w.facing < 0 { Gauche } else { Droite };
         return (r, (w.x * w.facing.signum()).rem_euclid(8) as usize);
     }
     match a {
+        // le coup suit la pose de la forge (poses.rs, running) : levé, abattu, la frappe au
+        // quatrième tic (la gerbe part), puis au repos et de nouveau abattu pour remonter
+        Activite::Running if w.flavor != super::monde::Saveur::Build => (Frappe, [1, 1, 2, 3, 3, 0, 0, 2][tick.rem_euclid(8) as usize]),
         Activite::Running | Activite::Quench | Activite::Sweep => boucle(Travail, 2),
         Activite::Thinking => (Relecture, [1, 1, 2, 2, 3, 3][(tick.div_euclid(3) % 6) as usize]),
         Activite::Review => boucle(Relecture, 3),
@@ -99,25 +144,14 @@ pub fn cases(ch: u32) -> Option<Arc<Cases>> {
     if let Some(c) = faites.get(&ch) {
         return Some(c.clone());
     }
-    let (w, rgba) = decoder()?;
+    let planches = PLANCHES.iter().map(|p| decoder(p)).collect::<Option<Vec<_>>>()?;
     let echelle = HAUTEUR * ch as f32 / 2.0 / HAUTEUR_CASE;
     let mut toutes = HashMap::new();
-    for (r, rangee) in [
-        Rangee::Repos,
-        Rangee::Droite,
-        Rangee::Gauche,
-        Rangee::Salut,
-        Rangee::Saut,
-        Rangee::Echec,
-        Rangee::Attente,
-        Rangee::Travail,
-        Rangee::Relecture,
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        for i in 0..IMAGES[r].min(COLONNES) {
-            toutes.insert((rangee, i), case(&rgba, w, i * CASE.0, r * CASE.1, echelle));
+    for rangee in RANGEES {
+        let (p, r, n) = rangee.ou();
+        let (w, rgba) = &planches[p];
+        for i in 0..n.min(COLONNES) {
+            toutes.insert((rangee, i), case(rgba, *w, i * CASE.0, r * CASE.1, echelle));
         }
     }
     let c = Arc::new(Cases(toutes));
@@ -125,9 +159,9 @@ pub fn cases(ch: u32) -> Option<Arc<Cases>> {
     Some(c)
 }
 
-/// La planche en RGBA (alpha prémultiplié, en flottants) et sa largeur.
-fn decoder() -> Option<(usize, Vec<[f32; 4]>)> {
-    let mut d = image_webp::WebPDecoder::new(std::io::Cursor::new(PLANCHE)).ok()?;
+/// Une planche en RGBA (alpha prémultiplié, en flottants) et sa largeur.
+fn decoder(planche: &[u8]) -> Option<(usize, Vec<[f32; 4]>)> {
+    let mut d = image_webp::WebPDecoder::new(std::io::Cursor::new(planche)).ok()?;
     let (w, h) = d.dimensions();
     let mut brut = vec![0u8; d.output_buffer_size()?];
     d.read_image(&mut brut).ok()?;
@@ -346,7 +380,7 @@ mod tests {
         // 26 pixels de forge de 9,5 px : ~247 px de haut, posés au sol
         assert!((235..=260).contains(&repos.h), "hauteur {}", repos.h);
         assert!(repos.dy + repos.h as i32 <= 2 && repos.dy + repos.h as i32 >= -4, "pieds à {}", repos.dy + repos.h as i32);
-        for (r, n) in [(Rangee::Travail, 6), (Rangee::Droite, 8), (Rangee::Echec, 8)] {
+        for (r, n) in [(Rangee::Travail, 6), (Rangee::Droite, 8), (Rangee::Echec, 8), (Rangee::Frappe, 4)] {
             for i in 0..n {
                 assert!(c.case(r, i).is_some_and(|k| k.w > 0), "{r:?} {i}");
             }
