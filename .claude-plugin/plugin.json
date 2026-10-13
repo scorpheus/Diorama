@@ -70,12 +70,12 @@
     },
     "rendu": {
       "type": "string",
-      "title": "Rendu natif (essai, Windows)",
-      "description": "non : le terminal dessine la scène, comme toujours ; oui (essai) : une appli à part (rendu/, en Rust, compilée par cargo) la dessine en vrais pixels par-dessus le bandeau, que le terminal garde noir et fixe",
-      "default": "non",
+      "title": "Rendu natif (Windows)",
+      "description": "oui : une appli à part (rendu/, en Rust, compilée par cargo au premier lancement) dessine la scène en vrais pixels par-dessus le bandeau, que le terminal garde noir et fixe ; non : le terminal la dessine lui-même, en caractères (sans cargo, ou hors de Windows)",
+      "default": "oui",
       "options": [
-        "non",
-        "oui"
+        "oui",
+        "non"
       ]
     }
   }

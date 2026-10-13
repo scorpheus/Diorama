@@ -122,3 +122,44 @@ Chaque étape a son banc, vu rouge avant d'être vert.
 - **Écrans à échelles différentes** : gérés par la conscience DPI par écran, comme le passeur.
 - **L'appli plantée** : le bandeau reste noir. Le hook `SessionStart` suivant la relance, et le
   plugin peut la relancer s'il voit ses requêtes refusées.
+
+## 7. Où on en est (2026-10-13)
+
+L'appli est le rendu par défaut (option `rendu`, `oui`). `non` rend le dessin au terminal.
+
+**Ce qui s'écarte du plan, et pourquoi** :
+
+- **Pas de Direct2D** : une fenêtre en couches, peinte au CPU, présentée par
+  `UpdateLayeredWindowIndirect` avec une seule zone sale. Chaque appel coûte ~0,08 ms. Une image
+  pleine de 1296×304 ajoute ~0,32 ms. Plusieurs zones ou des tuiles reviennent plus cher
+  (0,72 % contre 0,44 %) : une seule zone, l'union de ce qui a changé.
+- **Le cerveau reste dans le plugin** (étape 3 non faite) : il décide du monde, l'appli le dessine.
+- **Ressemblance plutôt qu'octet près** : le dessin est porté (`rendu/src/forge/`) et vérifié à
+  l'œil contre l'aperçu TypeScript (`rendu --planche`, les 28 scènes de l'aperçu).
+
+**Le protocole** : des lignes POST sur 127.0.0.1:41917, plusieurs par requête.
+
+- `bande <session> <colonnes> <rangées>` : quand la bande change, puis toutes les 10 s.
+- `monde <session> <cadrage> <extra> <éclairé 0|1> <activité> <tic> <json World>` : seulement
+  quand le monde n'est pas ce que l'appli en ferait d'elle-même, tic après tic.
+  - L'appli avance d'un tic par image : horloge, âges, marche des petits, de l'invité, du chat.
+  - Planté à l'enclume, rien ne part. En marche, une ligne par tic.
+- `quitter`.
+
+**Mesures** (banc hors écran, `rendu --banc`, cycles CPU, % d'un cœur) :
+
+| | appli |
+|---|---|
+| mire de test | 0,13 % |
+| forge au repos | 0,44 % (0,62 ms l'image) |
+| forge au travail | 0,46 % |
+
+Le plancher vient de la lumière du foyer : elle bat à chaque image et change toute la pièce,
+donc la zone présentée est presque toujours pleine. Les pixels de la cour qui ne bougent pas
+restent en cache.
+
+**Reste à faire** :
+
+- le personnage d'après le pet Codex, avec des étincelles en gerbe ;
+- retirer le dessin TypeScript du terminal, pour n'avoir plus qu'une solution ;
+- mesurer en session réelle le total plugin + appli + Windows Terminal (seuil du §4.5).

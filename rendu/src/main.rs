@@ -3,38 +3,38 @@
 //! noir et fixe, marqué de deux repères. Une seule appli pour la machine, lancée par le plugin
 //! (rendu.ps1), qui s'en va quand il ne reste plus de bandeau.
 //!
-//!   rendu.exe [--cadence <ms>] [--scene simple]
-//!       --cadence : une image toutes les <ms> (150 par défaut, la cadence du plugin)
-//!       --scene simple : un carré qui glisse au lieu de la gerbe (pour mesurer ce que coûte l'appli seule)
+//!   rendu.exe [--cadence <ms>]     une image toutes les <ms> (150 par défaut, la cadence du plugin)
+//!   rendu.exe --banc [<secondes>]  ce qu'elle coûte, poste par poste (banc.rs)
+//!   rendu.exe --planche <png> [--large <colonnes>]  la forge dans chaque moment (forge/planche.rs)
 //!
 //! Elle note ce qu'elle fait dans %TEMP%\diorama-rendu.log.
 
 #![windows_subsystem = "windows"]
 
 mod banc;
+mod forge;
 mod ecoute;
-mod etincelles;
 mod journal;
-mod veille;
-mod peintre;
 mod reperes;
+mod scene;
+mod toile;
+mod veille;
 
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use windows::core::w;
-use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HWND};
-use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D_RECT_F};
+use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HWND, RECT};
 use windows::Win32::System::Threading::CreateMutexW;
 use windows::Win32::UI::HiDpi::{SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetMessageW, IsIconic, IsWindowVisible, SetTimer, TranslateMessage, MSG, WM_TIMER,
 };
 
-use etincelles::Gerbe;
 use journal::note;
-use peintre::{Peintre, Toile};
 use reperes::{Capture, Place};
+use scene::{Image, Scene};
+use toile::Toile;
 
 const REGARD_MS: u32 = 250; // un coup d'œil aux repères, quand il est dû
 const SURETE: u64 = 8; // et un, de toute façon, tous les 8 (2 s)
@@ -54,9 +54,11 @@ struct Bande {
     /// bouger sans qu'on les cherche à nouveau
     place: Option<Place>,
     toile: Option<Toile>,
+    /// l'image de la toile est à repeindre en entier (neuve, ou d'une autre taille)
+    neuve: bool,
     perdu_depuis: Option<Instant>, // depuis quand on ne voit plus ses repères
     cherche: u64,                  // le coup d'œil de la dernière recherche
-    scene: Gerbe,
+    scene: forge::SceneForge,
     vue: Instant, // la dernière image de cette scène
 }
 
@@ -69,12 +71,9 @@ impl Bande {
 }
 
 struct App {
-    peintre: Peintre,
     capture: Capture,
     veille: veille::Veille,
     bandes: Vec<Bande>,
-    cadence_ms: u32,
-    simple: Option<Option<windows::Win32::Graphics::Direct2D::ID2D1SolidColorBrush>>,
     regards: u64,
     seule_depuis: Option<Instant>,
     // pour la ligne de chaque minute
@@ -85,8 +84,18 @@ struct App {
 }
 
 impl App {
-    /// Une ligne du plugin : « bande <session> <colonnes> <lignes> », ou « quitter ».
+    /// Une ligne du plugin : « bande <session> <colonnes> <lignes> », « monde <session> <état> »
+    /// (forge::Etat), ou « quitter ».
     fn ligne(&mut self, texte: &str) -> bool {
+        if let Some(reste) = texte.strip_prefix("monde ") {
+            let Some((session, etat)) = reste.split_once(' ') else { return true };
+            let Some(b) = self.bandes.iter_mut().find(|b| b.session == session) else { return true };
+            match forge::Etat::lire(etat) {
+                Ok(etat) => b.scene.recevoir(etat),
+                Err(e) => note(&format!("{session} : monde illisible : {e}")),
+            }
+            return true;
+        }
         let mots: Vec<&str> = texte.split_whitespace().collect();
         match mots.as_slice() {
             ["quitter"] => {
@@ -113,8 +122,6 @@ impl App {
                     return true;
                 };
                 note(&format!("{session} (processus {pid}) : bandeau de {cols} × {rows} cellules"));
-                let mut scene = Gerbe::new(reperes::hash(session) as u64);
-                scene.cadence_ms = self.cadence_ms;
                 self.bandes.push(Bande {
                     session: session.to_string(),
                     pid,
@@ -124,9 +131,10 @@ impl App {
                     terminal: None,
                     place: None,
                     toile: None,
+                    neuve: true,
                     perdu_depuis: None,
                     cherche: 0,
-                    scene,
+                    scene: forge::SceneForge::new(),
                     vue: Instant::now(),
                 });
                 self.seule_depuis = None;
@@ -139,7 +147,7 @@ impl App {
     /// Le coup d'œil : les sessions vivent-elles, leurs repères sont-ils là, sinon où sont-ils.
     fn regarder(&mut self) -> bool {
         self.regards += 1;
-        if self.regards % 8 == 0 {
+        if self.regards % SURETE == 0 {
             let avant = self.bandes.len();
             self.bandes.retain(|b| {
                 let vit = reperes::vivant(b.pid);
@@ -191,7 +199,7 @@ impl App {
                 let ici = Place { x: fenetre.left + p.x, y: fenetre.top + p.y, ..p };
                 if reperes::tient(&mut self.capture, &ici, b.cols, b.rows, &b.reperes) {
                     b.perdu_depuis = None;
-                    poser(&self.peintre, b, terminal, &ici);
+                    poser(b, terminal, &ici);
                     continue;
                 }
             }
@@ -221,59 +229,38 @@ impl App {
                     note(&format!("{} : bandeau trouvé en ({}, {}), cellule {} × {}", b.session, ici.x, ici.y, ici.cw, ici.ch));
                     b.place = Some(Place { x: ici.x - r.left, y: ici.y - r.top, ..ici });
                     b.perdu_depuis = None;
-                    poser(&self.peintre, b, terminal, &ici);
+                    poser(b, terminal, &ici);
                 }
             }
         }
         true
     }
 
-    /// Une image pour chaque bandeau visible.
+    /// Une image pour chaque bandeau visible : la scène peint ce qui a changé, la toile n'en
+    /// remet que cette zone au compositeur.
     fn peindre(&mut self) {
         for b in self.bandes.iter_mut() {
             let (Some(toile), Some(p)) = (b.toile.as_mut(), b.place) else { continue };
-            if !toile.visible {
+            if !toile.visible && !b.neuve {
                 continue;
             }
             let debut = Instant::now();
             let dt = debut.duration_since(b.vue).as_secs_f32();
             b.vue = debut;
-            let scene = &mut b.scene;
-            let (w, h, cw, ch) = (toile.w as f32, toile.h as f32, p.cw as f32, p.ch as f32);
-            let trous = [D2D_RECT_F { left: 0.0, top: 0.0, right: cw, bottom: ch }, D2D_RECT_F { left: w - cw, top: h - ch, right: w, bottom: h }];
-            if let Some(pinceau) = self.simple.as_mut() {
-                // la mesure de l'appli seule : un fond, un carré qui glisse, les trous
-                if pinceau.is_none() {
-                    *pinceau = unsafe { self.peintre.dc.CreateSolidColorBrush(&D2D1_COLOR_F { r: 0.9, g: 0.5, b: 0.2, a: 1.0 }, None) }.ok();
+            let (w, h) = (toile.w, toile.h);
+            let mut image = Image { pixels: toile.pixels(), w, h, cellule: (p.cw as u32, p.ch as u32) };
+            let neuve = std::mem::take(&mut b.neuve);
+            let Some(mut zone) = b.scene.peindre(&mut image, dt, neuve) else { continue };
+            // les repères du terminal restent visibles à travers : leurs cellules transparentes
+            for trou in trous(w, h, p.cw, p.ch) {
+                if neuve || croise(zone, trou) {
+                    image.remplir(trou, 0);
+                    zone = scene::union(zone, trou);
                 }
-                let x = (self.images as f32 * 4.0) % (w - 20.0);
-                let _ = toile.peindre(&self.peintre, |dc| unsafe {
-                    dc.Clear(Some(&D2D1_COLOR_F { r: 0.05, g: 0.05, b: 0.08, a: 1.0 }));
-                    if let Some(b) = pinceau.as_ref() {
-                        dc.FillRectangle(&D2D_RECT_F { left: x, top: h / 2.0 - 10.0, right: x + 20.0, bottom: h / 2.0 + 10.0 }, b);
-                    }
-                    for t in &trous {
-                        dc.PushAxisAlignedClip(t, windows::Win32::Graphics::Direct2D::D2D1_ANTIALIAS_MODE_ALIASED);
-                        dc.Clear(Some(&D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }));
-                        dc.PopAxisAlignedClip();
-                    }
-                });
-                self.images += 1;
-                self.ms += debut.elapsed().as_secs_f64() * 1000.0;
-                continue;
             }
-            if let Err(e) = scene.preparer(&self.peintre.dc, &self.peintre.d2d, &self.peintre.ecriture, toile.w, toile.h) {
-                note(&format!("{} : la scène ne se prépare pas : {e}", b.session));
-                continue;
-            }
-            scene.avancer(dt);
-            if let Err(e) = toile.peindre(&self.peintre, |dc| scene.dessiner(dc, &trous)) {
-                note(&format!("{} : l'image ne se peint pas : {e}", b.session));
-            }
-            let ms = debut.elapsed().as_secs_f64() * 1000.0;
-            scene.cout_ms = scene.cout_ms * 0.9 + ms as f32 * 0.1;
+            toile.presenter(Some(zone));
             self.images += 1;
-            self.ms += ms;
+            self.ms += debut.elapsed().as_secs_f64() * 1000.0;
         }
         if self.minute.elapsed() >= Duration::from_secs(60) {
             let visibles = self.bandes.iter().filter(|b| b.toile.as_ref().is_some_and(|t| t.visible)).count();
@@ -293,12 +280,26 @@ impl App {
     }
 }
 
-/// Pose (ou laisse) la toile du bandeau sur ses repères, à l'écran.
-fn poser(peintre: &Peintre, b: &mut Bande, terminal: HWND, ici: &Place) {
+/// Les deux cellules repères dans l'image d'un bandeau : la première et la dernière.
+fn trous(w: u32, h: u32, cw: i32, ch: i32) -> [RECT; 2] {
+    let (w, h) = (w as i32, h as i32);
+    [RECT { left: 0, top: 0, right: cw, bottom: ch }, RECT { left: w - cw, top: h - ch, right: w, bottom: h }]
+}
+
+fn croise(a: RECT, b: RECT) -> bool {
+    a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+}
+
+/// Pose (ou laisse) la toile du bandeau sur ses repères, à l'écran ; elle se montre à sa
+/// prochaine image.
+fn poser(b: &mut Bande, terminal: HWND, ici: &Place) {
     let (w, h) = ((b.cols * ici.cw) as u32, (b.rows * ici.ch) as u32);
     if b.toile.is_none() {
-        match Toile::new(peintre, Some(terminal), w, h) {
-            Ok(t) => b.toile = Some(t),
+        match Toile::new(Some(terminal), w, h) {
+            Ok(t) => {
+                b.toile = Some(t);
+                b.neuve = true;
+            }
             Err(e) => {
                 note(&format!("{} : pas de toile : {e}", b.session));
                 return;
@@ -306,36 +307,38 @@ fn poser(peintre: &Peintre, b: &mut Bande, terminal: HWND, ici: &Place) {
         }
     }
     let toile = b.toile.as_mut().unwrap();
-    if toile.visible && toile.w == w && toile.h == h && toile_en(toile, ici) {
+    if toile.visible && (toile.w, toile.h) == (w, h) && toile.place() == (ici.x, ici.y) {
         return;
     }
-    b.scene.cellule = (ici.cw, ici.ch);
-    if let Err(e) = toile.poser(ici.x, ici.y, w, h) {
-        note(&format!("{} : la toile ne se pose pas : {e}", b.session));
+    match toile.poser(ici.x, ici.y, w, h) {
+        Ok(neuve) => b.neuve |= neuve || !toile.visible,
+        Err(e) => note(&format!("{} : la toile ne se pose pas : {e}", b.session)),
     }
-}
-
-fn toile_en(toile: &Toile, ici: &Place) -> bool {
-    let mut r = Default::default();
-    unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowRect(toile.fenetre, &mut r).is_ok() && r.left == ici.x && r.top == ici.y }
+    if !b.neuve {
+        toile.presenter(Some(RECT::default())); // elle bouge seulement : rien à repeindre
+    }
 }
 
 fn main() {
-    let mut cadence_ms = 150u32;
     let args: Vec<String> = std::env::args().collect();
-    if let Some(i) = args.iter().position(|a| a == "--cadence") {
-        cadence_ms = args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(150).clamp(10, 1000);
+    let apres = |nom: &str| args.iter().position(|a| a == nom).map(|i| args.get(i + 1).and_then(|s| s.parse::<u64>().ok()));
+    let cadence_ms = apres("--cadence").flatten().unwrap_or(150).clamp(10, 1000) as u32;
+    let banc = apres("--banc").map(|s| s.unwrap_or(20));
+    if let Some(i) = args.iter().position(|a| a == "--planche") {
+        let sortie = args.get(i + 1).map_or("planche.png", |s| s.as_str());
+        let large = apres("--large").flatten().unwrap_or(0) as i32;
+        if let Err(e) = forge::planche::planche(sortie, large) {
+            eprintln!("planche : {e}");
+        }
+        return;
     }
-    let logiciel = args.iter().any(|a| a == "--warp");
-    let simple = args.windows(2).any(|a| a[0] == "--scene" && a[1] == "simple");
-    let banc = args.iter().position(|a| a == "--banc").map(|i| args.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(20u64));
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        if let Err(e) = Peintre::inscrire(peintre::procedure_par_defaut) {
+        if let Err(e) = toile::inscrire() {
             note(&format!("pas de classe de fenêtre : {e}"));
             return;
         }
-        let messages = match Peintre::fenetre_des_messages() {
+        let messages = match toile::fenetre_des_messages() {
             Ok(f) => f,
             Err(e) => {
                 note(&format!("pas de fenêtre des messages : {e}"));
@@ -343,10 +346,7 @@ fn main() {
             }
         };
         if let Some(secondes) = banc {
-            match Peintre::new(logiciel) {
-                Ok(p) => banc::banc(&p, messages, secondes, logiciel, args.iter().any(|a| a == "images")),
-                Err(e) => note(&format!("banc : pas de quoi peindre : {e}")),
-            }
+            banc::banc(messages, secondes);
             return;
         }
         // une seule appli pour la machine
@@ -359,21 +359,11 @@ fn main() {
             note(&format!("le port {} est pris ({e}) : une autre appli tourne", ecoute::PORT));
             return;
         }
-        let peintre = match Peintre::new(logiciel) {
-            Ok(p) => p,
-            Err(e) => {
-                note(&format!("pas de quoi peindre : {e}"));
-                return;
-            }
-        };
-        note(&format!("l'appli prend son poste, une image toutes les {cadence_ms} ms{}", if simple { ", scène simple" } else { "" }));
+        note(&format!("l'appli prend son poste, une image toutes les {cadence_ms} ms"));
         let mut app = App {
-            peintre,
             capture: Capture::new(),
             veille: veille::Veille::default(),
             bandes: Vec::new(),
-            cadence_ms,
-            simple: simple.then_some(None),
             regards: 0,
             seule_depuis: Some(Instant::now()),
             minute: Instant::now(),
@@ -388,8 +378,10 @@ fn main() {
             if msg.hwnd == messages {
                 if msg.message == ecoute::WM_LIGNE {
                     let mut reste = true;
-                    while let Ok(l) = lignes.try_recv() {
-                        reste &= app.ligne(&l);
+                    while let Ok(corps) = lignes.try_recv() {
+                        for l in corps.lines() {
+                            reste &= app.ligne(l);
+                        }
                     }
                     if !reste {
                         break;

@@ -235,7 +235,31 @@ function encode(words: Uint32Array): string {
 const RENDER_PORT = 41917 // rendu/src/ecoute.rs: PORT
 const RENDER_RETRY_TICKS = Math.round(2000 / TICK_MS) // an app slow to come (its first build) is told again this often
 const RENDER_REFRESH_TICKS = Math.round(10_000 / TICK_MS) // and an app that answers, this often: one started anew finds the band
-const render = { told: '', at: 0, busy: false, failedAt: -RENDER_RETRY_TICKS }
+const render = {
+  told: '', at: 0, busy: false, failedAt: -RENDER_RETRY_TICKS,
+  /** The last world the app was told: it draws it on, a tick a frame, until told another. */
+  world: undefined as { head: string; tick: number; w: World; at: number } | undefined,
+}
+
+/**
+ * A world `ticks` later, as the app sees it go by between two messages (Monde::plus_tard in
+ * rendu/src/forge/mod.rs): the clock and every age move on. What differs from it is news.
+ */
+function later(w: World, ticks: number): World {
+  if (ticks === 0) return w
+  return {
+    ...w,
+    clock: w.clock + ticks,
+    turnTicks: w.turnTicks > 0 ? w.turnTicks + ticks : 0,
+    bellAge: w.bellAge === undefined ? undefined : w.bellAge + ticks,
+    apprentices: w.apprentices.map(c => (c.leaving === undefined ? { ...c, age: c.age + ticks } : { ...c, leaving: c.leaving + ticks })),
+    guests: w.guests.map(g => ({ ...g, tick: g.tick + ticks })),
+    cat: w.cat && { ...w.cat, age: w.cat.age + ticks },
+    gift: w.gift && { ...w.gift, age: w.gift.age + ticks },
+    messenger: w.messenger && { ...w.messenger, age: w.messenger.age + ticks },
+    rare: w.rare && { ...w.rare, age: w.rare.age + ticks },
+  }
+}
 
 /** Mark n of this session: a dark colour, each channel 0x00, 0x11 or 0x22, never black (rendu/src/reperes.rs). */
 function markOf(n: number): number {
@@ -253,15 +277,32 @@ function stillBand(columns: number, rows: number): Uint32Array {
   return words
 }
 
-/** Tells the app of the band (« session columns rows ») once it has changed, now and then since, and more often while it does not answer. */
-function tellRender($: EngineInterface, band: string) {
-  if (band === render.told && anim.clock - render.at < RENDER_REFRESH_TICKS) return
+/**
+ * Tells the app of the band (« bande session columns rows ») once it has changed, now and then
+ * since, and more often while it does not answer; and of the world (« monde session crop extra
+ * lit moment tick json ») when it is not what the app would make of the last one, ticks later:
+ * standing at the anvil, nothing goes; walking, a line a tick.
+ */
+function tellRender($: EngineInterface, crop: Crop, w: World, tick: number, lit: boolean) {
   if (render.busy || anim.clock - render.failedAt < RENDER_RETRY_TICKS) return
+  const band = `${anim.sessionId} ${cropWidth(crop) + anim.extra} ${theme.rows}`
+  const head = `${anim.sessionId} ${crop} ${anim.extra} ${lit ? 1 : 0} ${anim.current}`
+  const lines: string[] = []
+  const bandDue = band !== render.told || anim.clock - render.at >= RENDER_REFRESH_TICKS
+  if (bandDue) lines.push(`bande ${band}`)
+  const sent = render.world, now = JSON.stringify(w)
+  const since = sent ? anim.clock - sent.at : 0
+  const known = sent !== undefined && sent.head === head && sent.tick + since === tick && since < RENDER_REFRESH_TICKS && JSON.stringify(later(sent.w, since)) === now
+  if (!known || bandDue) lines.push(`monde ${head} ${tick} ${now}`)
+  if (lines.length === 0) return
   render.busy = true
-  void $.http.fetch(`http://127.0.0.1:${RENDER_PORT}/`, { method: 'POST', body: `bande ${band}` })
+  const at = anim.clock
+  void $.http.fetch(`http://127.0.0.1:${RENDER_PORT}/`, { method: 'POST', body: lines.join('\n') })
     .then(r => {
-      if (r.ok) { render.told = band; render.at = anim.clock } else render.failedAt = anim.clock
-    }, () => { render.failedAt = anim.clock; render.told = '' })
+      if (!r.ok) { render.failedAt = anim.clock; return }
+      if (bandDue) { render.told = band; render.at = at }
+      render.world = { head, tick, w, at }
+    }, () => { render.failedAt = anim.clock; render.told = ''; render.world = undefined })
     .finally(() => { render.busy = false })
 }
 
@@ -1461,7 +1502,7 @@ export const register: Register = (on, options) => {
   const voice = String(options.repliques ?? 'local')
   const statusMode = String(options.statut ?? 'haiku')
   const lit = String(options.lumiere ?? 'oui') !== 'non'
-  const rendered = String(options.rendu ?? 'non') === 'oui'
+  const rendered = String(options.rendu ?? 'oui') === 'oui'
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1580,7 +1621,7 @@ export const register: Register = (on, options) => {
         if (!anim.bandId || !anim.crop) return
         if (rendered) {
           // the app draws the band; the terminal keeps its still one
-          tellRender($, `${anim.sessionId} ${cropWidth(anim.crop) + anim.extra} ${theme.rows}`)
+          tellRender($, anim.crop, worldNow(), poseTick(), lit)
           return
         }
         const cells = encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit, anim.extra))
