@@ -111,15 +111,15 @@ pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
     let lignes = scenes.len().div_ceil(par_ligne) as i32;
     let (w, h) = (ECART + (fw + ECART) * par_ligne as i32, ECART + (fh + ECART) * lignes);
     let mut pixels = vec![0xFF16_1616u32; (w * h) as usize];
-    let cases = super::pet::cases(CH as u32);
+    let pet = super::pet::cases(CH as u32, b'O').is_some();
     let mut scene = vec![0u32; (fw * fh) as usize];
     for (n, (a, t, monde)) in scenes.iter().enumerate() {
         // chaque scène peinte à part, Scorpheus par-dessus comme dans l'appli, puis posée
-        let (cells, acteur, _) = forge.image(Recadrage::Full, *a, *t, monde, true, extra, cases.is_some());
+        let (cells, acteurs, _) = forge.image(Recadrage::Full, *a, *t, monde, true, extra, pet);
         scene.fill(0);
         peindre(&mut Cible { pixels: &mut scene, w: fw as usize, h: fh as usize }, &cells, None, cols, 0, 0, CW, CH);
-        if let (Some(cases), Some(acteur)) = (&cases, &acteur) {
-            super::pet::peindre(cases, acteur, &mut scene, fw as usize, fh as usize, 0, CW, CH);
+        for acteur in &acteurs {
+            super::pet::peindre(acteur, &mut scene, fw as usize, fh as usize, 0, CW, CH);
         }
         let (ox, oy) = (ECART + (n % par_ligne) as i32 * (fw + ECART), ECART + (n / par_ligne) as i32 * (fh + ECART));
         for y in 0..fh {
@@ -309,14 +309,13 @@ mod chrono {
         }
         println!("peindre : {:.3} ms, {:.1} zones, {:.0} % de l'image", tp * 1000.0 / n as f64, nz as f64 / n as f64, 100.0 * aire as f64 / n as f64 / (cols * 9 * 16 * 19) as f64);
         // Scorpheus d'après son pet : l'image avec lui, puis lui seul peint
-        let cases = super::super::pet::cases(19).unwrap();
         let (mut ti, mut tpet) = (0.0, 0.0);
         for k in 0..n {
             let t = Instant::now();
             let (_, a, _) = f.image(Recadrage::Full, Activite::Running, k, &w.plus_tard(k), true, 72, true);
             ti += t.elapsed().as_secs_f64();
             let t = Instant::now();
-            super::super::pet::peindre(&cases, a.as_ref().unwrap(), &mut px, cols * 9, 16 * 19, 0, cw, ch);
+            super::super::pet::peindre(&a[0], &mut px, cols * 9, 16 * 19, 0, cw, ch);
             tpet += t.elapsed().as_secs_f64();
         }
         println!("image avec le pet : {:.3} ms ; le pet peint : {:.3} ms", ti * 1000.0 / n as f64, tpet * 1000.0 / n as f64);

@@ -147,7 +147,7 @@ fn forge(activite: Activite) -> SceneForge {
     monde.apprentices = (0..3).map(|i| Petit { seed: 3 + 4 * i, colour: Lettre(b"PbG"[i as usize]), age: 20 + 30 * i, leaving: None }).collect();
     // les cases du pet, faites une fois pour toute l'appli : hors de la mesure
     let t = std::time::Instant::now();
-    if crate::forge::pet::cases(19).is_some() && t.elapsed().as_millis() > 1 {
+    if crate::forge::pet::cases(19, b'O').is_some() && t.elapsed().as_millis() > 1 {
         note(&format!("banc : la planche du pet décodée et mise à l'échelle, une fois : {} ms", t.elapsed().as_millis()));
     }
     let mut s = SceneForge::new();

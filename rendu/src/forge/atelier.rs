@@ -29,11 +29,23 @@ pub struct Contexte {
     pub pet: bool,
     tete: &'static [&'static str],
     cape: [u8; 2],
+    /// les invités de ce dessin, que pet.rs peint par-dessus quand la scène ne les dessine pas
+    pub invites: Vec<InviteVu>,
+}
+
+/// Un invité peint d'après le pet : où il se tient (la colonne de la scène où commence sa
+/// place, comme C.0 + World.x), ce qu'il fait, son temps, et le monde de son dessin (son
+/// allure, sa cape).
+pub struct InviteVu {
+    pub x: i32,
+    pub activite: Activite,
+    pub tick: i64,
+    pub monde: Monde,
 }
 
 impl Default for Contexte {
     fn default() -> Self {
-        Contexte { edge: SW, pet: false, tete: &HAMMER_NORMAL, cape: *b"oO" }
+        Contexte { edge: SW, pet: false, tete: &HAMMER_NORMAL, cape: *b"oO", invites: Vec::new() }
     }
 }
 
@@ -1168,6 +1180,7 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
     let mut g = Grille::new(width, SH);
     if !actor_only {
         ctx.edge = width;
+        ctx.invites.clear();
     }
     let clock = world.clock;
     ctx.tete = match world.hammer {
@@ -1671,7 +1684,12 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
             personality: Humeur::Calme,
             ..world.clone()
         };
-        let pose = pose_of(if v.waving { Activite::Waving } else { Activite::Idle }, v.tick, &at);
+        let activite = if v.waving { Activite::Waving } else { Activite::Idle };
+        if ctx.pet {
+            ctx.invites.push(InviteVu { x: C.0 + gx, activite, tick: v.tick, monde: at });
+            continue;
+        }
+        let pose = pose_of(activite, v.tick, &at);
         let pet = std::mem::replace(&mut ctx.pet, false);
         let guest = compose(ctx, cour, &pose, &at, v.tick, true, edge);
         ctx.pet = pet;

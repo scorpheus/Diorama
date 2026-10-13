@@ -648,17 +648,20 @@ async function chooseLook($: EngineInterface, opening: string) {
   await heartbeat($)
 }
 
-/** The look wanted, or the nearest one no session at work is wearing. */
+/**
+ * The look wanted, or the nearest one no session at work is wearing: a cape no
+ * one wears first, since the native render's Scorpheus (his Codex pet) shows the
+ * cape but not the accessory; else a cape and accessory no one wears together.
+ */
 function freeLook(cape: string, accessory: Accessory): { cape: string; accessory: Accessory } {
   const worn = new Set(anim.neighbours.map(n => `${n.cape}+${n.accessory}`))
+  const capesWorn = new Set(anim.neighbours.map(n => n.cape))
   const capes = Object.keys(theme.looks.variants)
   const all = capes.flatMap(c => theme.looks.accessories.map(a => ({ cape: c, accessory: a })))
   const from = Math.max(0, all.findIndex(l => l.cape === cape && l.accessory === accessory))
-  for (let i = 0; i < all.length; i++) {
-    const l = all[(from + i * 5) % all.length] // a step of five: another cape before another accessory
-    if (l && !worn.has(`${l.cape}+${l.accessory}`)) return l
-  }
-  return { cape, accessory }
+  // a step of five: another cape before another accessory
+  const order = all.map((_, i) => all[(from + i * 5) % all.length]!)
+  return order.find(l => !capesWorn.has(l.cape)) ?? order.find(l => !worn.has(`${l.cape}+${l.accessory}`)) ?? { cape, accessory }
 }
 
 /** Tells the other sessions this one is at work, in its look; learns who else is. */
@@ -674,8 +677,10 @@ async function heartbeat($: EngineInterface) {
   for (const [id, p] of Object.entries(all)) if (now - p.seen > 24 * 60 * 60 * 1000) delete all[id] // a day gone: forgotten
   await $.store.set(PRESENCE_KEY, all)
   anim.neighbours = Object.entries(all).filter(([id, p]) => id !== anim.sessionId && now - p.seen < NEIGHBOUR_MS).map(([id, p]) => ({ ...p, id }))
-  // two forges in one look: the later of the two (by id) changes, the other keeps his
-  const twin = anim.neighbours.find(n => n.cape === anim.cape && n.accessory === anim.accessory && n.id < anim.sessionId)
+  // two forges in one look: the later of the two (by id) changes, the other keeps his;
+  // one cape is one look while some cape is still free (see freeLook)
+  const freeCape = Object.keys(theme.looks.variants).some(c => c !== anim.cape && !anim.neighbours.some(n => n.cape === c))
+  const twin = anim.neighbours.find(n => n.cape === anim.cape && (freeCape || n.accessory === anim.accessory) && n.id < anim.sessionId)
   if (twin) {
     const look = freeLook(anim.cape, anim.accessory)
     anim.cape = look.cape

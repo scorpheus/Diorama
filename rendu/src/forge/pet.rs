@@ -169,15 +169,19 @@ impl Cases {
     }
 }
 
-/// Les cases, à la hauteur de cellule `ch` : faites une fois pour toutes les bandes de cette
-/// taille, la planche décodée seulement le temps de les faire.
-pub fn cases(ch: u32) -> Option<Arc<Cases>> {
-    static FAITES: OnceLock<Mutex<HashMap<u32, Arc<Cases>>>> = OnceLock::new();
+/// Les cases, à la hauteur de cellule `ch`, à la cape `cape` (sa lettre claire, 'O' : la verte
+/// du pet) : faites une fois pour toutes les bandes de cette taille et de cette tenue, la
+/// planche décodée seulement le temps de les faire.
+pub fn cases(ch: u32, cape: u8) -> Option<Arc<Cases>> {
+    static FAITES: OnceLock<Mutex<HashMap<(u32, u8), Arc<Cases>>>> = OnceLock::new();
     let mut faites = FAITES.get_or_init(Default::default).lock().ok()?;
-    if let Some(c) = faites.get(&ch) {
+    if let Some(c) = faites.get(&(ch, cape)) {
         return Some(c.clone());
     }
-    let planches = PLANCHES.iter().map(|p| decoder(p)).collect::<Option<Vec<_>>>()?;
+    let mut planches = PLANCHES.iter().map(|p| decoder(p)).collect::<Option<Vec<_>>>()?;
+    for (_, rgba) in &mut planches {
+        teindre(rgba, cape);
+    }
     let echelle = HAUTEUR * ch as f32 / 2.0 / HAUTEUR_CASE;
     let mut toutes = HashMap::new();
     for rangee in RANGEES {
@@ -188,8 +192,67 @@ pub fn cases(ch: u32) -> Option<Arc<Cases>> {
         }
     }
     let c = Arc::new(Cases(toutes));
-    faites.insert(ch, c.clone());
+    faites.insert((ch, cape), c.clone());
     Some(c)
+}
+
+/// La couleur claire de la cape forêt (accessoires::PALETTE, 'O') : celle du pet, à peu près.
+const VERT: u32 = 0x62802f;
+
+/// Teinte, saturation, valeur (de 0 à 1) d'une couleur de 0 à 1.
+fn tsv([r, g, b]: [f32; 3]) -> [f32; 3] {
+    let (mx, mn) = (r.max(g).max(b), r.min(g).min(b));
+    let d = mx - mn;
+    let h = if d <= 0.0 {
+        0.0
+    } else if mx == r {
+        ((g - b) / d).rem_euclid(6.0) / 6.0
+    } else if mx == g {
+        ((b - r) / d + 2.0) / 6.0
+    } else {
+        ((r - g) / d + 4.0) / 6.0
+    };
+    [h, if mx > 0.0 { d / mx } else { 0.0 }, mx]
+}
+
+fn rvb([h, s, v]: [f32; 3]) -> [f32; 3] {
+    let i = (h * 6.0).floor();
+    let f = h * 6.0 - i;
+    let (p, q, t) = (v * (1.0 - s), v * (1.0 - s * f), v * (1.0 - s * (1.0 - f)));
+    match (i as i32).rem_euclid(6) {
+        0 => [v, t, p],
+        1 => [q, v, p],
+        2 => [p, v, t],
+        3 => [p, q, v],
+        4 => [t, p, v],
+        _ => [v, p, q],
+    }
+}
+
+/// La tenue de la session sur le pet : ce qui a la teinte de sa cape verte (la capuche, la
+/// tunique, la gourde) prend celle de la cape `cape`, chaque nuance à sa place. Les valeurs
+/// suivent de loin (racine du rapport) : les capes en lettres sont plus vives que la sienne.
+fn teindre(rgba: &mut [[f32; 4]], cape: u8) {
+    let hexa = |c: u32| [(c >> 16 & 255) as f32 / 255.0, (c >> 8 & 255) as f32 / 255.0, (c & 255) as f32 / 255.0];
+    let Some(cible) = super::accessoires::PALETTE.get(cape as usize).copied().flatten().filter(|_| cape != b'O') else {
+        return;
+    };
+    let (r, t) = (tsv(hexa(VERT)), tsv(hexa(cible)));
+    let (ks, kv) = (t[1] / r[1], (t[2] / r[2]).sqrt());
+    for p in rgba {
+        if p[3] < 1.0 {
+            continue;
+        }
+        let a = p[3] / 255.0;
+        let [h, s, v] = tsv([p[0] / a / 255.0, p[1] / a / 255.0, p[2] / a / 255.0]);
+        if !(50.0 / 360.0..=110.0 / 360.0).contains(&h) || s <= 0.25 || v <= 0.12 {
+            continue;
+        }
+        let n = rvb([(t[0] + h - r[0]).rem_euclid(1.0), (s * ks).min(1.0), (v * kv).min(1.0)]);
+        for c in 0..3 {
+            p[c] = n[c] * 255.0 * a;
+        }
+    }
 }
 
 /// Une planche en RGBA (alpha prémultiplié, en flottants) et sa largeur.
@@ -334,12 +397,14 @@ pub struct Acteur {
     pub x: f32,
     pub y: f32,
     pub eclairage: Option<Eclairage>,
+    /// la lettre claire de sa cape (Monde.cape[1])
+    pub cape: u8,
 }
 
 /// Peint `a` dans `pixels` (0xAARRGGBB prémultiplié, `w` × `h`) ; `x0` : la première colonne
 /// de forge montrée ; (cw, ch) : la cellule. Rend le rectangle peint.
-#[allow(clippy::too_many_arguments)]
-pub fn peindre(cases: &Cases, a: &Acteur, pixels: &mut [u32], w: usize, h: usize, x0: i32, cw: i32, ch: i32) -> Option<(i32, i32, i32, i32)> {
+pub fn peindre(a: &Acteur, pixels: &mut [u32], w: usize, h: usize, x0: i32, cw: i32, ch: i32) -> Option<(i32, i32, i32, i32)> {
+    let cases = cases(ch as u32, a.cape)?;
     let c = cases.case(a.rangee, a.image)?;
     if c.w == 0 {
         return None;
@@ -408,7 +473,7 @@ mod tests {
 
     #[test]
     fn la_planche_se_decoupe_en_cases_a_la_taille_du_personnage() {
-        let c = cases(19).expect("la planche se décode");
+        let c = cases(19, b'O').expect("la planche se décode");
         let repos = c.case(Rangee::Repos, 0).unwrap();
         // 26 pixels de forge de 9,5 px : ~247 px de haut, posés au sol
         assert!((235..=260).contains(&repos.h), "hauteur {}", repos.h);

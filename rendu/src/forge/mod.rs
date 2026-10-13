@@ -14,7 +14,6 @@ pub mod pixels;
 pub mod planche;
 pub mod poses;
 
-use std::sync::Arc;
 
 use atelier::{compose, Contexte, C, GROW, IMPACT, ROWS, SH, SW, YARD};
 use monde::{Activite, Monde, Recadrage};
@@ -46,10 +45,11 @@ impl Forge {
     }
 
     /// Comme `frame` ; avec `pet`, la scène sans Scorpheus en lettres ni étincelles en lettres,
-    /// et ce qui se peint par-dessus : lui tel que pet.rs le peint (sa case du moment, sa place,
-    /// la lumière autour), et le coup de marteau qui tombe à ce tic (combien d'étincelles).
+    /// et ce qui se peint par-dessus : lui et ses invités tels que pet.rs les peint (la case du
+    /// moment, la place, la lumière autour), et le coup de marteau qui tombe à ce tic (combien
+    /// d'étincelles).
     #[allow(clippy::too_many_arguments)]
-    pub fn image(&mut self, c: Recadrage, activity: Activite, tick: i64, world: &Monde, lit: bool, extra: i32, pet: bool) -> (Vec<u32>, Option<pet::Acteur>, Option<usize>) {
+    pub fn image(&mut self, c: Recadrage, activity: Activite, tick: i64, world: &Monde, lit: bool, extra: i32, pet: bool) -> (Vec<u32>, Vec<pet::Acteur>, Option<usize>) {
         self.ctx.pet = pet;
         let (x0, x1) = crop(c);
         let width = if x1 == SW { SW + extra.clamp(0, GROW) } else { SW };
@@ -57,22 +57,29 @@ impl Forge {
         let scene = compose(&mut self.ctx, &mut self.cour, &p, world, tick, false, width);
         let fin = if x1 == SW { width } else { x1 };
         let coup = if pet && p.sparks_age == Some(0) { p.spark_count.map(|n| n as usize) } else { None };
-        let acteur = (pet && !world.absent).then(|| {
-            let (rangee, image) = pet::moment(activity, tick, world);
-            // au milieu de la place du personnage en lettres (16 de large), les pattes au sol
-            pet::Acteur { rangee, image, x: (C.0 + world.x + 8) as f32 + pet::decalage(activity, world), y: SH as f32, eclairage: None }
-        });
+        // au milieu de la place du personnage en lettres (16 de large), les pattes au sol ; ses
+        // invités ensuite, par-dessus lui, comme la scène les dessinait
+        let acteur = |a: Activite, t: i64, w: &Monde, x: i32| {
+            let (rangee, image) = pet::moment(a, t, w);
+            pet::Acteur { rangee, image, x: (x + 8) as f32 + pet::decalage(a, w), y: SH as f32, eclairage: None, cape: w.cape[1].0 }
+        };
+        let mut acteurs: Vec<pet::Acteur> = Vec::new();
+        if pet {
+            if !world.absent {
+                acteurs.push(acteur(activity, tick, world, C.0 + world.x));
+            }
+            acteurs.extend(self.ctx.invites.iter().map(|v| acteur(v.activite, v.tick, &v.monde, v.x)));
+        }
         if !lit {
-            return (pixels::to_cells(&scene, &accessoires::PALETTE, x0, fin, None), acteur, coup);
+            return (pixels::to_cells(&scene, &accessoires::PALETTE, x0, fin, None), acteurs, coup);
         }
         let actor = if pet { pixels::Grille::new(SW, SH) } else { compose(&mut self.ctx, &mut self.cour, &p, world, tick, true, SW) };
         let dehors = self.cour.outdoors(world, activity == Activite::Running, YARD, width);
         let mut lumiere = lumiere::LumiereForge::new(&mut self.chutes, &p, world, tick, &actor, &dehors);
-        let acteur = acteur.map(|mut a| {
+        for a in &mut acteurs {
             a.eclairage = Some(lumiere.eclairage(a.x as i32 - 15, 0, 30, SH));
-            a
-        });
-        (pixels::to_cells(&scene, &accessoires::PALETTE, x0, fin, Some(&mut lumiere)), acteur, coup)
+        }
+        (pixels::to_cells(&scene, &accessoires::PALETTE, x0, fin, Some(&mut lumiere)), acteurs, coup)
     }
 }
 
@@ -148,8 +155,6 @@ pub struct SceneForge {
     /// tics passés depuis le dernier état reçu
     depuis: i64,
     avant: Vec<u32>,
-    /// les cases du pet, à la hauteur de cellule de la bande
-    cases: Option<(u32, Arc<pet::Cases>)>,
     gerbe: gerbe::Gerbe,
     /// le tic du dernier coup de marteau : un message du plugin qui le redonne ne frappe pas deux fois
     frappe: i64,
@@ -158,7 +163,7 @@ pub struct SceneForge {
 
 impl SceneForge {
     pub fn new() -> Self {
-        SceneForge { forge: Forge::default(), etat: None, depuis: 0, avant: Vec::new(), cases: None, gerbe: gerbe::Gerbe::default(), frappe: i64::MIN, images: 0 }
+        SceneForge { forge: Forge::default(), etat: None, depuis: 0, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), frappe: i64::MIN, images: 0 }
     }
 
     pub fn recevoir(&mut self, etat: Etat) {
@@ -174,11 +179,10 @@ impl crate::scene::Scene for SceneForge {
         self.depuis += 1;
         let monde = etat.monde.plus_tard(e);
         let (cw, ch) = (image.cellule.0 as i32, image.cellule.1 as i32);
-        if self.cases.as_ref().is_none_or(|(h, _)| *h != image.cellule.1) {
-            self.cases = pet::cases(image.cellule.1).map(|c| (image.cellule.1, c));
-        }
         let tick = etat.tick + e;
-        let (cells, acteur, coup) = self.forge.image(etat.recadrage, etat.activite, tick, &monde, etat.lit, etat.extra, self.cases.is_some());
+        // les cases du pet, faites une fois par hauteur de cellule et par cape
+        let pet = pet::cases(image.cellule.1, b'O').is_some();
+        let (cells, acteurs, coup) = self.forge.image(etat.recadrage, etat.activite, tick, &monde, etat.lit, etat.extra, pet);
         let (x0, x1) = crop(etat.recadrage);
         // le coup tombe sur l'enclume : la gerbe part de là, et retombe au sol de la forge
         let hb = (ROWS * ch) as f32;
@@ -193,13 +197,10 @@ impl crate::scene::Scene for SceneForge {
         let (w, h) = (image.w as usize, image.h as usize);
         let mut cible = cellules::Cible { pixels: image.pixels, w, h };
         let mut zone = cellules::peindre(&mut cible, &cells, if neuve { None } else { Some(&self.avant) }, cols, 0, 0, cw, ch);
-        let peint = match (&self.cases, &acteur) {
-            (Some((_, cases)), Some(a)) => pet::peindre(cases, a, image.pixels, w, h, x0, cw, ch),
-            _ => None,
-        };
-        let etincelles = self.gerbe.peindre(image.pixels, w, h);
+        let mut peints: Vec<_> = acteurs.iter().filter_map(|a| pet::peindre(a, image.pixels, w, h, x0, cw, ch)).collect();
+        peints.extend(self.gerbe.peindre(image.pixels, w, h));
         let mut cells = cells;
-        for (l, t, r, b) in [peint, etincelles].into_iter().flatten() {
+        for (l, t, r, b) in peints {
             zone = Some(zone.map_or((l, t, r, b), |z| (z.0.min(l), z.1.min(t), z.2.max(r), z.3.max(b))));
             // sous lui et sous la gerbe, les cellules ne sont plus ce que `cells` en dit : à
             // l'image suivante elles se repeignent, qu'il soit resté ou parti

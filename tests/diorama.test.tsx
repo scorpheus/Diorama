@@ -839,22 +839,23 @@ test('no two forges at work wear the same look', async ($, on) => {
     if (system.includes('tenue')) asked = system
     return '{"cape": "braise", "accessoire": "tablier", "caractere": "jovial"}'
   }))
-  const { clock } = await start($, on, answerTools, { presence: { 'sess-dev': { project: 'Dev', cape: 'braise', accessory: 'tablier', seen: START } } })
+  const { clock } = await start($, on, answerTools, { presence: { 'sess-dev': { project: 'Dev', cape: 'braise', accessory: 'bandeau', seen: START } } })
   await $.prompt.submit(typed('Smoke test des 12 heures'))
   await clock.advance(1000) // the look is chosen in the background
-  expect(asked).toContain('braise+tablier') // Haiku is told what is already worn
+  expect(asked).toContain('braise+bandeau') // Haiku is told what is already worn
   const mine = (shelf.get('presence') as Record<string, { cape: string; accessory: string; personality: string }>)['sess-1']
-  expect(`${mine?.cape}+${mine?.accessory}`).not.toBe('braise+tablier')
+  // another cape, not just another accessory: the native render shows the cape alone
+  expect(mine?.cape).not.toBe('braise')
   expect(mine?.personality).toBe('jovial')
 })
 
 test('of two twins already dressed alike, the later one changes', async ($, on) => {
   const { ui } = await start($, on, answerTools, { presence: {
     'sess-0': { project: 'Dev', cape: 'braise', accessory: 'tablier', seen: START },
-    'sess-1': { project: 'vehigraph', cape: 'braise', accessory: 'tablier', seen: START - 60_000 },
+    'sess-1': { project: 'vehigraph', cape: 'braise', accessory: 'bandeau', seen: START - 60_000 },
   } })
   const mine = (shelf.get('presence') as Record<string, { cape: string; accessory: string }>)['sess-1']
-  expect(`${mine?.cape}+${mine?.accessory}`).not.toBe('braise+tablier')
+  expect(mine?.cape).not.toBe('braise')
   expect(await ui.find({ text: /change de tenue : la forge Dev portait la même/ })).toBeDefined()
 })
 
