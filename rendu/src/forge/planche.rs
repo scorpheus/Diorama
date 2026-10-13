@@ -17,7 +17,7 @@ fn petit(seed: i64, age: i64, colour: u8) -> Petit {
 }
 
 /// Les scènes de la planche : (activité, tic, monde).
-fn scenes() -> Vec<(Activite, i64, Monde)> {
+pub fn scenes() -> Vec<(Activite, i64, Monde)> {
     let calme = Monde::default;
     let avec = |f: &dyn Fn(&mut Monde)| {
         let mut w = calme();
