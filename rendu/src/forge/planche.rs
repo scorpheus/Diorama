@@ -37,7 +37,7 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
         (Activite::Idle, 0, calme()),
         (Activite::Thinking, 4, calme()),
         (Activite::Running, 3, calme()),
-        (Activite::Running, 5, avec(&|w| { w.flavor = Saveur::Build; w.effort = 2 })),
+        (Activite::Running, 5, avec(&|w| { w.flavor = Saveur::Build; w.effort = 2; w.x = -8 })), // au soufflet
         (Activite::Review, 2, avec(&|w| w.flavor = Saveur::Web)),
         (Activite::Waiting, 1, calme()),
         (Activite::Failed, 2, calme()),
@@ -195,25 +195,45 @@ mod film {
 
     /// Des images qui se suivent, comme l'appli les peint (le pet, la gerbe), côte à côte :
     /// FILM=<sortie.png> cargo test --release film -- --ignored
+    /// MOMENT : frappe (par défaut), soufflet, trempe, envoi, balai, sommeil ; DEBUT : le tic de
+    /// la première image (16 par défaut) ; IMAGES : combien (12)
     #[test]
     #[ignore]
     fn film() {
         let (cw, ch, cols) = (9i32, 19i32, 144i32);
         let (w, h) = (cols * cw, 16 * ch);
+        let var = |n: &str, d: i32| std::env::var(n).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
+        let mut monde = Monde { clock: 1, ..Monde::default() };
+        let activite = match std::env::var("MOMENT").unwrap_or_default().as_str() {
+            "soufflet" => {
+                monde.flavor = Saveur::Build;
+                monde.x = -8; // au soufflet (atelier.rs, BELLOWS_SPOT)
+                Activite::Running
+            }
+            "trempe" => Activite::Quench,
+            "envoi" => {
+                monde.ship = Some(Envoi::Push);
+                Activite::Ship
+            }
+            "balai" => Activite::Sweep,
+            "sommeil" => Activite::Sleep,
+            _ => Activite::Running,
+        };
         let mut s = SceneForge::new();
-        s.recevoir(Etat { recadrage: Recadrage::Full, extra: 72, lit: true, activite: Activite::Running, tick: 0, monde: Monde { clock: 1, ..Monde::default() } });
+        s.recevoir(Etat { recadrage: Recadrage::Full, extra: 72, lit: true, activite, tick: 0, monde });
         let mut px = vec![0u32; (w * h) as usize];
-        let (vue, n) = (300i32, 12i32); // le coin de l'enclume et de Scorpheus, douze images
+        let (debut, n) = (var("DEBUT", 16), var("IMAGES", 12));
+        let (x0, vue) = (var("X0", 60), var("VUE", 300)); // le coin du four, de l'enclume et de Scorpheus
         let mut out = vec![0xFF16_1616u32; ((vue + 4) * n * h) as usize];
-        for k in 0..16 + n {
+        for k in 0..debut + n {
             s.peindre(&mut Image { pixels: &mut px, w: w as u32, h: h as u32, cellule: (cw as u32, ch as u32) }, 0.15, k == 0);
-            let i = k - 16;
+            let i = k - debut;
             if i < 0 {
                 continue;
             }
             for y in 0..h {
                 for x in 0..vue {
-                    let p = px[(y * w + 60 + x) as usize];
+                    let p = px[(y * w + x0 + x) as usize];
                     out[(y * (vue + 4) * n + i * (vue + 4) + x) as usize] = if p >> 24 == 0 { 0xFF0C_0C0C } else { p };
                 }
             }

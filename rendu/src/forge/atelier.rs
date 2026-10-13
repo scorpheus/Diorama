@@ -348,6 +348,9 @@ fn draw_steam(g: &mut Grille, age: i64, ox: i32, oy: i32) {
 
 impl Contexte {
     fn arm(&self, g: &mut Grille, sx: i32, sy: i32, px: i32, py: i32) {
+        if self.pet {
+            return; // le pet a les siennes
+        }
         g.line(sx, sy, px, py, self.cape[1]);
         g.line(sx, sy + 1, px, py + 1, self.cape[0]);
         g.put(px, py, b'l');
@@ -365,6 +368,9 @@ impl Contexte {
     }
 
     fn hammer(&self, g: &mut Grille, px: i32, py: i32, hx: i32, hy: i32) {
+        if self.pet {
+            return;
+        }
         g.line(px, py, hx + 1, hy + 1, b'r');
         let w = self.tete.first().map_or(3, |r| r.len() as i32);
         g.stamp(hx - (w - 3).div_euclid(2), hy - (self.tete.len() as i32 - 2), self.tete);
@@ -1437,8 +1443,10 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
         if fe == Some(Fete::Noel) {
             g.stamp(x + 5, hy - 4, &HAT_SANTA);
         }
+        }
 
-        // son bras gauche (à gauche de l'écran) : marteau, levier, lame, sceau, balai
+        // son bras gauche (à gauche de l'écran) : marteau, levier, lame, sceau, balai ; d'après
+        // son pet, le pet peint la patte et le marteau, la forge ce qu'elle tient d'autre
         let ls = (x + 1, y + 15);
         // en marchant, ses pattes pendent au repos ; le balai y reste, il balaie en allant
         let left = if walking && p.sweep.is_none() { Gauche::Rest } else { p.left };
@@ -1458,7 +1466,9 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
             }
             Gauche::Drop => {
                 ctx.arm(&mut g, ls.0, ls.1, x, y + 19);
-                g.stamp(x - 5, C.1 + 24, &["r...", ".rAA", "..aa"]); // tombé à ses pieds
+                if !ctx.pet {
+                    g.stamp(x - 5, C.1 + 24, &["r...", ".rAA", "..aa"]); // tombé à ses pieds
+                }
             }
             Gauche::Scroll => ctx.arm(&mut g, ls.0, ls.1, x + 4, y + 18),
             Gauche::Pull => {
@@ -1496,6 +1506,7 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
 
         // son bras droit
         let rs = (x + 14, y + 15);
+        if !ctx.pet {
         match right {
             Droite::Rest => ctx.arm(&mut g, rs.0, rs.1, x + 15, y + 18),
             Droite::Wave1 => ctx.arm(&mut g, rs.0, rs.1, x + 17, y + 9),
@@ -1525,6 +1536,9 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
         if p.scroll {
             g.stamp(x + 4, y + 16, &SCROLL);
         }
+        }
+        if ctx.pet && right == Droite::Broom {
+            ctx.draw_broom(&mut g, &p, x, y, ls, rs, walking && world.facing < 0); // ses pattes : le pet
         }
         if p.thought {
             g.put(x + 15, hy + 3, b'w');

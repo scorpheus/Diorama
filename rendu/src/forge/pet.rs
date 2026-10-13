@@ -32,9 +32,19 @@ pub enum Rangee {
     Relecture,
     /// le coup de marteau sur l'enclume : au repos, levé, abattu, la frappe
     Frappe,
+    /// le levier du soufflet : haut, pressé
+    Soufflet,
+    /// la trempe : la lame levée, puis dans le seau
+    Trempe,
+    /// l'envoi : la lame rangée dans la caisse en quatre temps, le couvercle, le sceau levé, frappé
+    Envoi,
+    /// le balai que la forge dessine, à chaque allonge du coup (0 à 4)
+    Balai,
+    /// assis sur son tabouret, les yeux fermés ; la tête qui dodeline
+    Sommeil,
 }
 
-const RANGEES: [Rangee; 10] = [
+const RANGEES: [Rangee; 15] = [
     Rangee::Repos,
     Rangee::Droite,
     Rangee::Gauche,
@@ -45,6 +55,11 @@ const RANGEES: [Rangee; 10] = [
     Rangee::Travail,
     Rangee::Relecture,
     Rangee::Frappe,
+    Rangee::Soufflet,
+    Rangee::Trempe,
+    Rangee::Envoi,
+    Rangee::Balai,
+    Rangee::Sommeil,
 ];
 
 impl Rangee {
@@ -61,16 +76,26 @@ impl Rangee {
             Rangee::Travail => (0, 7, 6),
             Rangee::Relecture => (0, 8, 6),
             Rangee::Frappe => (1, 0, 4),
+            Rangee::Soufflet => (1, 1, 2),
+            Rangee::Trempe => (1, 2, 2),
+            Rangee::Envoi => (1, 3, 7),
+            Rangee::Balai => (1, 4, 5),
+            Rangee::Sommeil => (1, 5, 2),
         }
     }
+}
 
-    /// De combien de pixels de forge il se décale de sa place : à l'enclume, il s'en approche
-    /// assez pour que la tête du marteau tombe sur le lingot.
-    pub const fn decalage(self) -> f32 {
-        match self {
-            Rangee::Frappe => -4.0,
-            _ => 0.0,
-        }
+/// De combien de pixels de forge il se décale de sa place : à l'enclume (le marteau, la trempe,
+/// l'envoi), il s'en approche assez pour que sa patte y arrive, la tête du marteau sur le lingot.
+/// Tout le moment durant, pour ne pas sauter d'une image à l'autre.
+pub fn decalage(a: Activite, w: &Monde) -> f32 {
+    match a {
+        _ if w.walking => 0.0,
+        Activite::Running if w.flavor != super::monde::Saveur::Build => -4.0,
+        Activite::Quench | Activite::Ship => -4.0,
+        // vers la cour : la tête du balai reste dans sa case
+        Activite::Sweep => 2.0,
+        _ => 0.0,
     }
 }
 
@@ -87,16 +112,24 @@ pub fn moment(a: Activite, tick: i64, w: &Monde) -> (Rangee, usize) {
         // le coup suit la pose de la forge (poses.rs, running) : levé, abattu, la frappe au
         // quatrième tic (la gerbe part), puis au repos et de nouveau abattu pour remonter
         Activite::Running if w.flavor != super::monde::Saveur::Build => (Frappe, [1, 1, 2, 3, 3, 0, 0, 2][tick.rem_euclid(8) as usize]),
-        Activite::Running | Activite::Quench | Activite::Sweep => boucle(Travail, 2),
+        // la patte suit le levier, pressé trois tics sur six (poses.rs, running)
+        Activite::Running => (Soufflet, (tick.rem_euclid(6) < 3) as usize),
+        // la lame levée, au seau du quatrième au neuvième tic, puis levée de nouveau (poses.rs, quench)
+        Activite::Quench => (Trempe, (3..9).contains(&tick) as usize),
+        // rangée, le couvercle, le sceau levé puis frappé ; fier ensuite (poses.rs, ship)
+        Activite::Ship if tick < 10 => (Envoi, [0, 1, 2, 3, 4, 4, 5, 5, 6, 6][tick.max(0) as usize]),
+        // ses pattes suivent le manche, poussé puis ramené (poses.rs, sweep)
+        Activite::Sweep => (Balai, [0, 1, 2, 3, 4, 3, 2, 1][tick.rem_euclid(8) as usize]),
         Activite::Thinking => (Relecture, [1, 1, 2, 2, 3, 3][(tick.div_euclid(3) % 6) as usize]),
         Activite::Review => boucle(Relecture, 3),
         Activite::Waiting => boucle(Attente, 3),
         Activite::Failed => (Echec, [0, 1, 2, 2, 7, 6][(tick.div_euclid(3) % 6) as usize]),
         Activite::Jumping => boucle(Saut, 2),
         Activite::Waving | Activite::Ship => boucle(Salut, 2),
-        // couché, endormi ; puis il se relève
-        Activite::Sleep => (Echec, 4),
-        Activite::Waking => (Echec, (5 + tick.div_euclid(3).max(0) as usize).min(7)),
+        // il somnole sur son tabouret, la tête tombe douze tics sur vingt-quatre (poses.rs, sleep) ;
+        // un message le fait bondir
+        Activite::Sleep => (Sommeil, (tick.rem_euclid(24) < 12) as usize),
+        Activite::Waking => (Saut, tick.clamp(0, 4) as usize),
         Activite::Idle | Activite::Away => boucle(Repos, 3),
     }
 }
@@ -380,7 +413,7 @@ mod tests {
         // 26 pixels de forge de 9,5 px : ~247 px de haut, posés au sol
         assert!((235..=260).contains(&repos.h), "hauteur {}", repos.h);
         assert!(repos.dy + repos.h as i32 <= 2 && repos.dy + repos.h as i32 >= -4, "pieds à {}", repos.dy + repos.h as i32);
-        for (r, n) in [(Rangee::Travail, 6), (Rangee::Droite, 8), (Rangee::Echec, 8), (Rangee::Frappe, 4)] {
+        for (r, n) in [(Rangee::Travail, 6), (Rangee::Droite, 8), (Rangee::Echec, 8), (Rangee::Frappe, 4), (Rangee::Envoi, 7)] {
             for i in 0..n {
                 assert!(c.case(r, i).is_some_and(|k| k.w > 0), "{r:?} {i}");
             }
