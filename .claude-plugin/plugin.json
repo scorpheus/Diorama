@@ -67,6 +67,16 @@
         "oui",
         "non"
       ]
+    },
+    "rendu": {
+      "type": "string",
+      "title": "Rendu natif (essai, Windows)",
+      "description": "non : le terminal dessine la scène, comme toujours ; oui (essai) : une appli à part (rendu/, en Rust, compilée par cargo) la dessine en vrais pixels par-dessus le bandeau, que le terminal garde noir et fixe",
+      "default": "non",
+      "options": [
+        "non",
+        "oui"
+      ]
     }
   }
 }

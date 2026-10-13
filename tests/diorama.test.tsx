@@ -43,6 +43,10 @@ const STORE_DIR = 'C:/fake/.claude/plugins/store'
 const STORE_FILE = `${STORE_DIR}/diorama_inline-test.json`
 let storeOnDisk = true
 let wholeReads = 0
+/** The native render (option rendu): what the plugin posted to the app, what it launched, and whether the app answers. */
+const renderPosts: Array<{ url: string; body: string }> = []
+const launched: Array<readonly string[]> = []
+let renderAnswers = false
 let listed: Array<{ id: string; description: string; type: string; status: AgentStatus }> = []
 let sessionId = 'sess-1'
 // the compaction window the next engine's settings set (autoCompactWindow), taken by that engine alone
@@ -122,6 +126,18 @@ function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
     throw new Error(`ENOENT: ${path}`)
   })
   on('ui.toast', () => ({ value: undefined }))
+  renderPosts.length = 0
+  launched.length = 0
+  renderAnswers = false
+  on('http.fetch', (_$, e) => {
+    renderPosts.push({ url: e.url, body: e.init?.body ?? '' })
+    if (!renderAnswers) throw new Error('ECONNREFUSED')
+    return { value: { status: 204, ok: true, headers: {}, text: '' } }
+  })
+  on('process.spawn', async function* (_$, e) {
+    launched.push(e.argv)
+    return { value: { code: 0, signal: null } } as never
+  })
   on('session.cwd', () => ({ value: 'C:/projets/vehigraph' }))
   on('turn.step', async function* () {
     return { turnId: 't1', index: 0, answer: '', toolUses: [], stopReason: 'end_turn', usage: null } as never
@@ -851,6 +867,52 @@ test('ravens carry the news between forges', async ($, on) => {
   expect(shelf.get('news:sess-1')).toMatchObject({ kind: 'waiting', project: 'vehigraph' })
   await $.prompt.submit(typed('vas-y'))
   expect(shelf.has('news:sess-1')).toBe(false)
+})
+
+/** FNV-1a, as the plugin's hashOf: the marks come from the session. */
+function fnv(text: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193)
+  return h >>> 0
+}
+
+test('without the native render, nothing goes to the app and nothing is launched', async ($, on) => {
+  const { clock } = await start($, on)
+  await clock.advance(3000)
+  expect(renderPosts.length).toBe(0)
+  expect(launched.length).toBe(0)
+  expect(blits.length).toBeGreaterThan(0)
+})
+
+test('with the native render, the app is launched and told of the band, and the terminal keeps it still and marked', { options: { rendu: 'oui' } }, async ($, on) => {
+  const { ui, clock } = await start($, on)
+  expect(launched.some(argv => argv.some(a => a.endsWith('rendu/rendu.ps1')) && argv.includes('-Lancer'))).toBe(true)
+  // the band in the terminal: black, the session's marks in its first and last cells
+  const raster = await ui.find({ type: 'Raster', key: 'diorama' })
+  const cols = raster?.props.columns as number, rows = raster?.props.rows as number
+  const bytes = Uint8Array.from(atob(String(raster?.props.cells)), c => c.charCodeAt(0))
+  const words = new Uint32Array(bytes.buffer)
+  expect(words.length).toBe(cols * rows * 3)
+  const mark = (n: number) => {
+    const v = (((fnv('sess-1') >>> (n * 8)) & 0xff) % 26) + 1
+    return ((((v / 9) | 0) % 3) * 0x11) << 16 | ((((v / 3) | 0) % 3) * 0x11) << 8 | (v % 3) * 0x11
+  }
+  const n = words.length
+  expect([words[0], words[1], words[2]]).toEqual([0x2580, mark(0), mark(1)])
+  expect([words[n - 3], words[n - 2], words[n - 1]]).toEqual([0x2580, mark(2), mark(3)])
+  expect(Array.from(words.slice(3, n - 3)).every((w, i) => (i % 3 === 0 ? w === 0x20 : w === 0))).toBe(true)
+  // the app not there yet (its first build): told again every two seconds, not at every tick
+  await clock.advance(3000)
+  expect(renderPosts[0]).toEqual({ url: 'http://127.0.0.1:41917/', body: `bande sess-1 ${cols} ${rows}` })
+  expect(renderPosts.length).toBeGreaterThanOrEqual(2)
+  expect(renderPosts.length).toBeLessThanOrEqual(3)
+  // it answers: told again every ten seconds only (an app started anew finds the band); the terminal is never asked to repaint
+  renderAnswers = true
+  await clock.advance(2500)
+  const told = renderPosts.length
+  await clock.advance(20_000)
+  expect(renderPosts.length - told).toBe(2)
+  expect(blits.length).toBe(0)
 })
 
 test('the visits are looked for in the store read whole, once a look', { timeoutMs: 120_000 }, async ($, on) => {

@@ -228,6 +228,43 @@ function encode(words: Uint32Array): string {
   return out
 }
 
+// The native render (the `rendu` option, a trial, Windows): an app of its own (rendu/, in Rust)
+// draws the band in real pixels, on a window laid over it; the terminal keeps a still black band
+// with two marks at its corners, by which the app finds it on the screen. The app hears of the
+// band over HTTP on the loopback (the engine refuses a named pipe to `$.fs`).
+const RENDER_PORT = 41917 // rendu/src/ecoute.rs: PORT
+const RENDER_RETRY_TICKS = Math.round(2000 / TICK_MS) // an app slow to come (its first build) is told again this often
+const RENDER_REFRESH_TICKS = Math.round(10_000 / TICK_MS) // and an app that answers, this often: one started anew finds the band
+const render = { told: '', at: 0, busy: false, failedAt: -RENDER_RETRY_TICKS }
+
+/** Mark n of this session: a dark colour, each channel 0x00, 0x11 or 0x22, never black (rendu/src/reperes.rs). */
+function markOf(n: number): number {
+  const v = (((hashOf(anim.sessionId) >>> (n * 8)) & 0xff) % 26) + 1
+  return ((((v / 9) | 0) % 3) * 0x11) << 16 | ((((v / 3) | 0) % 3) * 0x11) << 8 | (v % 3) * 0x11
+}
+
+/** The band as the terminal keeps it under the app: black, its first and last cells marked, upper and lower half. */
+function stillBand(columns: number, rows: number): Uint32Array {
+  const words = new Uint32Array(columns * rows * 3)
+  for (let i = 0; i < words.length; i += 3) words[i] = 0x20
+  const n = words.length
+  words[0] = 0x2580; words[1] = markOf(0); words[2] = markOf(1)
+  words[n - 3] = 0x2580; words[n - 2] = markOf(2); words[n - 1] = markOf(3)
+  return words
+}
+
+/** Tells the app of the band (« session columns rows ») once it has changed, now and then since, and more often while it does not answer. */
+function tellRender($: EngineInterface, band: string) {
+  if (band === render.told && anim.clock - render.at < RENDER_REFRESH_TICKS) return
+  if (render.busy || anim.clock - render.failedAt < RENDER_RETRY_TICKS) return
+  render.busy = true
+  void $.http.fetch(`http://127.0.0.1:${RENDER_PORT}/`, { method: 'POST', body: `bande ${band}` })
+    .then(r => {
+      if (r.ok) { render.told = band; render.at = anim.clock } else render.failedAt = anim.clock
+    }, () => { render.failedAt = anim.clock; render.told = '' })
+    .finally(() => { render.busy = false })
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 const tone = (p: number) => (p >= 85 ? '#ef6b6b' : p >= 60 ? '#f2c14e' : '#6fcf7f')
 const DAYS = ['dim', 'lun', 'mar', 'mer', 'jeu', 'ven', 'sam']
@@ -1424,6 +1461,7 @@ export const register: Register = (on, options) => {
   const voice = String(options.repliques ?? 'local')
   const statusMode = String(options.statut ?? 'haiku')
   const lit = String(options.lumiere ?? 'oui') !== 'non'
+  const rendered = String(options.rendu ?? 'non') === 'oui'
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1470,6 +1508,15 @@ export const register: Register = (on, options) => {
     anim.masterpiece = (await $.store.get(`master:${anim.sessionId}`)) !== undefined
     await heartbeat($)
     await flushWeek($)
+    if (rendered) {
+      // the app, built anew if its source changed, and started if it does not run: it outlives the session
+      const argv = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${$.plugin.root}/rendu/rendu.ps1`, '-Lancer']
+      void (async () => {
+        for await (const _ of $.process.spawn({ argv })) {
+          // it writes nothing worth reading: the log is the app's
+        }
+      })().catch(() => undefined)
+    }
     const hour = new Date(anim.nowMs).getHours()
     if (voice !== 'aucune') await say($, pick(hour >= 5 && hour < 12 ? 'morning' : hour >= 18 ? 'evening' : 'afternoon'), true)
     await setAct($, 'waving', '', 3000)
@@ -1531,6 +1578,11 @@ export const register: Register = (on, options) => {
           void chooseDream($).catch(() => undefined)
         }
         if (!anim.bandId || !anim.crop) return
+        if (rendered) {
+          // the app draws the band; the terminal keeps its still one
+          tellRender($, `${anim.sessionId} ${cropWidth(anim.crop) + anim.extra} ${theme.rows}`)
+          return
+        }
         const cells = encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit, anim.extra))
         // nothing moved: the terminal keeps what it shows, and is spared a repaint (sent again
         // now and then all the same, should the band have been drawn anew behind our back)
@@ -1923,7 +1975,7 @@ export const register: Register = (on, options) => {
     anim.crop = crop
     anim.extra = extra
     const { Raster } = $.ui.resolve(e)
-    const cells = encode(theme.frame(crop, anim.current, poseTick(), worldNow(), lit, extra))
+    const cells = encode(rendered ? stillBand(cropWidth(crop) + extra, ROWS) : theme.frame(crop, anim.current, poseTick(), worldNow(), lit, extra))
     anim.shown = cells
     anim.shownAt = anim.clock
     return (
