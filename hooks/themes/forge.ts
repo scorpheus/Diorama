@@ -1484,6 +1484,24 @@ const drift = (t: number, every: number, seed: number) => {
 type Lamp = { x: number; y: number; reach: number; up: number; down: number; rgb: readonly number[]; power: number }
 
 /**
+ * How a lamp's light falls off over the room, before its power: worked out once a
+ * lamp, since none moves; only how bright it burns changes from frame to frame.
+ */
+const falloffs = new Map<string, Float64Array>()
+function falloffOf(l: Lamp): Float64Array {
+  const key = `${l.x},${l.y},${l.reach},${l.up},${l.down}`
+  let map = falloffs.get(key)
+  if (map === undefined) {
+    map = new Float64Array(YARD * SH)
+    for (let y = 0; y < SH; y++) {
+      for (let x = 0; x < YARD; x++) map[y * YARD + x] = Math.max(0, 1 - Math.hypot(x - l.x, (y - l.y) * (y < l.y ? l.up : l.down)) / l.reach) ** 2
+    }
+    falloffs.set(key, map)
+  }
+  return map
+}
+
+/**
  * The forge's light. The room is dim by day, blue by night; the hearth lights
  * forward and down (its hood stops what would rise), the lantern its corner, a
  * blow its flash, the window the floor under it in the hour's colour. Where
@@ -1494,7 +1512,7 @@ function lightOf(p: Pose, w: World, tick: number, actor: Grid, working: boolean,
   const night = w.hour < 6 || w.hour >= 21
   const dusk = !night && (w.hour < 8 || w.hour >= 18)
   const closed = w.hour >= 23 || w.hour < 6
-  const ambient = night ? [0.36, 0.4, 0.56] : dusk ? [0.74, 0.68, 0.7] : [0.8, 0.79, 0.77]
+  const [ar, ag, ab] = night ? [0.36, 0.4, 0.56] : dusk ? [0.74, 0.68, 0.7] : [0.8, 0.79, 0.77]
   const fire = w.exhausted ? 0 : p.fire
   const lamps: Lamp[] = [
     { x: MOUTH.x + MOUTH.w / 2, y: MOUTH.y + MOUTH.h / 2, reach: 34, up: 2.2, down: 1, rgb: [1, 0.55, 0.25], power: 0.22 * fire * (0.85 + 0.15 * drift(tick, 3, 3)) },
@@ -1504,12 +1522,16 @@ function lightOf(p: Pose, w: World, tick: number, actor: Grid, working: boolean,
   const sky = w.weather === 'storm' ? [0.55, 0.6, 0.7] : night ? [0.45, 0.55, 0.95] : dusk ? [1, 0.7, 0.45] : [1, 0.97, 0.88]
   const daylight = closed ? 0 : w.weather === 'storm' ? 0.25 : night ? 0.3 : dusk ? 0.45 : 0.55
   if (daylight > 0) lamps.push({ x: WINDOW.x + WINDOW.w / 2, y: WINDOW.y + WINDOW.h - 1, reach: 26, up: 3, down: 0.6, rgb: sky, power: daylight })
+  // what all the lamps lay on a pixel of the room, into k
+  const maps = lamps.map(falloffOf), k = [0, 0, 0]
   const gather = (x: number, y: number) => {
-    const k = [0, 0, 0]
-    for (const l of lamps) {
-      const f = Math.max(0, 1 - Math.hypot(x - l.x, (y - l.y) * (y < l.y ? l.up : l.down)) / l.reach) ** 2 * l.power
-      for (let j = 0; j < 3; j++) k[j] = (k[j] ?? 0) + f * (l.rgb[j] ?? 1)
+    const i = y * YARD + x
+    let r = 0, g = 0, b = 0
+    for (let n = 0; n < lamps.length; n++) {
+      const l = lamps[n] as Lamp, f = (maps[n]?.[i] ?? 0) * l.power
+      r += f * (l.rgb[0] ?? 1); g += f * (l.rgb[1] ?? 1); b += f * (l.rgb[2] ?? 1)
     }
+    k[0] = r; k[1] = g; k[2] = b
     return k
   }
   const shade = modelOf(actor, w, p)
@@ -1519,7 +1541,7 @@ function lightOf(p: Pose, w: World, tick: number, actor: Grid, working: boolean,
   return (x, y, letter, c) => {
     if (x >= YARD) {
       // out of doors: the sky behind, the hour's light on whoever stands there, the forge's at the door
-      if (c === undefined) { const b = yard.back(x, y); return b && pack(b) }
+      if (c === undefined) return yard.back(x, y)
       return GLOWS_OUT.has(letter) ? c : pack(yard.light([c >> 16, (c >> 8) & 255, c & 255], x, y))
     }
     if (c === undefined) {
@@ -1528,12 +1550,11 @@ function lightOf(p: Pose, w: World, tick: number, actor: Grid, working: boolean,
       return Math.max(r, g, b) < 12 ? undefined : (r << 16) | (g << 8) | b
     }
     if (GLOWS.has(letter) || (x >= WINDOW.x && x < WINDOW.x + WINDOW.w && y < WINDOW.y + WINDOW.h)) return c
-    const k = gather(x, y)
+    const [kr = 0, kg = 0, kb = 0] = gather(x, y)
     // his own pixels: warm toward the fire, cool away from it
     const s = actor[y]?.[x] === letter ? shade(x, y) - 1 : 0
-    const m = s > 0 ? [1 + s * 1.25, 1 + s, 1 + s * 0.55] : [1 + s * 1.2, 1 + s, 1 + s * 0.3]
-    const lit = (v: number, j: number) => byte(v * ((ambient[j] ?? 1) + (k[j] ?? 0)) * (m[j] ?? 1))
-    return (lit(c >> 16, 0) << 16) | (lit((c >> 8) & 255, 1) << 8) | lit(c & 255, 2)
+    const mr = s > 0 ? 1 + s * 1.25 : 1 + s * 1.2, mg = 1 + s, mb = s > 0 ? 1 + s * 0.55 : 1 + s * 0.3
+    return (byte((c >> 16) * (ar + kr) * mr) << 16) | (byte(((c >> 8) & 255) * (ag + kg) * mg) << 8) | byte((c & 255) * (ab + kb) * mb)
   }
 }
 

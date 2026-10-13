@@ -101,18 +101,20 @@ export function toCells(g: Grid, palette: Readonly<Record<string, number>>, x0: 
     const c = palette[letter]
     return light ? light(x, y, letter, c) : c
   }
-  for (let r = 0; r < rows; r++) {
-    for (let x = 0; x < w; x++) {
-      const top = colour(x0 + x, 2 * r, g[2 * r]?.[x0 + x] ?? '.')
-      const bot = colour(x0 + x, 2 * r + 1, g[2 * r + 1]?.[x0 + x] ?? '.')
-      const i = (r * w + x) * 3
-      if (top === undefined && bot === undefined) words.set([0x20, DEFAULT, DEFAULT], i)
-      else if (top === undefined) words.set([LOWER, bot ?? DEFAULT, DEFAULT], i)
-      else words.set([UPPER, top, bot ?? DEFAULT], i)
-      const o = g.over?.get(cellOf(x0 + x, r))
-      if (o && o.under === underOf(g, x0 + x, r)) {
-        const ch = o.kind === 'dots' ? 0x2800 + o.bits : o.kind === 'quads' ? QUADS[o.bits] ?? 0x20 : o.bits
-        words.set([ch, colour(x0 + x, 2 * r, o.c) ?? DEFAULT, colour(x0 + x, 2 * r, o.bg) ?? DEFAULT], i)
+  const over = g.over !== undefined && g.over.size > 0 ? g.over : undefined
+  for (let r = 0, i = 0; r < rows; r++) {
+    const above = g[2 * r], below = g[2 * r + 1]
+    for (let x = x0; x < x1; x++, i += 3) {
+      const top = colour(x, 2 * r, above?.[x] ?? '.')
+      const bot = colour(x, 2 * r + 1, below?.[x] ?? '.')
+      // written word by word: no array a cell
+      if (top === undefined) { words[i] = bot === undefined ? 0x20 : LOWER; words[i + 1] = bot ?? DEFAULT; words[i + 2] = DEFAULT }
+      else { words[i] = UPPER; words[i + 1] = top; words[i + 2] = bot ?? DEFAULT }
+      const o = over?.get(cellOf(x, r))
+      if (o && o.under === underOf(g, x, r)) {
+        words[i] = o.kind === 'dots' ? 0x2800 + o.bits : o.kind === 'quads' ? QUADS[o.bits] ?? 0x20 : o.bits
+        words[i + 1] = colour(x, 2 * r, o.c) ?? DEFAULT
+        words[i + 2] = colour(x, 2 * r, o.bg) ?? DEFAULT
       }
     }
   }

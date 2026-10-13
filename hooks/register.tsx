@@ -33,6 +33,7 @@ const WORDS = 44 // columns kept for the words beside the scene: the gauges, the
 const WORDS_ROOMY = 58 // the words with gauges of a fair length: past it, a scene that grows takes the rest
 const TICK_MS = 150
 const SLEEP_TICKS = Math.round((10 * 60 * 1000) / TICK_MS) // ten idle minutes
+const RESEND_TICKS = Math.round(3000 / TICK_MS) // an unchanged picture is sent again after this long
 const TEA_TICKS = Math.round((2 * 60 * 60 * 1000) / TICK_MS) // two hours into the session
 const SHORT_DAY_TICKS = Math.round((30 * 60 * 1000) / TICK_MS) // under half an hour at work: a dagger
 const SPEECH_MS = 6000
@@ -206,9 +207,11 @@ const NEEDS_YOU: Readonly<Record<string, string>> = {
 
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
-/** Standard padded base64 of the words' little-endian bytes (RasterProps.cells). */
+/** Standard padded base64 of the words' little-endian bytes (RasterProps.cells): the runtime's own where it has one, thirty times quicker. */
 function encode(words: Uint32Array): string {
   const bytes = new Uint8Array(words.buffer, words.byteOffset, words.byteLength)
+  const native = (bytes as Uint8Array & { toBase64?: () => string }).toBase64
+  if (typeof native === 'function') return native.call(bytes)
   let out = ''
   for (let i = 0; i < bytes.length; i += 3) {
     const n = ((bytes[i] ?? 0) << 16) | ((bytes[i + 1] ?? 0) << 8) | (bytes[i + 2] ?? 0)
@@ -302,6 +305,8 @@ const anim = {
   bandId: undefined as string | undefined,
   crop: undefined as Crop | undefined, // the window the mounted Raster was drawn at
   extra: 0, // and the columns its scene grew by
+  shown: undefined as string | undefined, // the cells it shows, as last sent
+  shownAt: 0, // and when (the clock)
   tick: 0, // since the moment began
   clock: 0, // since the session began
   current: 'waving' as Activity,
@@ -1444,9 +1449,15 @@ export const register: Register = (on, options) => {
           void chooseDream($).catch(() => undefined)
         }
         if (!anim.bandId || !anim.crop) return
+        const cells = encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit, anim.extra))
+        // nothing moved: the terminal keeps what it shows, and is spared a repaint (sent again
+        // now and then all the same, should the band have been drawn anew behind our back)
+        if (cells === anim.shown && anim.clock - anim.shownAt < RESEND_TICKS) return
+        anim.shown = cells
+        anim.shownAt = anim.clock
         // a band not mounted (a survey, a narrow terminal) answers deny or rejects: nothing to do
-        $.ui.blit({ requestId: anim.bandId, key: KEY, cells: encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit, anim.extra)) })
-          .catch(() => undefined)
+        $.ui.blit({ requestId: anim.bandId, key: KEY, cells })
+          .then(r => { if (r.deny !== undefined) anim.shown = undefined }, () => { anim.shown = undefined })
       }),
       // the countdowns move by the minute; the local time is set again
       $.clock.every(30_000, () => {
@@ -1829,9 +1840,12 @@ export const register: Register = (on, options) => {
     anim.crop = crop
     anim.extra = extra
     const { Raster } = $.ui.resolve(e)
+    const cells = encode(theme.frame(crop, anim.current, poseTick(), worldNow(), lit, extra))
+    anim.shown = cells
+    anim.shownAt = anim.clock
     return (
       <Box flexDirection="row" gap={2}>
-        <Raster key={KEY} columns={cropWidth(crop) + extra} rows={ROWS} cells={encode(theme.frame(crop, anim.current, poseTick(), worldNow(), lit, extra))} />
+        <Raster key={KEY} columns={cropWidth(crop) + extra} rows={ROWS} cells={cells} />
         {panel}
       </Box>
     )
