@@ -4,3 +4,4 @@ node_modules/
 apercu*.png
 rendu/target/
 __pycache__/
+tools/pet/chatgpt/
