@@ -152,6 +152,7 @@ const offstageNow = () => theme.stage.offstage + anim.extra
 const petAt = () => theme.pet ?? { gate: 14, away: theme.width + 12, follow: 21 }
 const HANDOFF_TICKS = 13 // every two seconds, the visits and the cat are looked at
 const SWEEP_LOOKS = 15 // and every fifteenth look (thirty seconds), the keys of every session, not only the live ones
+const PURGE_BEATS = 120 // once an hour (of thirty-second beats), the store is rid of the sessions gone
 const HANDOFF_WAIT = 60 // nine seconds for the host to say he is gone, then home anyway
 const GUEST_WALK = 36 // a guest crosses the yard in five seconds at most: a wide one, he hurries (inside the handoff)
 
@@ -308,6 +309,7 @@ const anim = {
   extra: 0, // and the columns its scene grew by
   shown: undefined as string | undefined, // the cells it shows, as last sent
   visitLooks: 0, // looks for visits so far: every SWEEP_LOOKS-th reads every key
+  beats: 0, // thirty-second beats so far: every PURGE_BEATS-th rids the store of the sessions gone
   shownAt: 0, // and when (the clock)
   tick: 0, // since the moment began
   clock: 0, // since the session began
@@ -976,6 +978,37 @@ async function pollVisits($: EngineInterface, voice: string) {
   }
 }
 
+/**
+ * Rids the store of the sessions gone: their keys (week, ravens, visit, title, masterpiece)
+ * once they are out of the presence (unseen for a day) and nothing of theirs is recent: no
+ * day left to show in their week (none in the last eight), no raven nor visit of the last
+ * day (a session just opened may write one before it is in the presence). Else every
+ * session ever opened would stay in the file.
+ */
+async function purgeStore($: EngineInterface) {
+  const raw = await $.store.get(PRESENCE_KEY)
+  const alive = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
+  const gone = new Map<string, string[]>()
+  for (const key of await $.store.keys()) {
+    const m = /^(week|news|visit|title|master):(.+)$/.exec(key)
+    const id = m?.[2]
+    if (id === undefined || id === anim.sessionId || id in alive) continue
+    gone.set(id, [...(gone.get(id) ?? []), key])
+  }
+  const day = 24 * 60 * 60 * 1000, shown = dateKey(anim.nowMs - 8 * day)
+  const recent = async (key: string) => {
+    const v = await $.store.get(key)
+    if (key.startsWith('week:')) return Array.isArray(v) && v.filter(isDay).some(d => d.date > shown) // its rack still has days to show
+    const at = key.startsWith(NEWS_PREFIX) ? (v as News | undefined)?.at : key.startsWith(VISIT_PREFIX) ? (v as Visit | undefined)?.until : undefined
+    return typeof at === 'number' && at > anim.nowMs - day
+  }
+  for (const keys of gone.values()) {
+    let kept = false
+    for (const key of keys) if (!kept && /^(week|news|visit):/.test(key)) kept = await recent(key)
+    if (!kept) for (const key of keys) await $.store.delete(key)
+  }
+}
+
 /** Sends the other forges news by raven, under this session's own key. */
 async function sendNews($: EngineInterface, kind: News['kind']) {
   // the conversation's title, else the task Haiku named: the project alone tells four conversations apart from none
@@ -1467,6 +1500,7 @@ export const register: Register = (on, options) => {
       }),
       // the countdowns move by the minute; the local time is set again
       $.clock.every(30_000, () => {
+        if (anim.beats++ % PURGE_BEATS === 0) void purgeStore($).catch(() => undefined)
         void syncClock($).catch(() => undefined)
         void flushWeek($).catch(() => undefined)
         void heartbeat($).catch(() => undefined)

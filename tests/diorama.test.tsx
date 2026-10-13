@@ -846,6 +846,27 @@ test('the visits are looked for under the live sessions\' keys, and under every 
   expect(await ui.find({ text: /corbeau : la forge Neuf/ })).toBeDefined()
 })
 
+test('the store forgets the sessions long gone, and keeps what may still be shown', { timeoutMs: 60_000 }, async ($, on) => {
+  const day = 86_400_000
+  const keys = (id: string, last: number) => ({
+    [`week:${id}`]: [{ date: dayOf(last), tests: 1, builds: 0, edits: 0, shells: 0, ticks: 5 }],
+    [`news:${id}`]: { kind: 'done', project: 'P', at: last },
+    [`title:${id}`]: 'un titre',
+    [`master:${id}`]: { date: dayOf(last) },
+  })
+  const { clock } = await start($, on, answerTools, {
+    ...keys('gone-old', START - 20 * day), // gone, its week empty of the last seven days: forgotten
+    'visit:gone-old': { host: 'x', until: START - 20 * day, project: 'P', cape: 'nuit', accessory: 'aucun', phase: 'gone' },
+    ...keys('gone-recent', START - 3 * day), // gone, but its week still shows: kept, should it come back
+    ...keys('alive', START - 20 * day), // among the presence: kept
+    presence: { alive: { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START } },
+  })
+  await clock.advance(35_000)
+  expect([...shelf.keys()].filter(k => k.endsWith(':gone-old'))).toEqual([])
+  expect(shelf.has('week:gone-recent') && shelf.has('title:gone-recent') && shelf.has('master:gone-recent')).toBe(true)
+  expect(shelf.has('week:alive') && shelf.has('news:alive') && shelf.has('title:alive')).toBe(true)
+})
+
 test("a raven names the conversation, not only its project", async ($, on) => {
   const { ui, clock } = await start($, on, answerTools, {
     'news:sess-pit': { kind: 'waiting', project: 'Dev', title: 'Gestion carburant pit AI', at: START + 2000 },
