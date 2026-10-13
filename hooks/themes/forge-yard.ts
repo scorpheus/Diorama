@@ -1,6 +1,7 @@
 // The yard out of doors, behind whoever stands in it: the sky of the hour, clouds
-// going by, two mountain ranges paling with distance, a line of firs; and as the
-// window widens, a tree that keeps the seasons, a well, a mill wheel. Painted in
+// going by, two mountain ranges paling with distance and falls down their flanks,
+// a line of firs; and as the window widens, a tree that keeps the seasons, a well,
+// a mill wheel. Painted in
 // true colours rather than letters: what is far fades into the sky, a ridge or a
 // rim is smoothed where it crosses a pixel, a cloud is soft. The door frame (oak
 // posts, the eave, the sill) parts it from the room. What falls (rain, snow,
@@ -33,6 +34,12 @@ const HEIGHT = 32
 const GROUND = 28 // the yard's floor, from this row down
 const HORIZON = 25
 
+/** The two ranges' ridges at column x: the far one, then the near one. */
+const farRidge = (x: number) => 8 + roll(x / 9, 1) * 6 + roll(x / 4, 2) * 2
+const nearRidge = (x: number) => 15 + roll(x / 6, 3) * 5
+/** Where the firs at the foot of the near range begin, at column x: a fir every five columns. */
+const firTop = (x: number) => { const fir = Math.round(x / 5) * 5; return 27 - (5 + Math.floor(rand(fir) * 4)) + Math.abs(x - fir) * 2 }
+
 /** The hour and the weather out of doors: the sky's two ends, the light things take, the forge's glow at the door. */
 type Sky = { top: RGB; low: RGB; amb: RGB; spill: number; night: boolean; dusk: boolean; storm: boolean; flash: boolean }
 
@@ -60,7 +67,32 @@ export function layout(from: number, to: number) {
   // a narrow yard has only the edge of a crown peeking in, high on the right
   const tree = room < 30 ? { x: to + 1, r: 7 } : { x: wheel !== undefined ? to - 30 : to - 9, r: 8.5 }
   const well = room >= 44 ? tree.x - 21 : undefined
-  return { wheel, tree, well }
+  // the falls. Far ones spring from the far range's cols (low points of its ridge), or else
+  // from a flank, never a peak, where it stands well over the near one: one to a narrow yard,
+  // more as it widens. The near one comes down the near range where it shows most face over
+  // the firs, between two of them. All clear of the trunk and the wheel.
+  const hidden = (x: number) => Math.abs(x - tree.x) <= 3 || (wheel !== undefined && x >= wheel - 10)
+  const around = (ridge: (x: number) => number, x: number, test: (r: number, k: number) => boolean) =>
+    [1, 2, 3].every(k => test(ridge(x), ridge(x - k)) && test(ridge(x), ridge(x + k)))
+  const pick = (score: (x: number) => number | undefined, n: number, apart: number) => {
+    const spots: Array<{ x: number; v: number }> = []
+    for (let x = from + 7; x < to - 3; x++) { const v = hidden(x) ? undefined : score(x); if (v !== undefined) spots.push({ x, v }) }
+    spots.sort((a, b) => b.v - a.v)
+    const chosen: number[] = []
+    for (const { x } of spots) if (chosen.length < n && chosen.every(c => Math.abs(c - x) >= apart)) chosen.push(x)
+    return chosen
+  }
+  const flank = (ridge: (x: number) => number, x: number) => !around(ridge, x, (r, k) => r <= k + 0.6)
+  const far = pick(x => {
+    const gap = nearRidge(x) - farRidge(x)
+    return gap < 3.5 || !flank(farRidge, x) ? undefined : gap + (around(farRidge, x, (r, k) => r >= k) ? 4 : 0)
+  }, Math.max(1, Math.round(room / 26)), 10)
+  const near = pick(x => {
+    const face = firTop(x) - nearRidge(x)
+    return face < 3 || !flank(nearRidge, x) || far.some(f => Math.abs(f - x) < 4 && f !== x) ? undefined : face
+  }, 1, 0)
+  const falls = [...far.map(x => ({ x, near: false })), ...near.map(x => ({ x, near: true }))]
+  return { wheel, tree, well, falls }
 }
 
 /**
@@ -71,8 +103,48 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
   const sky = skyOf(w)
   const se = season(w), winter = se === 'winter'
   const t = w.clock
-  const { wheel, tree, well } = layout(from, to)
+  const { wheel, tree, well, falls } = layout(from, to)
   const lit = (c: RGB, far = 0): RGB => mix(mul(c, sky.amb), sky.low, far)
+
+  /**
+   * Water falling past (x, y), seen through by `alpha`: streaks of foam going down
+   * `speed` pixels a tick; ice that stays put in winter. `far` pales it into the sky.
+   */
+  const falling = (c: RGB, x: number, y: number, speed: number, alpha: number, far = 0, white = false, drips = false): RGB => {
+    if (winter) return mix(c, lit(rand(x * 3 + Math.floor(y / 2) * 7) > 0.5 ? hex(0xe4f2fa) : hex(0xbfe0f0), far), alpha)
+    const k = rand(x * 3 + Math.floor((y - t * speed) / 2) * 7)
+    if (drips && k < 0.45) return c // threads that break into drops
+    return mix(c, lit(k > (white ? 0.35 : 0.65) ? hex(0xf2fbff) : white ? hex(0xb4e2f6) : hex(0x4fb0f0), far), alpha)
+  }
+
+  /**
+   * The falls: streams springing from the far range's cols, paled by the distance,
+   * that go on behind the near ridge; and one down the near range, wider, from below
+   * its ridge to the firs. None falls quite straight: it steps aside at its ledges,
+   * a cleft of shadow at its left.
+   */
+  const jog = (y: number, seed: number) => Math.round((roll(y / 3, seed) - 0.5) * 3.2)
+  const fallsAt = (x: number, y: number, c: RGB, near: boolean): RGB => {
+    for (const f of falls) {
+      if (near !== f.near) continue
+      const top = near ? nearRidge(f.x) + 1.5 : farRidge(f.x) + 1.5
+      if (y < top - 1 || y > 26) continue
+      const at = f.x + jog(y, f.x * 7 + (near ? 3 : 0)), far = near ? 0.12 : 0.3
+      if (y < top) { if (x === at) c = mul(c, [0.75, 0.75, 0.8]) } // the cleft it springs from
+      else if (x === at - 1) c = mul(c, [0.82, 0.82, 0.86])
+      else if (x === at) c = falling(c, x, y + f.x, near ? 1.2 : 0.7, 1, far, true)
+      else if (x === at + 1) c = falling(c, x, y + f.x + 3, near ? 1.2 : 0.7, near ? 0.9 : 0.55, far, true)
+      else if (near && x === at + 2) c = falling(c, x, y + f.x + 5, 1.2, 0.4, far, true)
+    }
+    return c
+  }
+  /** And the spray where the near one lands, among the firs' tips. */
+  const mist = (x: number, y: number, c: RGB): RGB => {
+    const f = falls.find(f => f.near)
+    if (f === undefined || winter) return c
+    const base = firTop(f.x), d = Math.hypot((x - f.x - jog(base, f.x * 7 + 3) - 0.5) / 2.6, (y - base) / 1.3)
+    return d < 1 ? mix(c, lit(hex(0xf4f9fc), 0.2), (1 - d) * 0.6 * (0.7 + 0.3 * Math.sin(t / 3 + x))) : c
+  }
 
   // the forge's glow through the door, evening and night: a warm pool on the floor
   const spill = (x: number, y: number, c: RGB): RGB => {
@@ -100,16 +172,17 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
 
   /** Two ranges and the firs: each ridge smoothed where it crosses a pixel. */
   const hills = (x: number, y: number, c: RGB): RGB => {
-    const far = 8 + roll(x / 9, 1) * 6 + roll(x / 4, 2) * 2
+    const far = farRidge(x)
     if (y + 1 > far) {
       const snow = y < far + (winter ? 4 : 1.5) || y < 11 // the high peaks keep their snow
       c = mix(c, lit(snow ? hex(0xe8eef4) : hex(0x5d6e86), 0.6), clamp01(y + 1 - far))
     }
-    const near = 15 + roll(x / 6, 3) * 5
+    c = fallsAt(x, y, c, false)
+    const near = nearRidge(x)
     if (y + 1 > near) c = mix(c, lit(winter && y < near + 1 ? hex(0xc8d4e0) : hex(0x3e5560), 0.38), clamp01(y + 1 - near))
-    const fir = Math.round(x / 5) * 5, top = 27 - (5 + Math.floor(rand(fir) * 4)) + Math.abs(x - fir) * 2
-    if (y >= top || y >= 26) c = lit(winter && (x + y) % 3 === 0 ? hex(0xdfe8f0) : hex(0x23402c), 0.05)
-    return c
+    c = fallsAt(x, y, c, true)
+    if (y >= firTop(x) || y >= 26) c = lit(winter && (x + y) % 3 === 0 ? hex(0xdfe8f0) : hex(0x23402c), 0.05)
+    return mist(x, y, c)
   }
 
   const ground = (x: number, y: number): RGB => {
@@ -162,25 +235,85 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
     return c
   }
 
-  // the wheel: water from the race on the right falls on its paddles; it turns
-  // faster while he works (it drives the bellows), and stands frozen in winter
+  // the wheel: water from the race on the right falls into the buckets at its crown and
+  // rides them down the near side, spilling as they pass the bottom; it turns faster
+  // while he works (it drives the bellows), and stands frozen in winter
   const turn = winter ? 0.4 : t * (working ? 0.22 : 0.09)
+  const CY = 19, R = 7, STEP = (2 * Math.PI) / 10
+  /** How far down the near side an angle on the wheel is: 0 at the crown, π at the foot; out of [0, π] on the far side. */
+  const down = (th: number) => th < 0 ? -Math.PI / 2 - th : 1.5 * Math.PI - th
+  /** How full the buckets are there: filled at the crown, full down the side, emptied past the bottom. */
+  const fill = (q: number) => smooth(0.05, 0.45, q) * (1 - smooth(1.5, 2.3, q))
+  // the buckets spilling now: where each one's lip is, and how much it pours
+  const spills = wheel === undefined || winter ? [] : Array.from({ length: 10 }, (_, k) => {
+    const th = Math.atan2(Math.sin(k * STEP - turn), Math.cos(k * STEP - turn))
+    const q = down(th), f = smooth(1.3, 1.6, q) * (1 - smooth(2.1, 2.4, q))
+    return { x: Math.round(wheel + (R + 1.6) * Math.cos(th)), y: CY + (R + 1.6) * Math.sin(th), f }
+  }).filter(s => s.f > 0.05)
   const millAt = (x: number, y: number, c: RGB): RGB => {
-    if (wheel === undefined || x < wheel - 10) return c
-    const cx = wheel, cy = 19, R = 7
+    if (wheel === undefined || x < wheel - 19) return c
+    const cx = wheel
     // the race on its trestle, from beyond the edge to over the wheel
     if (x === to - 2 && y > 11 && y < GROUND) c = lit(hex(0x5a3a1e))
     if (y === 11 && x >= cx - 1) return lit(hex(0x7a4a24))
-    const water = (x: number, y: number) => winter ? lit(hex(0xbfe0f0)) : rand(x * 3 + Math.floor(y - t * 0.8) * 7) > 0.7 ? lit(hex(0xdff6ff)) : lit(hex(0x7fd4ff))
     if (y === 10 && x >= cx) return winter ? lit(hex(0xbfe0f0)) : rand(Math.floor(x + t * 0.6) * 5) > 0.75 ? lit(hex(0xdff6ff)) : lit(hex(0x7fd4ff))
-    if (!winter && x === cx - 1 && y === 12) return water(x, y)
     if (winter && y === 12 && x >= cx && x % 2 === 0) return lit(hex(0xcfe8f6)) // icicles
-    // the pond at its foot
-    if (y >= GROUND - 1 && y <= GROUND && x >= cx - 9) return winter ? lit(hex(0xd8ecf6)) : rand(Math.floor(x + t * 0.3) * 11 + y) > 0.85 ? lit(hex(0xdff6ff)) : mul(lit(hex(0x5fb4e0)), [0.9, 0.95, 1])
-    const d = Math.hypot(x - cx, y - cy)
+    const under = spills.find(s => Math.abs(s.x - x) <= 1)
+    const b = shore(x, y, c)
+    if (b) return b
+    // the pond at its foot, white where the spill lands
+    if (wet(x, y)) {
+      if (winter) return lit(hex(0xd8ecf6))
+      if (y === GROUND - 1 && under && rand(x * 7 + t * 13) < 0.3 + under.f * 0.6) return lit(hex(0xf2fbff))
+      if (y > GROUND) {
+        // the brook running out of it toward us, a little faster at its middle
+        const u = Math.floor((y - x) / 2 - t * 0.45)
+        return rand(u * 7 + ((x + y) % 3)) > 0.82 ? lit(hex(0xdff6ff)) : mul(lit(hex(0x5fb4e0)), [0.86, 0.92, 1])
+      }
+      return rand(Math.floor(x + t * 0.3) * 11 + y) > 0.85 ? lit(hex(0xdff6ff)) : mul(lit(hex(0x5fb4e0)), [0.9, 0.95, 1])
+    }
+    // the splashes jumping off it, a pixel high
+    if (y === GROUND - 2 && under && rand(x * 5 + t * 17) > 1 - under.f * 0.4) return mix(c, lit(hex(0xeef8ff)), 0.8)
+    c = wheelAt(x, y, c)
+    if (winter) return c
+    // off the race's lip and down into the bucket going by under it
+    if ((y === 10 && x === cx - 1) || (x === cx - 2 && (y === 11 || y === 12))) return falling(c, x, y, 1.6, 0.9)
+    // what the spilling buckets let go, straight down to the pond in threads
+    for (const s of spills) if (x === s.x && y > s.y && y < GROUND - 1) return falling(c, x, y + x * 2, 1.6, 0.9 * s.f, 0, false, true)
+    return c
+  }
+  /** The pond under the wheel, and the brook it lets out down the yard toward us, widening as it comes. */
+  const wet = (x: number, y: number) => {
+    if (wheel === undefined) return false
+    const dx = x - wheel
+    return y === GROUND - 1 ? dx >= -8 : y === GROUND ? dx >= -10
+      : y === GROUND + 1 ? dx >= -13 && dx <= -8 : y === GROUND + 2 ? dx >= -15 && dx <= -10 : y === GROUND + 3 && dx >= -17 && dx <= -11
+  }
+  /** Its banks (wet grass, a pebble here and there), and its reeds that bend with the wind. */
+  const shore = (x: number, y: number, c: RGB): RGB | undefined => {
+    if (wheel === undefined) return undefined
+    const dx = x - wheel
+    // the reeds on the pond's near shore and by the brook, their heads swaying
+    for (const [rx, h] of [[-11, 4], [-13, 3], [-7, 2]] as const) {
+      const base = rx === -7 ? GROUND + 1 : GROUND
+      if (dx === rx && y <= base && y > base - h) return lit(winter ? hex(0xb8a57c) : hex(0x3e6a2a))
+      const sway = sky.storm ? Math.round(Math.sin(t / 2 + rx)) : Math.round(Math.sin(t / 6 + rx) * 0.6)
+      if (h >= 3 && dx === rx + sway && (y === base - h || y === base - h - 1)) return lit(winter && y === base - h - 1 ? hex(0xeef2f8) : hex(0x6a4022))
+    }
+    if (y < GROUND || wet(x, y)) return undefined
+    if (wet(x - 1, y) || wet(x + 1, y) || wet(x, y - 1) || wet(x, y + 1)) {
+      if (winter) return lit(hex(0xdde6f0))
+      return rand(x * 13 + y * 7) > 0.8 ? lit(hex(0x8a8494)) : mul(c, [0.72, 0.74, 0.7]) // wet grass, a pebble here and there
+    }
+    return undefined
+  }
+  const wheelAt = (x: number, y: number, c: RGB): RGB => {
+    if (wheel === undefined) return c
+    const cx = wheel
+    const d = Math.hypot(x - cx, y - CY)
     if (d > R + 2) return c
     // the water comes along the race from the right onto its top: the top goes left (anticlockwise)
-    const ang = Math.atan2(y - cy, x - cx) + turn
+    const th = Math.atan2(y - CY, x - cx), ang = th + turn
     const near = (n: number) => { const s = (2 * Math.PI) / n, a = ((ang % s) + s) % s; return Math.min(a, s - a) * d }
     // drawn with soft edges, so it turns smoothly rather than by whole pixels
     const paddle = d > R && d < R + 2 ? clamp01(1.5 - near(10) / 0.7) : 0
@@ -189,6 +322,11 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
     const spoke = d < R ? clamp01(1.4 - near(6) / 0.6) : 0
     if (d < 1.5) return lit(hex(0x4a4e5c))
     c = mix(c, lit(hex(0x3a2214)), Math.max(spoke, inner * 0.8))
+    // the water in the buckets, resting on each paddle's upper face, turning with it
+    if (!winter && d > R + 0.3) {
+      const u = ((ang % STEP) + STEP) % STEP, depth = fill(down(th)) * STEP * 0.6
+      if (u > 0.05 && u < 0.05 + depth) c = mix(c, lit(rand(Math.round(u * 20) + Math.round(d) * 3 + t) > 0.85 ? hex(0xdff6ff) : hex(0x4fb0f0)), 0.9)
+    }
     c = mix(c, lit(hex(0x2a1a10)), paddle)
     c = mix(c, lit(hex(0x8a5a2e)), rim)
     return c

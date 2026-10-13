@@ -623,7 +623,7 @@ function drawCat(g: Grid, cat: NonNullable<World['cat']>) {
 
 function drawGift(g: Grid, gift: NonNullable<World['gift']>) {
   stamp(g, SW - 6, SH - 3, GIFTS[gift.kind])
-  if (gift.age % 16 < 3) put(g, SW - 4, SH - 5, 'w') // a glint
+  if (gift.age % 16 < 3) put(g, SW - 5, SH - 3, 'w') // a glint, on the gift itself
 }
 
 function drawMessenger(g: Grid, m: NonNullable<World['messenger']>) {
