@@ -52,6 +52,9 @@ struct Bande {
     cols: i32,
     rows: i32,
     terminal: Option<HWND>,
+    /// le processus `claude attach` dont l'onglet montre la session, quand elle tourne en
+    /// arrière-plan (reperes::rattaches)
+    client: Option<u32>,
     /// où sont les repères, par rapport au coin de la fenêtre du terminal : la fenêtre peut
     /// bouger sans qu'on les cherche à nouveau
     place: Option<Place>,
@@ -131,6 +134,7 @@ impl App {
                     cols,
                     rows,
                     terminal: None,
+                    client: None,
                     place: None,
                     toile: None,
                     neuve: true,
@@ -173,6 +177,13 @@ impl App {
             if !du && b.terminal.is_some() {
                 continue;
             }
+            // l'onglet rattaché s'est fermé : sa fenêtre ne la montre plus
+            if b.client.is_some_and(|c| self.regards % SURETE == 0 && !reperes::vivant(c)) {
+                b.cacher();
+                b.client = None;
+                b.terminal = None;
+                continue;
+            }
             let terminal = match b.terminal {
                 Some(t) if unsafe { IsWindowVisible(t).as_bool() } => t,
                 _ => {
@@ -181,7 +192,23 @@ impl App {
                     if self.regards % 4 != 1 {
                         continue; // s'attacher à une console coûte : une fois par seconde
                     }
-                    match reperes::fenetre_de(b.pid) {
+                    let visible = |t: &HWND| unsafe { IsWindowVisible(*t).as_bool() };
+                    // sa fenêtre ; sinon (lancée en arrière-plan), celle d'un onglet qui s'y
+                    // rattache : chercher ces onglets passe tous les processus en revue, une
+                    // fois toutes les 4 s
+                    b.client = None;
+                    let trouvee = reperes::fenetre_de(b.pid).filter(visible).or_else(|| {
+                        if self.regards % 16 != 1 {
+                            return None;
+                        }
+                        reperes::rattaches(&b.session, b.pid).into_iter().find_map(|c| {
+                            let t = reperes::fenetre_de(c).filter(visible)?;
+                            note(&format!("{} : montrée dans l'onglet de « claude attach » (processus {c})", b.session));
+                            b.client = Some(c);
+                            Some(t)
+                        })
+                    });
+                    match trouvee {
                         Some(t) => {
                             self.veille.suivre(t);
                             b.terminal = Some(t);

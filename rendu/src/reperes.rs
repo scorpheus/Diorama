@@ -207,6 +207,58 @@ pub fn fenetre_de(pid: u32) -> Option<HWND> {
     }
 }
 
+/// La ligne de commande d'un processus.
+pub fn ligne_de_commande(pid: u32) -> Option<String> {
+    use windows::Wdk::System::Threading::{NtQueryInformationProcess, ProcessCommandLineInformation};
+    use windows::Win32::Foundation::UNICODE_STRING;
+    unsafe {
+        let p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        // un UNICODE_STRING suivi de son texte
+        let mut tampon = vec![0u64; 4096];
+        let mut n = 0u32;
+        let ok = NtQueryInformationProcess(p, ProcessCommandLineInformation, tampon.as_mut_ptr().cast(), (tampon.len() * 8) as u32, &mut n).is_ok();
+        let _ = CloseHandle(p);
+        if !ok {
+            return None;
+        }
+        let u = &*(tampon.as_ptr() as *const UNICODE_STRING);
+        (!u.Buffer.is_null()).then(|| String::from_utf16_lossy(std::slice::from_raw_parts(u.Buffer.0, u.Length as usize / 2)))
+    }
+}
+
+/// Les processus `claude attach <cible>` qui montrent la session `session` (processus `pid`) :
+/// une session lancée en arrière-plan (`claude --bg`) n'a pas de fenêtre à elle, elle se montre
+/// dans les onglets qui s'y rattachent. La cible est son identifiant, ses huit premiers
+/// caractères, ou son nom (`--name`).
+pub fn rattaches(session: &str, pid: u32) -> Vec<u32> {
+    use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS};
+    let la_sienne = ligne_de_commande(pid).unwrap_or_default();
+    let mots: Vec<&str> = la_sienne.split_whitespace().collect();
+    let nom = mots.iter().position(|&m| m == "--name").and_then(|i| mots.get(i + 1)).map(|n| n.trim_matches('"').to_string());
+    let court = session.get(..8).unwrap_or(session);
+    let mut out = Vec::new();
+    unsafe {
+        let Ok(photo) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else { return out };
+        let mut e = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+        let mut encore = Process32FirstW(photo, &mut e).is_ok();
+        while encore {
+            let exe = String::from_utf16_lossy(&e.szExeFile[..e.szExeFile.iter().position(|&c| c == 0).unwrap_or(0)]);
+            if exe.eq_ignore_ascii_case("claude.exe") && e.th32ProcessID != pid {
+                if let Some(ligne) = ligne_de_commande(e.th32ProcessID) {
+                    let mots: Vec<&str> = ligne.split_whitespace().collect();
+                    let cible = mots.iter().position(|&m| m == "attach").and_then(|i| mots.get(i + 1)).map(|c| c.trim_matches('"'));
+                    if cible.is_some_and(|c| c == session || c == court || nom.as_deref() == Some(c)) {
+                        out.push(e.th32ProcessID);
+                    }
+                }
+            }
+            encore = Process32NextW(photo, &mut e).is_ok();
+        }
+        let _ = CloseHandle(photo);
+    }
+    out
+}
+
 /// Le rectangle d'une fenêtre à l'écran.
 pub fn rectangle(f: HWND) -> Option<RECT> {
     let mut r = RECT::default();
@@ -223,6 +275,43 @@ mod tests {
         // FNV-1a 32 bits de référence
         assert_eq!(hash(""), 0x811c9dc5);
         assert_eq!(hash("a"), 0xe40c292c);
+    }
+
+    /// Le double d'un onglet rattaché : ce binaire de test, copié sous le nom claude.exe et lancé
+    /// avec « attach <cible> » ; les mots de sa ligne sont pour lui des filtres, « dort » le tient
+    /// en vie le temps de le chercher.
+    #[test]
+    fn un_onglet_rattache_se_retrouve_par_sa_cible() {
+        let dossier = std::env::temp_dir().join(format!("diorama-rattache-{}", std::process::id()));
+        std::fs::create_dir_all(&dossier).unwrap();
+        let claude = dossier.join("claude.exe");
+        std::fs::copy(std::env::current_exe().unwrap(), &claude).unwrap();
+        let session = "0123abcd-0000-4000-8000-000000000000";
+        let mut cherches = Vec::new();
+        for cible in ["0123abcd", session] {
+            let mut p = std::process::Command::new(&claude).args(["attach", cible, "dort", "--ignored", "--quiet"]).spawn().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            cherches.push(rattaches(session, std::process::id()).contains(&p.id()));
+            let _ = p.kill();
+            let _ = p.wait();
+        }
+        // une autre session ne le voit pas
+        let mut p = std::process::Command::new(&claude).args(["attach", "ffffffff", "dort", "--ignored", "--quiet"]).spawn().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let autre = rattaches(session, std::process::id()).contains(&p.id());
+        let _ = p.kill();
+        let _ = p.wait();
+        let _ = std::fs::remove_file(&claude);
+        let _ = std::fs::remove_dir(&dossier);
+        assert_eq!(cherches, [true, true], "par l'identifiant court, puis entier");
+        assert!(!autre);
+        assert!(ligne_de_commande(std::process::id()).is_some_and(|l| l.contains("rendu")));
+    }
+
+    #[test]
+    #[ignore]
+    fn dort() {
+        std::thread::sleep(std::time::Duration::from_secs(5));
     }
 
     #[test]
