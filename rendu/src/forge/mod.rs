@@ -237,6 +237,15 @@ mod tests {
     }
 
     #[test]
+    fn la_route_du_rhum_se_lit_du_monde_et_se_garde_entre_deux_messages() {
+        let ligne = LIGNE.replace(r#""clock":1012}"#, r#""clock":1012,"rhum":"race"}"#);
+        let etat = Etat::lire(&ligne).expect("la ligne du plugin se lit");
+        assert_eq!(etat.monde.rhum, Some(monde::PhaseRhum::Course));
+        assert_eq!(etat.monde.plus_tard(10).rhum, Some(monde::PhaseRhum::Course));
+        assert_eq!(Etat::lire(LIGNE).expect("sans elle aussi").monde.rhum, None);
+    }
+
+    #[test]
     fn une_ligne_abimee_ne_casse_rien() {
         assert!(Etat::lire("full 0 1 idle").is_err());
         assert!(Etat::lire("large 0 1 idle 3 {}").is_err());

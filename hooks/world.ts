@@ -102,6 +102,8 @@ export type World = {
   masterpiece: boolean
   /** A rare sight in the sky: a shooting star by night, a dragon by day. */
   rare?: { kind: 'star' | 'dragon'; age: number }
+  /** The session named for the Route du Rhum: the sea in the yard, the fleet before its start or racing. */
+  rhum?: 'before' | 'race'
 }
 
 export type Personality = 'calme' | 'jovial' | 'grognon' | 'reveur' | 'applique'

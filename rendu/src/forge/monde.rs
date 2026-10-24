@@ -45,6 +45,10 @@ sorte!(Nouvelle { Done = "done", Waiting = "waiting" });
 sorte!(Rarete { Star = "star", Dragon = "dragon" });
 sorte!(Recadrage { Full = "full", Compact = "compact", Solo = "solo" });
 sorte!(
+    /// La Route du Rhum, dans la session qui la montre : la flotte avant le départ, ou en course.
+    PhaseRhum { Avant = "before", Course = "race" }
+);
+sorte!(
     Reve {
         Voiture = "voiture", Fusee = "fusee", Bug = "bug", Circuit = "circuit", Livre = "livre", Montagne = "montagne",
         Poisson = "poisson", Etoile = "etoile", Gateau = "gateau", Dragon = "dragon", Drapeau = "drapeau",
@@ -174,6 +178,8 @@ pub struct Monde {
     pub personality: Humeur,
     pub masterpiece: bool,
     pub rare: Option<Rare>,
+    /// La session nommée pour la Route du Rhum : la mer dans la cour.
+    pub rhum: Option<PhaseRhum>,
 }
 
 impl Default for Monde {
@@ -223,6 +229,7 @@ impl Default for Monde {
             personality: Humeur::Calme,
             masterpiece: false,
             rare: None,
+            rhum: None,
         }
     }
 }

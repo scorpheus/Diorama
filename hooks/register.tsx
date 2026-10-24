@@ -459,6 +459,10 @@ const anim = {
   turnPassed: false, // tests went green during this turn
   masterpiece: false,
   rare: undefined as { kind: 'star' | 'dragon'; since: number } | undefined,
+  rhumAsked: false, // DIORAMA_ROUTE_DU_RHUM in this session's environment: the Route du Rhum here
+  rhumNamed: false, // the Route du Rhum's file names this session
+  rhumStamp: undefined as number | undefined, // that file's last change, as last read
+  rhumPhase: undefined as World['rhum'], // the phase last shown, to cheer the start
   themeWanted: 'forge', // the `theme` option
   themeStamp: undefined as number | undefined, // the theme file's last change, when it is one
   doings: [] as string[], // the main thread's actions on the task at hand, for its status
@@ -529,6 +533,7 @@ function worldNow(): World {
     personality: anim.personality,
     masterpiece: anim.masterpiece,
     rare: anim.rare && anim.clock - anim.rare.since < theme.rareFor ? { kind: anim.rare.kind, age: anim.clock - anim.rare.since } : undefined,
+    rhum: rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined,
     ...rackNow(),
     banner: anim.banner,
     speaking: anim.speaking,
@@ -1021,11 +1026,14 @@ let storePath: string | undefined
 let storeTries = 0
 const STORE_TRIES = 10 // looks at the store's folder before falling back on `$.store` for good
 
+/** Claude Code's own folder: ~/.claude, unless CLAUDE_CONFIG_DIR says another. */
+const configDir = async ($: EngineInterface) =>
+  (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${(await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? ''}/.claude`
+
 async function storeFile($: EngineInterface): Promise<string | undefined> {
   if (storePath !== undefined || storeTries >= STORE_TRIES || !anim.sessionId) return storePath
   storeTries++
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${(await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? ''}/.claude`
-  const dir = `${config}/plugins/store`
+  const dir = `${await configDir($)}/plugins/store`
   for (const f of await $.fs.list(dir).catch(() => [])) {
     if (f.kind !== 'file' || !f.name.startsWith($.plugin.name) || !f.name.endsWith('.json')) continue
     const all = await readStore($, `${dir}/${f.name}`)
@@ -1492,6 +1500,71 @@ async function useTheme($: EngineInterface, wanted: string) {
 }
 
 /** A theme file changed on disk: drawn again at once, so its author sees it. */
+// --- the Route du Rhum: one session of the machine shows it -----------------------
+
+// The start, off Saint-Malo: Sunday 1 November 2026 at 13h02, Paris time (UTC+1 by then).
+const RHUM_START = Date.UTC(2026, 10, 1, 12, 2)
+const RHUM_FILE = 'diorama-route-du-rhum.txt' // in Claude Code's folder: which session shows it
+// or, in a session's own environment, DIORAMA_ROUTE_DU_RHUM=1: this one
+
+const rhumHere = () => anim.rhumAsked || anim.rhumNamed
+const rhumPhaseAt = (ms: number): NonNullable<World['rhum']> => (ms < RHUM_START ? 'before' : 'race')
+
+/** The race's line beside the scene: the countdown to the start, then the days at sea. */
+function rhumLine(ms: number): string {
+  const left = RHUM_START - ms
+  if (left > 0) return `⛵ Route du Rhum · départ dans ${countdown(left)} · Saint-Malo, dim. 1er nov. 13h02`
+  if (-left < 60 * 60 * 1000) return "⛵ Route du Rhum · c'est parti ! Cap sur Pointe-à-Pitre"
+  const day = Math.floor(-left / (24 * 60 * 60 * 1000)) + 1
+  return day <= 30 ? `⛵ Route du Rhum · jour ${day} de course · Saint-Malo → Pointe-à-Pitre, 3 542 milles` : '⛵ Route du Rhum 2026 · la flotte est à Pointe-à-Pitre'
+}
+
+/** Whether a word names this session: its id, the pid of its Claude Code, or its name (`~/.claude/sessions/`). */
+async function namesThis($: EngineInterface, word: string): Promise<boolean> {
+  if (word === anim.sessionId) return true
+  const dir = `${await configDir($)}/sessions`
+  for (const f of await $.fs.list(dir).catch(() => [])) {
+    if (f.kind !== 'file' || !f.name.endsWith('.json')) continue
+    try {
+      const s = JSON.parse(await $.fs.read(`${dir}/${f.name}`)) as { pid?: number; sessionId?: string; name?: string }
+      if (s.sessionId === anim.sessionId) return String(s.pid) === word || (s.name !== undefined && s.name.toLowerCase() === word.toLowerCase())
+    } catch {
+      // written over meanwhile: the next change of the file looks again
+    }
+  }
+  return false
+}
+
+/**
+ * Which session of the machine shows the Route du Rhum: the one the file names (its first
+ * line: a session id, a pid or a session's name; written by hand, by tools/route-du-rhum.mts,
+ * or by whatever orchestrates the sessions), read again whenever it changes.
+ */
+async function watchRhum($: EngineInterface) {
+  const file = `${await configDir($)}/${RHUM_FILE}`
+  const stamp = await $.fs.stat(file).then(s => s.mtimeMs, () => undefined)
+  if (stamp === anim.rhumStamp) return
+  anim.rhumStamp = stamp
+  const word = stamp === undefined ? '' : (await $.fs.read(file).catch(() => '')).replace(/^\uFEFF/, '').trim().split(/\s+/)[0] ?? ''
+  const named = word !== '' && (await namesThis($, word))
+  if (named === anim.rhumNamed) return
+  anim.rhumNamed = named
+  if (!anim.rhumAsked) await note($, named ? 'la Route du Rhum se montre ici' : 'la Route du Rhum se montre ailleurs')
+  $.ui.invalidate('ui.render')
+}
+
+/** The gun: the session that shows the race cheers its start, once. */
+async function rhumStart($: EngineInterface, voice: string) {
+  const phase = rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined
+  const was = anim.rhumPhase
+  anim.rhumPhase = phase
+  if (was !== 'before' || phase !== 'race') return
+  $.ui.toast(`${anim.name} : la Route du Rhum est partie de Saint-Malo !`)
+  await note($, 'Route du Rhum : le départ est donné')
+  if (voice !== 'aucune') await say($, 'Bon vent, les marins !', true)
+  if (anim.current === 'idle' && !anim.trip) await setAct($, 'jumping', 'le départ !', 2400)
+}
+
 async function watchTheme($: EngineInterface) {
   const file = themeFile($.plugin.root, anim.themeWanted)
   if (file === undefined) return
@@ -1551,6 +1624,14 @@ export const register: Register = (on, options) => {
       anim.name = (known?.name && names.includes(known.name) ? known.name : undefined) ?? names[hashOf(anim.sessionId + '#') % names.length] ?? anim.name
     }
     anim.startedMs = anim.nowMs
+    {
+      const asked = ((await $.env.get('DIORAMA_ROUTE_DU_RHUM')) ?? '').trim()
+      anim.rhumAsked = asked !== '' && !/^(0|non|no|false|off)$/i.test(asked)
+      anim.rhumStamp = undefined
+      anim.rhumNamed = false
+      await watchRhum($).catch(() => undefined)
+      anim.rhumPhase = rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined
+    }
     anim.masterpiece = (await $.store.get(`master:${anim.sessionId}`)) !== undefined
     await heartbeat($)
     await flushWeek($)
@@ -1589,6 +1670,7 @@ export const register: Register = (on, options) => {
           void catPoll($).catch(() => undefined)
           void pollVisits($, voice).catch(() => undefined)
           void watchTheme($).catch(() => undefined)
+          void watchRhum($).catch(() => undefined)
         }
         if ((anim.clock + anim.phase) % POLL_TICKS === 0) {
           // idle since when: three forges idle at once make a banquet
@@ -1597,6 +1679,7 @@ export const register: Register = (on, options) => {
           void maybeBanquet($).catch(() => undefined)
           void maybeTrip($, voice).catch(() => undefined)
           void routine($).catch(() => undefined)
+          void rhumStart($, voice).catch(() => undefined)
           // the cat sometimes comes down to follow him about: when he strolls, not when work calls him
           if (anim.cat.mode === 'roof' && anim.current === 'idle' && anim.x !== anim.target && chance(anim.clock + anim.phase * 13) < 0.15) {
             anim.cat.mode = 'follow'
@@ -1944,7 +2027,8 @@ export const register: Register = (on, options) => {
     const shown = team.apprentices.slice(0, 3)
     // what fits under the rest: sixteen rows, the log takes what is left
     const more = team.apprentices.length - shown.length
-    const used = 7 + 1 + (team.apprentices.length > 0 ? 1 + shown.length + (more > 0 ? 1 : 0) : 0) + (team.jobs.length > 0 ? 1 : 0)
+    const rhum = rhumHere() ? rhumLine(now) : undefined
+    const used = 7 + 1 + (rhum ? 1 : 0) + (team.apprentices.length > 0 ? 1 + shown.length + (more > 0 ? 1 : 0) : 0) + (team.jobs.length > 0 ? 1 : 0)
     // the task on two lines at most, where it stands on three; the forge's last two events in what is left
     const free = Math.max(0, ROWS - used)
     const textWidth = Math.max(20, room - 4)
@@ -1976,6 +2060,7 @@ export const register: Register = (on, options) => {
           u?.usd !== undefined ? `$${u.usd.toFixed(2)}` : '',
         ].filter(Boolean).join(' · ')}`}</Text> : null}
         {roomy ? <Text key="today" dimColor wrap="truncate">{`    ${todayLine}`}</Text> : null}
+        {rhum ? <Text key="rhum" color="#7fd4ff" wrap="truncate">{rhum}</Text> : null}
         {team.apprentices.length > 0 ? <Text key="apprentices" color="#b07cff">{fill(words().helpers, { n: team.apprentices.length })}</Text> : null}
         {shown.map(p => {
           const cub = anim.cubs.get(p.id)

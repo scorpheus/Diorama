@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
-use super::monde::{Monde, Saison, Temps};
+use super::monde::{Monde, PhaseRhum, Saison, Temps};
 use super::pixels::{arrondi, hasard, Grille};
 
 pub type Rgb = [f64; 3];
@@ -195,6 +195,120 @@ fn place_all(from: i32, to: i32) -> Plan {
     Plan { wheel, tree, well, falls }
 }
 
+// --- la Route du Rhum : la baie de Saint-Malo pour les montagnes, et la flotte dessus ------
+
+const SEA: i32 = 17; // l'horizon : la mer de cette rangée jusqu'au quai
+
+/// Un bateau de côté, l'étrave à droite : m le mât, M la grand-voile, S sa bande, J le foc, b la
+/// bôme, H la coque, h son étrave, f un flotteur ou un foil. La dernière rangée moins `under`
+/// est sur l'eau ; celles d'après sont dans l'eau, à demi vues.
+struct Coque {
+    rows: &'static [&'static str],
+    under: i32,
+}
+const ULTIM: Coque = Coque {
+    rows: &[
+        "........m......",
+        ".......Mm......",
+        ".......MmJ.....",
+        "......MMmJ.....",
+        "......MSmJJ....",
+        ".....MMSmJJ....",
+        ".....MMSmJJJ...",
+        "....MMMMSJJJ...",
+        "...MMMMMmJJJJ..",
+        "..MMMMMMmJJJJ..",
+        "..bbbbbbm......",
+        ".HHHHHHHHHHHHHh",
+        "..fff.....ffff.",
+    ],
+    under: 1,
+};
+const IMOCA: Coque = Coque {
+    rows: &[
+        ".....m....",
+        "....Mm....",
+        "....MmJ...",
+        "...MSmJ...",
+        "...MSmJJ..",
+        "..MMSmJJ..",
+        "..MMMmJJJ.",
+        ".bbbbm....",
+        "HHHHHHHHHh",
+        ".....f....",
+    ],
+    under: 1,
+};
+const CLASS40: Coque = Coque { rows: &["...m...", "..Mm...", "..MmJ..", ".MSmJ..", ".bbm...", "HHHHHHh"], under: 0 };
+const SPECK: Coque = Coque { rows: &["..m..", ".MmJ.", "MMmJ.", "HHHHh"], under: 0 };
+
+impl Coque {
+    fn large(&self) -> i32 {
+        self.rows[0].len() as i32
+    }
+}
+
+/// Un bateau de la flotte : sa forme, la rangée où court sa coque, son allure, ses couleurs
+/// (coque, étrave, voile, bande), combien il est loin.
+struct Voile {
+    coque: &'static Coque,
+    lane: i32,
+    speed: f64,
+    seed: i64,
+    couleurs: [u32; 4],
+    far: f64,
+}
+
+/// La flotte qu'une baie de cette largeur tient, de l'horizon vers nous : plus de place, de plus gros bateaux.
+fn flotte(room: i32) -> Vec<Voile> {
+    let mut f = vec![
+        Voile { coque: &SPECK, lane: 19, speed: 0.07, seed: 3, couleurs: [0xe8e8ec, 0xc0392b, 0xf4f4f0, 0xf4f4f0], far: 0.55 },
+        Voile { coque: &SPECK, lane: 20, speed: 0.09, seed: 17, couleurs: [0x2a3a6a, 0x2a3a6a, 0xf4f4f0, 0xf4f4f0], far: 0.5 },
+        Voile { coque: &CLASS40, lane: 22, speed: 0.15, seed: 29, couleurs: [0xf2c14e, 0x2a2a30, 0xf6f6f2, 0x3f80dc], far: 0.3 },
+        Voile { coque: &IMOCA, lane: 24, speed: 0.24, seed: 41, couleurs: [0x24242c, 0xd04a2a, 0xe8e8ea, 0xd04a2a], far: 0.15 },
+    ];
+    if room >= 34 {
+        f.push(Voile { coque: &ULTIM, lane: 26, speed: 0.42, seed: 59, couleurs: [0x1d3f8a, 0xe8e8ec, 0xf8f8f6, 0x1d3f8a], far: 0.02 });
+    }
+    if room >= 70 {
+        f.push(Voile { coque: &ULTIM, lane: 26, speed: 0.38, seed: 83, couleurs: [0xc0392b, 0xf2f2f2, 0xf8f8f6, 0xc0392b], far: 0.02 });
+    }
+    f
+}
+
+/// Où est un bateau à `t` : la colonne de son bord gauche, et dans quel sens il va. En course,
+/// il traverse la baie de gauche à droite, vers l'Atlantique, et repasse un peu plus tard ;
+/// avant le départ, il tire des bords autour de sa place en attendant le coup de canon.
+fn sailing(v: &Voile, t: f64, rhum: PhaseRhum, from: i32, to: i32) -> (i32, i32) {
+    let w = v.coque.large();
+    let room = to - from;
+    if rhum == PhaseRhum::Course {
+        let lap = (room + w + 4) as f64 + (hasard(v.seed) * 16.0).floor();
+        return (from - w + (t * v.speed + hasard(v.seed * 7) * lap).rem_euclid(lap).floor() as i32, 1);
+    }
+    let reach = ((room - w) as f64 / 3.0).clamp(2.0, 14.0);
+    let centre = (from + 2) as f64 + hasard(v.seed * 3) * ((room - w - 4).max(0)) as f64;
+    let a = (t * v.speed * 0.5) / reach + hasard(v.seed * 11) * 6.28;
+    let x = (arrondi(centre + a.sin() * reach) as i32).min(to - w).max(from + 2);
+    (x, if a.cos() >= 0.0 { 1 } else { -1 })
+}
+
+/// Deux mouettes sur la baie, en grandes boucles, un coup d'aile de temps en temps : leur place à `t`, ailes hautes ou non.
+fn mouettes(t: f64, from: i32, to: i32) -> [(i32, i32, bool); 2] {
+    let room = (to - from) as f64;
+    let une = |i: i32| {
+        let fi = i as f64;
+        (
+            arrondi(from as f64 + room * (0.5 + 0.4 * (t / (90.0 + fi * 37.0) + fi * 2.1).sin())) as i32,
+            arrondi(7.0 + fi * 2.0 + 2.0 * (t / (23.0 + fi * 9.0) + fi).sin()) as i32,
+            (t / 2.0 + fi).floor().rem_euclid(7.0) < 2.0,
+        )
+    };
+    [une(0), une(1)]
+}
+
+const PAVOIS: [u32; 5] = [0xd04a2a, 0xf2c14e, 0x1d5a9a, 0xf4f4f0, 0x3c8a3c];
+
 /// La cour immobile pour un ciel, une saison et une largeur : la couleur de chaque pixel, et
 /// ceux qui lisent l'horloge, à repeindre à chaque image.
 struct Immobile {
@@ -202,7 +316,7 @@ struct Immobile {
     moving: Vec<u32>,
 }
 
-type Cle = (i32, i32, u8, bool, bool, bool, bool);
+type Cle = (i32, i32, u8, bool, bool, bool, bool, u8);
 const STILLS: usize = 12; // les derniers ciels et largeurs gardés ; l'heure et la fenêtre changent lentement
 
 /// Ce que la cour garde d'une image à l'autre : ce qui ne bouge pas n'est jamais peint deux fois.
@@ -265,6 +379,10 @@ impl Cour {
         let p = Peintre {
             sky,
             se,
+            rhum: w.rhum,
+            flotte: if w.rhum.is_some() { flotte(to - from) } else { Vec::new() },
+            places: RefCell::new(None),
+            vol: RefCell::new(None),
             winter: se == Saison::Hiver,
             clock: w.clock,
             working,
@@ -277,7 +395,7 @@ impl Cour {
             pouring: RefCell::new(None),
         };
         // peinte entière une fois par ciel, saison et largeur ; puis, image après image, ce qui bouge
-        let key: Cle = (from, to, se as u8, sky.night, sky.dusk, sky.storm, sky.flash);
+        let key: Cle = (from, to, se as u8, sky.night, sky.dusk, sky.storm, sky.flash, w.rhum.map_or(0, |r| r as u8 + 1));
         let mut colours = vec![0u32; (width * HEIGHT) as usize];
         match self.stills.get(&key) {
             None => {
@@ -316,6 +434,11 @@ impl Cour {
 struct Peintre {
     sky: Ciel,
     se: Saison,
+    rhum: Option<PhaseRhum>,
+    flotte: Vec<Voile>,
+    /// où sont les bateaux à cette image : (lequel, bord gauche, sens)
+    places: RefCell<Option<Vec<(usize, i32, i32)>>>,
+    vol: RefCell<Option<[(i32, i32, bool); 2]>>,
     winter: bool,
     clock: i64,
     working: bool,
@@ -897,9 +1020,286 @@ impl Peintre {
         None
     }
 
+    /// Les feux des bateaux, du phare : après le jour, ou sous l'orage.
+    fn lamps(&self) -> bool {
+        self.sky.night || self.sky.dusk || self.sky.storm
+    }
+
+    /// Où sont les bateaux à cette image : lu par chaque pixel qui pourrait en porter un, qui bouge donc.
+    fn bateaux(&self) -> Vec<(usize, i32, i32)> {
+        let t = self.now();
+        let rhum = self.rhum.unwrap_or(PhaseRhum::Course);
+        self.places
+            .borrow_mut()
+            .get_or_insert_with(|| {
+                self.flotte
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| {
+                        let (x, dir) = sailing(v, t, rhum, self.from, self.to);
+                        (i, x, dir)
+                    })
+                    .collect()
+            })
+            .clone()
+    }
+
+    fn sea_at(&self, x: i32, y: i32) -> Rgb {
+        let storm = self.sky.storm;
+        let k = (y - SEA) as f64 / (GROUND - 1 - SEA) as f64; // 0 à l'horizon, 1 contre le quai
+        let (loin, pres) = if storm { (hex(0x34424e), hex(0x4a5a64)) } else { (hex(0x1d5a78), hex(0x2c8090)) };
+        let mut c = self.lit(mix(loin, pres, k), 0.45 * (1.0 - k));
+        // les vaguelettes : des tirets de lumière qui vont avec la houle, plus longs et plus vifs
+        // vers nous ; plus de moutons dans l'orage
+        let len = 2.0 + k * 4.0;
+        let speed = (0.04 + k * 0.12) * if storm { 2.0 } else { 1.0 };
+        if hasard(((x as f64 + self.now() * speed) / len).floor() as i64 * 13 + (y * 101) as i64) > if storm { 0.8 } else { 0.88 } {
+            c = mix(c, self.lit(hex(0xe2f2f6), 0.3 * (1.0 - k)), if storm { 0.8 } else { 0.5 });
+        }
+        // le ressac contre le quai
+        if y == GROUND - 1 && hasard((x * 7) as i64 + (self.now() / 2.0).floor() as i64 * 3) > 0.62 {
+            c = mix(c, self.lit(hex(0xf2fbff), 0.0), 0.7);
+        }
+        c
+    }
+
+    fn boat_at(&self, x: i32, y: i32) -> Option<Rgb> {
+        // le plus proche d'abord : il cache ceux de derrière
+        for &(i, bx, dir) in self.bateaux().iter().rev() {
+            let v = &self.flotte[i];
+            let rows = v.coque.rows;
+            let wide = v.coque.large();
+            let top = v.lane - (rows.len() as i32 - 1 - v.coque.under);
+            if y < top || y > v.lane + v.coque.under || x < bx || x >= bx + wide {
+                continue;
+            }
+            let col = if dir > 0 { x - bx } else { bx + wide - 1 - x };
+            let ch = rows[(y - top) as usize].as_bytes()[col as usize];
+            if ch == b'.' {
+                continue;
+            }
+            // après le jour, le feu de tête de mât et celui de l'étrave, vert ou rouge selon le bord vu
+            if self.lamps() && ch == b'm' && y == top {
+                return Some(hex(0xfff6d0));
+            }
+            if self.lamps() && ch == b'h' {
+                return Some(if dir > 0 { hex(0x6fe07a) } else { hex(0xff5a4a) });
+            }
+            let [coque, etrave, voile, bande] = v.couleurs;
+            let c = match ch {
+                b'm' => hex(0x2a2a30),
+                b'b' => hex(0x3a3a44),
+                b'J' => mul(hex(voile), [0.88, 0.9, 0.94]),
+                b'f' => mul(hex(coque), [0.7, 0.7, 0.75]),
+                b'h' => hex(etrave),
+                b'M' => hex(voile),
+                b'S' => hex(bande),
+                _ => hex(coque),
+            };
+            let vu = self.lit(c, v.far);
+            // ce qui est dans l'eau, à demi vu
+            return Some(if y > v.lane { mix(self.sea_at(x, y), vu, 0.5) } else { vu });
+        }
+        None
+    }
+
+    /// Combien l'eau est blanche en (x, y) : la vague d'étrave, et le sillage derrière, long en course.
+    fn foam_at(&self, x: i32, y: i32) -> f64 {
+        let course = self.rhum == Some(PhaseRhum::Course);
+        let mut f: f64 = 0.0;
+        for (i, bx, dir) in self.bateaux() {
+            let v = &self.flotte[i];
+            if y != v.lane && y != v.lane + 1 {
+                continue;
+            }
+            let wide = v.coque.large();
+            let len = arrondi(wide as f64 * if course { 1.4 } else { 0.5 }) as i32;
+            let bow = if dir > 0 { bx + wide } else { bx - 1 };
+            let back = ((if dir > 0 { bx - 1 } else { bx + wide }) - x) * dir;
+            if course && x == bow && y == v.lane {
+                f = f.max(0.9);
+            }
+            if back >= 0 && back < len {
+                let k = 1.0 - back as f64 / len as f64;
+                if hasard((x * 13 + y * 7) as i64 + (self.now() * 0.7).floor() as i64 * 31) < k * if y == v.lane { 0.8 } else { 0.45 } {
+                    f = f.max(k);
+                }
+            }
+        }
+        f
+    }
+
+    /// L'îlot et son phare, au large à droite d'une baie large.
+    fn isle(&self) -> Option<i32> {
+        if self.to - self.from >= 44 {
+            Some(self.to - 10)
+        } else {
+            None
+        }
+    }
+
+    fn beacon(&self) -> bool {
+        self.lamps() && self.now().floor().rem_euclid(28.0) < 3.0
+    }
+
+    fn isle_at(&self, x: i32, y: i32) -> Option<Rgb> {
+        let isle = self.isle()?;
+        if y > SEA || y < SEA - 11 {
+            return None;
+        }
+        let d = (x as f64 - isle as f64 - 0.5).abs();
+        if d < 7.0 && y as f64 >= SEA as f64 + 0.5 - (3.0 - d * 0.45 + roll(x as f64 / 2.0, 61) * 1.2) {
+            return Some(self.lit(if hasard((x * 5 + y * 3) as i64) > 0.7 { hex(0x8a8494) } else { hex(0x5d5866) }, 0.35));
+        }
+        if x != isle && x != isle + 1 {
+            return None;
+        }
+        if y == SEA - 11 {
+            return Some(self.lit(hex(0x2a2a30), 0.3)); // le chapeau de la lanterne
+        }
+        if y == SEA - 10 {
+            return Some(if !self.lamps() {
+                self.lit(hex(0x9ab0c0), 0.3)
+            } else if self.beacon() {
+                hex(0xfff2a0)
+            } else {
+                self.lit(hex(0x7a7050), 0.3)
+            });
+        }
+        if y <= SEA - 3 {
+            return Some(self.lit(if y <= SEA - 8 { hex(0xc0392b) } else { hex(0xeef0f4) }, 0.3));
+        }
+        None
+    }
+
+    fn gull_at(&self, x: i32, y: i32) -> bool {
+        if self.sky.night || !(3..=13).contains(&y) {
+            return false; // la nuit, elles dorment
+        }
+        let t = self.now(); // lue par chaque pixel qui demande, pas seulement le premier : chacun bouge
+        let vol = *self.vol.borrow_mut().get_or_insert_with(|| mouettes(t, self.from, self.to));
+        vol.iter().any(|&(gx, gy, up)| {
+            let (dx, dy) = (x - gx, y - gy);
+            if up {
+                (dx.abs() == 1 && dy == -1) || (dx == 0 && dy == 0)
+            } else {
+                (dx.abs() <= 1 && dy == 0) || (dx.abs() == 2 && dy == 1)
+            }
+        })
+    }
+
+    fn quay(&self, x: i32, y: i32) -> Rgb {
+        if y == GROUND {
+            // ses pierres de couronnement, le long du bord
+            return self.lit(
+                if self.winter {
+                    hex(0xeef2f8)
+                } else if (x - self.from) % 6 == 0 {
+                    hex(0x5d5866)
+                } else {
+                    hex(0xa8a4ae)
+                },
+                0.0,
+            );
+        }
+        if self.winter && hasard((x * 3 + y * 5) as i64) > 0.35 {
+            return self.lit(hex(0xeaf0f7), 0.0);
+        }
+        let row = y % 2;
+        let stone = (x + row * 2).div_euclid(4);
+        self.lit(
+            if (x + row * 2) % 4 == 0 {
+                hex(0x4a4048)
+            } else if hasard((stone * 13 + y) as i64) > 0.5 {
+                hex(0x8a8490)
+            } else {
+                hex(0x76707c)
+            },
+            0.0,
+        )
+    }
+
+    /// Le pavois, du bout de l'avant-toit au bord de la cour, comme sur les quais la semaine du départ.
+    fn flag_at(&self, x: i32, y: i32) -> Option<Rgb> {
+        let (x0, x1) = (self.from + 12, self.to - 1);
+        if x <= x0 || x >= x1 || y > 7 {
+            return None;
+        }
+        let rope = 2 + arrondi(2.5 * (PI * (x - x0) as f64 / (x1 - x0) as f64).sin()) as i32;
+        if y == rope {
+            return Some(self.lit(hex(0x3a3a44), 0.0));
+        }
+        let k = x - x0;
+        if k % 3 != 0 && (y == rope + 1 || (y == rope + 2 && k % 3 == 1)) {
+            Some(self.lit(hex(PAVOIS[(k / 3) as usize % PAVOIS.len()]), 0.0))
+        } else {
+            None
+        }
+    }
+
+    /// La Route du Rhum : la baie de Saint-Malo où étaient les montagnes, la flotte dessus (qui
+    /// tire des bords avant le coup de canon, qui file vers l'Atlantique après), deux mouettes,
+    /// dans une cour large un îlot et son phare, et le granit du quai sous les pieds. Ni arbre,
+    /// ni puits, ni roue : la mer a pris leur place.
+    fn harbour(&self, x: i32, y: i32) -> Rgb {
+        let room = self.to - self.from;
+        if y >= GROUND {
+            return self.quay(x, y);
+        }
+        if let Some(c) = self.flag_at(x, y) {
+            return c;
+        }
+        let bollard = self.from + 19;
+        if room >= 26 && y >= GROUND - 2 && (x == bollard || x == bollard + 1 || (y == GROUND - 2 && x == bollard - 1)) {
+            return self.lit(if y == GROUND - 2 { hex(0x3a3a44) } else { hex(0x24242c) }, 0.0);
+        }
+        if y >= 14 {
+            if let Some(c) = self.boat_at(x, y) {
+                return c;
+            }
+        }
+        if y < SEA || (y == SEA && self.isle().is_some()) {
+            if let Some(c) = self.isle_at(x, y) {
+                return c;
+            }
+        }
+        if y < SEA {
+            if self.gull_at(x, y) {
+                return self.lit(hex(0xf4f4f0), 0.0);
+            }
+            let c = self.sky_at(x, y);
+            // le faisceau du phare, qui balaie la baie quand il s'allume
+            return match self.isle() {
+                Some(isle) if y == SEA - 10 && x < isle && isle - x < 14 && self.beacon() => {
+                    mix(c, hex(0xfff2a0), 0.55 * (1.0 - (isle - x) as f64 / 14.0))
+                }
+                _ => c,
+            };
+        }
+        let mut c = self.sea_at(x, y);
+        // les bouées de la ligne de départ, qui dansent
+        if self.rhum == Some(PhaseRhum::Avant) && room >= 20 {
+            for bx in [self.from + arrondi(room as f64 * 0.3) as i32, self.from + arrondi(room as f64 * 0.72) as i32] {
+                if x == bx && (22..=24).contains(&y) {
+                    let top = 22 + if (self.now() / 4.0 + bx as f64).sin() > 0.0 { 0 } else { 1 };
+                    if y == top || y == top + 1 {
+                        c = self.lit(if y == top { hex(0xf2c14e) } else { hex(0xc08a20) }, 0.15);
+                    }
+                }
+            }
+        }
+        let f = if y >= 18 { self.foam_at(x, y) } else { 0.0 };
+        if f > 0.0 {
+            mix(c, self.lit(hex(0xf2fbff), 0.0), 0.45 + 0.45 * f)
+        } else {
+            c
+        }
+    }
+
     fn paint(&self, x: i32, y: i32) -> u32 {
         let c = match self.door(x, y) {
             Some(c) => c,
+            None if self.rhum.is_some() => self.harbour(x, y),
             None => {
                 // sous les feuilles, ni ciel ni collines ne se peignent
                 let c = self.crown(x, y).unwrap_or_else(|| if y >= GROUND { self.ground(x, y) } else { self.hills(x, y) });
@@ -937,8 +1337,8 @@ pub fn draw_yard_weather(cour: &mut Cour, g: &mut Grille, w: &Monde, from: i32, 
             g.dot(2.0 * fx, 2.0 * fy, b'w', Some(clair));
         }
     }
-    if se == Saison::Automne || se == Saison::Printemps {
-        // de la couronne de l'arbre jusqu'à l'herbe, en tournoyant, le vent les prenant à gauche
+    if (se == Saison::Automne || se == Saison::Printemps) && w.rhum.is_none() {
+        // au bord de la mer, pas d'arbre ; ailleurs, de la couronne de l'arbre jusqu'à l'herbe, en tournoyant, le vent les prenant à gauche
         let (tx, tr) = cour.layout(from, to).tree;
         let colours = if se == Saison::Automne { b"FyF" } else { b"MMi" };
         for i in 0..3i64 {
@@ -954,6 +1354,49 @@ pub fn draw_yard_weather(cour: &mut Cour, g: &mut Grille, w: &Monde, from: i32, 
             };
             for (dx, dy) in forme {
                 g.dot(fx + dx, fy + dy, colours[i as usize], Some(clair));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bleu(c: u32) -> bool {
+        (c & 0xff) > (c >> 16) & 0xff
+    }
+
+    #[test]
+    fn la_route_du_rhum_met_la_mer_et_la_flotte_dans_la_cour() {
+        let (from, to) = (54, 144);
+        let mut w = Monde { month: 11, day: 2, hour: 14.0, ..Monde::default() };
+        let mut cour = Cour::default();
+        let montagnes = cour.outdoors(&w, false, from, to);
+        w.rhum = Some(PhaseRhum::Course);
+        let mer = cour.outdoors(&w, false, from, to);
+        // la baie où étaient les sapins, le granit du quai où était l'herbe
+        let (x, y) = (from + 40, GROUND - 3);
+        assert_ne!(montagnes.back(x, y), mer.back(x, y));
+        assert!(bleu(mer.back(x, y).unwrap()));
+        let quai = mer.back(from + 40, GROUND + 1).unwrap();
+        let (r, g, b) = (quai >> 16, (quai >> 8) & 0xff, quai & 0xff);
+        assert!(r.abs_diff(g) < 30 && g.abs_diff(b) < 30, "du granit gris, pas de l'herbe : {quai:06x}");
+        // la flotte avance d'une image à l'autre
+        let plus_tard = cour.outdoors(&w.plus_tard(40), false, from, to);
+        let bouge = (14..GROUND).flat_map(|y| (from..to).map(move |x| (x, y))).filter(|&(x, y)| mer.back(x, y) != plus_tard.back(x, y)).count();
+        assert!(bouge > 50, "{bouge} pixels ont bougé");
+    }
+
+    #[test]
+    fn avant_le_depart_les_bateaux_tirent_des_bords_dans_la_baie() {
+        let (from, to) = (54, 126);
+        for v in flotte(to - from) {
+            let sens: std::collections::HashSet<i32> = (0..4000).step_by(50).map(|t| sailing(&v, t as f64, PhaseRhum::Avant, from, to).1).collect();
+            assert_eq!(sens.len(), 2, "il vire de bord");
+            for t in (0..4000).step_by(37) {
+                let (x, _) = sailing(&v, t as f64, PhaseRhum::Avant, from, to);
+                assert!(x >= from + 2 && x + v.coque.large() <= to, "il reste dans la baie");
             }
         }
     }

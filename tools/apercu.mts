@@ -98,6 +98,8 @@ if (anime) {
     ['orage, sous pression', 'idle', 0, { weather: 'storm', pressure: 92 }],
     ['fête, messager', 'idle', 0, { banquet: true, messenger: { kind: 'waiting', age: 12 }, gift: { kind: 'coin', age: 1 } }],
     ['hiver', 'idle', 0, { month: 1, hour: 11 }],
+    ['Route du Rhum, avant le départ', 'idle', 0, { rhum: 'before', month: 10, day: 30, hour: 15 }],
+    ['Route du Rhum, en course, le soir', 'idle', 0, { rhum: 'race', month: 11, day: 1, hour: 19 }],
     ['visite à trois, le soir', 'idle', 0, { hour: 19, month: 10, lanternLit: true, guests: [guest, ...[['C', 'D', 'bandeau', 40], ['o', 'O', 'tablier', 90]].map(([a, b, accessory, tick]) => ({ ...guest, x: theme.stage.guestSpots[1] ?? guest.x, cape: [a, b] as const, accessory: String(accessory), tick: Number(tick), waving: false }))] }],
   ]
 }

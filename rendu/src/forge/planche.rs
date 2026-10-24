@@ -80,6 +80,8 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
             w.gift = Some(Don { kind: Cadeau::Coin, age: 1 });
         })),
         (Activite::Idle, 0, avec(&|w| { w.month = 1; w.hour = 11.0 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Avant); w.month = 10; w.day = 30; w.hour = 15.0 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.month = 11; w.day = 1; w.hour = 19.0 })),
     ];
     let mut trois = calme();
     trois.hour = 19.0;
