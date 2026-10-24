@@ -463,6 +463,8 @@ const anim = {
   rhumNamed: false, // the Route du Rhum's file names this session
   rhumStamp: undefined as number | undefined, // that file's last change, as last read
   rhumPhase: undefined as World['rhum'], // the phase last shown, to cheer the start
+  rhumDataStamp: undefined as number | undefined, // the report's last change, as last read
+  rhumFleet: undefined as RhumFleet | undefined, // the fleet at its last report
   themeWanted: 'forge', // the `theme` option
   themeStamp: undefined as number | undefined, // the theme file's last change, when it is one
   doings: [] as string[], // the main thread's actions on the task at hand, for its status
@@ -535,6 +537,7 @@ function worldNow(): World {
     rare: anim.rare && anim.clock - anim.rare.since < theme.rareFor ? { kind: anim.rare.kind, age: anim.clock - anim.rare.since } : undefined,
     rhum: rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined,
     rhumProgress: rhumHere() && anim.nowMs >= RHUM_START ? rhumProgressAt(anim.nowMs) : undefined,
+    ...rhumWorld(),
     ...rackNow(),
     banner: anim.banner,
     speaking: anim.speaking,
@@ -1500,7 +1503,6 @@ async function useTheme($: EngineInterface, wanted: string) {
   if (errors.length > 0) await note($, `thème « ${wanted} » refusé : ${errors[0]}${errors.length > 1 ? ` (+${errors.length - 1})` : ''}`)
 }
 
-/** A theme file changed on disk: drawn again at once, so its author sees it. */
 // --- the Route du Rhum: one session of the machine shows it -----------------------
 
 // The start, off Saint-Malo: Sunday 1 November 2026 at 13h02, Paris time (UTC+1 by then).
@@ -1512,8 +1514,132 @@ const rhumHere = () => anim.rhumAsked || anim.rhumNamed
 const rhumPhaseAt = (ms: number): NonNullable<World['rhum']> => (ms < RHUM_START ? 'before' : 'race')
 // The leaders' time to Guadeloupe, about: the Ultims' record is under seven days (2022)
 const RHUM_LEAD_MS = 7 * 24 * 60 * 60 * 1000
-/** How far the race is, 0 to 1, in hundredths, at the leaders' pace: it moves the scenery on every hour and a half or so. */
-const rhumProgressAt = (ms: number) => Math.round(Math.min(1, Math.max(0, (ms - RHUM_START) / RHUM_LEAD_MS)) * 100) / 100
+const RHUM_MILES = 3542 // the course, Saint-Malo to Pointe-à-Pitre
+/**
+ * How far the race is, 0 to 1, in hundredths: the leaders' share of the course run at the last
+ * report, when there is one; else at the leaders' pace, from the start.
+ */
+function rhumProgressAt(ms: number): number {
+  const dtf = anim.rhumFleet?.boats.map(b => b.dtf).filter((d): d is number => d !== undefined)
+  const p = dtf && dtf.length > 0 ? 1 - Math.min(...dtf) / RHUM_MILES : (ms - RHUM_START) / RHUM_LEAD_MS
+  return Math.round(Math.min(1, Math.max(0, p)) * 100) / 100
+}
+
+// --- the fleet at its last report: whatever fetches it writes it beside the file above ---
+
+const RHUM_DATA = 'diorama-route-du-rhum.json'
+/** The race's classes, in the order the native render numbers them. */
+const RHUM_CLASSES = ['Ultim', 'Ocean Fifty', 'IMOCA', 'Class40', 'Rhum Multi', 'Rhum Mono'] as const
+type RhumBoat = { name: string; skipper?: string; cls: number; colours?: readonly [number, number]; lat: number; lon: number; rank?: number; dtf?: number; speed?: number }
+type RhumFleet = { at: number; boats: RhumBoat[] }
+
+/** A class by its name, however written: « class 40 », « Ocean50 », « rhum-mono ». */
+function classOf(name: unknown): number {
+  const key = String(name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const known: Record<string, number> = { ultim: 0, oceanfifty: 1, ocean50: 1, imoca: 2, class40: 3, rhummulti: 4, rhummono: 5 }
+  return known[key] ?? -1
+}
+
+const hexOf = (v: unknown) => (typeof v === 'string' && /^#?[0-9a-f]{6}$/i.test(v) ? parseInt(v.replace('#', ''), 16) : undefined)
+const numberOf = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+
+/**
+ * The report, as written in the file: `{ "at": "2026-11-02T14:00:00Z", "bateaux": [{ "nom",
+ * "skipper", "classe", "couleurs": ["#coque", "#bande"], "lat", "lon", "rang", "dtf", "vitesse" }] }`
+ * (rang: within its class; dtf: miles to the finish; vitesse: knots). A boat without a known
+ * class or a position is left out; a file without a boat, refused.
+ */
+function readFleet(text: string): RhumFleet | undefined {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text.replace(/^\uFEFF/, ''))
+  } catch {
+    return undefined
+  }
+  const r = raw as { at?: unknown; bateaux?: unknown }
+  const at = typeof r.at === 'string' ? Date.parse(r.at) : numberOf(r.at)
+  if (at === undefined || Number.isNaN(at) || !Array.isArray(r.bateaux)) return undefined
+  const boats: RhumBoat[] = []
+  for (const b of r.bateaux as Array<Record<string, unknown>>) {
+    const cls = classOf(b?.classe)
+    const lat = numberOf(b?.lat), lon = numberOf(b?.lon)
+    if (cls < 0 || lat === undefined || lon === undefined || typeof b.nom !== 'string') continue
+    const pair = Array.isArray(b.couleurs) ? b.couleurs.map(hexOf) : []
+    boats.push({
+      name: b.nom, cls, lat, lon,
+      ...(typeof b.skipper === 'string' ? { skipper: b.skipper } : {}),
+      ...(pair[0] !== undefined && pair[1] !== undefined ? { colours: [pair[0], pair[1]] as const } : {}),
+      ...(numberOf(b.rang) !== undefined ? { rank: numberOf(b.rang) } : {}),
+      ...(numberOf(b.dtf) !== undefined ? { dtf: numberOf(b.dtf) } : {}),
+      ...(numberOf(b.vitesse) !== undefined ? { speed: numberOf(b.vitesse) } : {}),
+    })
+  }
+  if (boats.length === 0) return undefined
+  // the rank in its class, from the distance to the finish when the report gives none
+  for (let cls = 0; cls < RHUM_CLASSES.length; cls++) {
+    const mine = boats.filter(b => b.cls === cls)
+    if (mine.some(b => b.rank === undefined)) {
+      mine.sort((a, b) => (a.dtf ?? Infinity) - (b.dtf ?? Infinity)).forEach((b, i) => { b.rank = i + 1 })
+    }
+  }
+  return { at, boats }
+}
+
+/** The first of each class at the last report, in the classes' order. */
+const rhumLeaders = (f: RhumFleet) =>
+  RHUM_CLASSES.map((_, cls) => f.boats.find(b => b.cls === cls && b.rank === 1)).filter((b): b is RhumBoat => b !== undefined)
+
+/** The fleet for the native render's chart and boats: compact, a tenth of a degree. */
+function rhumWorld(): Pick<World, 'rhumFlotte' | 'rhumTetes'> {
+  const f = anim.rhumFleet
+  if (!f || !rhumHere()) return {}
+  const tenth = (v: number) => Math.round(v * 10) / 10
+  const heads = rhumLeaders(f).filter(b => b.colours).map(b => [b.cls, b.colours?.[0] ?? 0, b.colours?.[1] ?? 0] as [number, number, number])
+  return {
+    rhumFlotte: f.boats.map(b => [b.cls, tenth(b.lat), tenth(b.lon), b.rank ?? 0] as [number, number, number, number]),
+    ...(heads.length > 0 ? { rhumTetes: heads } : {}),
+  }
+}
+
+/** A class's leader as the words say it, the classes in turn every twenty seconds: « Ultim · 1er SVR · 2 950 milles · 31,2 nœuds · pointage 14h00 ». */
+function rhumLeaderLine(ms: number): string | undefined {
+  const f = anim.rhumFleet
+  if (!f) return undefined
+  const leaders = rhumLeaders(f)
+  const b = leaders[Math.floor(ms / 20_000) % Math.max(1, leaders.length)]
+  if (!b) return undefined
+  const t = new Date(f.at)
+  const at = `${String(t.getHours()).padStart(2, '0')}h${String(t.getMinutes()).padStart(2, '0')}`
+  const nombre = (v: number, d = 0) => {
+    const [entier = '', decimales] = v.toFixed(d).split('.')
+    return entier.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (decimales ? `,${decimales}` : '')
+  }
+  return [
+    `   ${RHUM_CLASSES[b.cls]} · 1er ${b.name}${b.skipper ? ` (${b.skipper})` : ''}`,
+    b.dtf !== undefined ? `${nombre(b.dtf)} milles` : '',
+    b.speed !== undefined ? `${nombre(b.speed, 1)} nœuds` : '',
+    `pointage ${at}`,
+  ].filter(Boolean).join(' · ')
+}
+
+/** The report beside the designation: read again whenever it changes, by the session that shows the race only. */
+async function watchRhumData($: EngineInterface) {
+  if (!rhumHere()) return
+  const file = `${await configDir($)}/${RHUM_DATA}`
+  const stamp = await $.fs.stat(file).then(s => s.mtimeMs, () => undefined)
+  if (stamp === anim.rhumDataStamp) return
+  anim.rhumDataStamp = stamp
+  const fleet = stamp === undefined ? undefined : readFleet(await $.fs.read(file).catch(() => ''))
+  const was = anim.rhumFleet?.at
+  anim.rhumFleet = fleet
+  if (fleet && fleet.at !== was) {
+    const t = new Date(fleet.at)
+    await note($, `Route du Rhum : pointage de ${String(t.getHours()).padStart(2, '0')}h${String(t.getMinutes()).padStart(2, '0')}, ${fleet.boats.length} bateaux`)
+  } else if (stamp !== undefined && !fleet) {
+    await note($, `Route du Rhum : ${RHUM_DATA} illisible`)
+  }
+  $.ui.invalidate('ui.render')
+}
 
 /** The race's line beside the scene: the countdown to the start, then the days at sea. */
 function rhumLine(ms: number): string {
@@ -1570,6 +1696,7 @@ async function rhumStart($: EngineInterface, voice: string) {
   if (anim.current === 'idle' && !anim.trip) await setAct($, 'jumping', 'le départ !', 2400)
 }
 
+/** A theme file changed on disk: drawn again at once, so its author sees it. */
 async function watchTheme($: EngineInterface) {
   const file = themeFile($.plugin.root, anim.themeWanted)
   if (file === undefined) return
@@ -1635,6 +1762,9 @@ export const register: Register = (on, options) => {
       anim.rhumStamp = undefined
       anim.rhumNamed = false
       await watchRhum($).catch(() => undefined)
+      anim.rhumDataStamp = undefined
+      anim.rhumFleet = undefined
+      await watchRhumData($).catch(() => undefined)
       anim.rhumPhase = rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined
     }
     anim.masterpiece = (await $.store.get(`master:${anim.sessionId}`)) !== undefined
@@ -1676,6 +1806,7 @@ export const register: Register = (on, options) => {
           void pollVisits($, voice).catch(() => undefined)
           void watchTheme($).catch(() => undefined)
           void watchRhum($).catch(() => undefined)
+          void watchRhumData($).catch(() => undefined)
         }
         if ((anim.clock + anim.phase) % POLL_TICKS === 0) {
           // idle since when: three forges idle at once make a banquet
@@ -2033,7 +2164,8 @@ export const register: Register = (on, options) => {
     // what fits under the rest: sixteen rows, the log takes what is left
     const more = team.apprentices.length - shown.length
     const rhum = rhumHere() ? rhumLine(now) : undefined
-    const used = 7 + 1 + (rhum ? 1 : 0) + (team.apprentices.length > 0 ? 1 + shown.length + (more > 0 ? 1 : 0) : 0) + (team.jobs.length > 0 ? 1 : 0)
+    const leader = rhumHere() ? rhumLeaderLine(now) : undefined
+    const used = 7 + 1 + (rhum ? 1 : 0) + (leader ? 1 : 0) + (team.apprentices.length > 0 ? 1 + shown.length + (more > 0 ? 1 : 0) : 0) + (team.jobs.length > 0 ? 1 : 0)
     // the task on two lines at most, where it stands on three; the forge's last two events in what is left
     const free = Math.max(0, ROWS - used)
     const textWidth = Math.max(20, room - 4)
@@ -2066,6 +2198,7 @@ export const register: Register = (on, options) => {
         ].filter(Boolean).join(' · ')}`}</Text> : null}
         {roomy ? <Text key="today" dimColor wrap="truncate">{`    ${todayLine}`}</Text> : null}
         {rhum ? <Text key="rhum" color="#7fd4ff" wrap="truncate">{rhum}</Text> : null}
+        {leader ? <Text key="rhum-leader" color="#7fd4ff" dimColor wrap="truncate">{leader}</Text> : null}
         {team.apprentices.length > 0 ? <Text key="apprentices" color="#b07cff">{fill(words().helpers, { n: team.apprentices.length })}</Text> : null}
         {shown.map(p => {
           const cub = anim.cubs.get(p.id)

@@ -151,8 +151,31 @@ pub struct Bateau {
     pub graine: i64,
 }
 
-/// La flotte qu'une baie de cette largeur montre, de l'horizon vers nous.
-pub fn flotte(room: f32) -> Vec<Bateau> {
+/// La classe de course d'une sorte de bateau, comme le pointage les numérote.
+fn classe(s: Sorte) -> u32 {
+    match s {
+        Sorte::Ultim => 0,
+        Sorte::OceanFifty => 1,
+        Sorte::Imoca => 2,
+        Sorte::Class40 => 3,
+        Sorte::Rhum => 4,
+    }
+}
+
+/// La flotte qu'une baie de cette largeur montre, de l'horizon vers nous ; le plus proche de
+/// chaque classe aux couleurs de son premier, quand le pointage les donne.
+pub fn flotte(room: f32, tetes: Option<&[[u32; 3]]>) -> Vec<Bateau> {
+    let mut f = flotte_type(room);
+    for t in tetes.unwrap_or(&[]) {
+        let classe_t = if t[0] == 5 { 4 } else { t[0] };
+        if let Some(b) = f.iter_mut().rev().find(|b| classe(b.sorte) == classe_t) {
+            (b.coque, b.bande) = (hex(t[1]), hex(t[2]));
+        }
+    }
+    f
+}
+
+fn flotte_type(room: f32) -> Vec<Bateau> {
     let b = |sorte, coque: u32, voile: u32, bande: u32, lane, vitesse, graine| Bateau { sorte, coque: hex(coque), voile: hex(voile), bande: hex(bande), lane, vitesse, graine };
     let mut f = vec![
         b(Sorte::Rhum, 0xf0f0f0, 0xf4f2ea, 0xc0392b, 17.7, 0.035, 3),
@@ -271,7 +294,7 @@ impl Baie {
             let taille = (c.room() / 40.0).clamp(0.55, 1.0);
             let phase = w.phase();
             // de l'horizon vers nous : les bateaux et les bêtes, chacun à sa profondeur
-            let mut tous: Vec<(f32, Option<Bateau>, Option<Box<dyn Fn(&mut Toile)>>)> = flotte(c.room()).into_iter().map(|b| (b.lane, Some(b), None)).collect();
+            let mut tous: Vec<(f32, Option<Bateau>, Option<Box<dyn Fn(&mut Toile)>>)> = flotte(c.room(), w.rhum_tetes.as_deref()).into_iter().map(|b| (b.lane, Some(b), None)).collect();
             tous.extend(faune(&c, &sky, et, t).into_iter().map(|(lane, f)| (lane, None, Some(f))));
             tous.sort_by(|a, b| a.0.total_cmp(&b.0));
             if self.gardees.len() > 400 {
@@ -1200,6 +1223,9 @@ fn poisson_volant(t: &mut Toile, c: &Cadre, sky: &Ciel, u: f32, lane: f32, f: f3
 /// Guadeloupe qui se balancent.
 fn premier_plan(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, et: Etape, w: &Monde, t_: f32) {
     let room = c.room();
+    if let Some(f) = w.rhum_flotte.as_deref().filter(|f| !f.is_empty() && room >= 40.0) {
+        carte(t, gardees, c, f, t_);
+    }
     match et {
         Etape::Bretagne => {
             let couleurs = [0xd04a2a, 0xf2c14e, 0x1d5a9a, 0xf4f4f0, 0x3c8a3c];
@@ -1240,6 +1266,113 @@ fn premier_plan(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, e
             }
         }
         _ => {}
+    }
+}
+
+// --- la carte de la course : la flotte au dernier pointage --------------------------
+
+/// Ce que montre la carte : de la Manche aux Antilles, en degrés.
+const CARTE: (f32, f32, f32, f32) = (-66.0, 0.0, 12.0, 52.0);
+const SAINT_MALO: (f32, f32) = (-2.02, 48.65);
+const POINTE_A_PITRE: (f32, f32) = (-61.53, 16.24);
+
+/// Les terres, à grands traits : (longitude, latitude).
+const EUROPE_AFRIQUE: [(f32, f32); 42] = [
+    (2.0, 53.0), (2.0, 51.0), (1.6, 50.1), (0.2, 49.7), (-1.3, 49.6), (-1.9, 49.7), (-1.6, 48.7), (-3.0, 48.8),
+    (-4.8, 48.5), (-4.3, 47.8), (-2.5, 47.3), (-1.2, 46.2), (-1.3, 44.5), (-1.8, 43.4), (-3.8, 43.5), (-8.0, 43.7),
+    (-9.3, 43.0), (-8.9, 41.9), (-9.5, 39.4), (-9.0, 38.5), (-8.9, 37.0), (-6.3, 36.8), (-5.6, 36.0), (-6.0, 35.8),
+    (-6.9, 34.0), (-8.5, 33.3), (-9.8, 30.4), (-11.5, 28.0), (-13.0, 27.5), (-15.0, 24.5), (-16.1, 22.5), (-17.0, 21.0),
+    (-16.5, 19.5), (-16.1, 18.0), (-16.8, 15.0), (-17.5, 14.7), (-16.7, 13.0), (-16.8, 12.0), (-16.8, 11.0), (2.0, 11.0),
+    (2.0, 30.0), (2.0, 45.0),
+];
+const ANGLETERRE: [(f32, f32); 11] = [
+    (-5.7, 50.0), (-3.0, 50.6), (1.4, 51.2), (1.7, 52.6), (0.0, 53.5), (-3.0, 53.4), (-4.6, 52.8), (-5.3, 51.7),
+    (-4.2, 51.5), (-3.2, 51.4), (-5.0, 50.5),
+];
+const IRLANDE: [(f32, f32); 7] = [(-10.2, 51.6), (-8.0, 51.6), (-6.3, 52.2), (-6.0, 53.5), (-7.0, 54.0), (-10.0, 54.0), (-9.8, 53.0)];
+/// Les îles, en points : Açores, Madère, Canaries, Cap-Vert, et l'arc des Antilles.
+const ILES: [(f32, f32, f32); 17] = [
+    (-25.6, 37.8, 0.5), (-28.1, 38.5, 0.5), (-27.2, 38.7, 0.4), (-31.1, 39.4, 0.3), (-16.9, 32.7, 0.4),
+    (-15.5, 28.1, 0.4), (-13.7, 28.6, 0.4), (-16.6, 28.3, 0.4), (-17.9, 27.8, 0.3), (-23.6, 15.1, 0.4), (-24.4, 16.6, 0.4),
+    (-61.6, 16.2, 0.6), (-61.35, 15.4, 0.4), (-61.0, 14.6, 0.5), (-61.8, 17.1, 0.35), (-66.4, 18.2, 0.9), (-62.8, 17.9, 0.3),
+];
+/// Les classes sur la carte : Ultim, Ocean Fifty, IMOCA, Class40, Rhum Multi, Rhum Mono.
+const TEINTES: [u32; 6] = [0xd8402e, 0x8a4ad0, 0x1a1a24, 0xf0a020, 0x2e9a4a, 0x2a8ad8];
+
+/// La carte de la course, épinglée en haut à droite de la cour : la côte, les îles, la route de
+/// Saint-Malo à Pointe-à-Pitre, et chaque bateau à sa place au dernier pointage, le premier de
+/// chaque classe cerclé. Le papier se dessine une fois ; les bateaux, à chaque image.
+fn carte(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, flotte: &[[f32; 4]], t_: f32) {
+    let room = c.room();
+    let w = (room * c.cw * 0.34).min(300.0);
+    let h = w * 0.66;
+    let (x0, y0) = (room * c.cw - w - 1.2 * c.cw, 1.0 * c.demi);
+    let (gx, gy) = (w * 0.04, h * 0.06); // la marge du papier
+    let proj = move |lon: f32, lat: f32| -> (f32, f32) {
+        let (l0, l1, b0, b1) = CARTE;
+        (gx + (lon - l0) / (l1 - l0) * (w - 2.0 * gx), gy + (b1 - lat) / (b1 - b0) * (h - 2.0 * gy))
+    };
+    let cle = (-100, w as i32, h as i32, 0, 0);
+    let papier = gardees.entry(cle).or_insert_with(|| {
+        Vignette::faire(w as usize + 6, h as usize + 6, 0.0, 0.0, &move |t: &mut Toile, _, _| {
+            // l'ombre, le papier, la mer, le cadre
+            t.poly(&[(4.0, 4.0), (w + 4.0, 4.0), (w + 4.0, h + 4.0), (4.0, h + 4.0)], [0.0, 0.0, 0.0], 0.3);
+            t.poly(&[(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)], hex(0xe9dcb8), 1.0);
+            t.poly(&[(gx, gy), (w - gx, gy), (w - gx, h - gy), (gx, h - gy)], hex(0xbcd8e0), 1.0);
+            let terre = hex(0xd2be8c);
+            let trait_cote = hex(0x8a7a58);
+            for cote in [&EUROPE_AFRIQUE[..], &ANGLETERRE[..], &IRLANDE[..]] {
+                let pts: Vec<(f32, f32)> = cote.iter().map(|&(lo, la)| proj(lo.min(CARTE.1), la.clamp(CARTE.2, CARTE.3))).collect();
+                t.poly(&pts, terre, 1.0);
+                let mut ferme = pts.clone();
+                ferme.push(pts[0]);
+                t.ligne(&ferme, 0.8, trait_cote, 0.7);
+            }
+            for &(lo, la, r) in &ILES {
+                let (x, y) = proj(lo, la);
+                t.disque(x, y, (r * w / 120.0).max(1.0), terre, 1.0, 0.0);
+                t.disque(x, y, (r * w / 120.0).max(1.0) + 0.5, trait_cote, 0.4, 0.8);
+            }
+            // la route, en tirets, sur l'arc de grand cercle
+            let (a, b) = (SAINT_MALO, POINTE_A_PITRE);
+            let vers = |p: (f32, f32)| {
+                let (lo, la) = (p.0.to_radians(), p.1.to_radians());
+                [la.cos() * lo.cos(), la.cos() * lo.sin(), la.sin()]
+            };
+            let (va, vb) = (vers(a), vers(b));
+            let om = (va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2]).acos();
+            let point = |f: f32| {
+                let (ka, kb) = (((1.0 - f) * om).sin() / om.sin(), (f * om).sin() / om.sin());
+                let v = [ka * va[0] + kb * vb[0], ka * va[1] + kb * vb[1], ka * va[2] + kb * vb[2]];
+                proj(v[1].atan2(v[0]).to_degrees(), v[2].atan2(v[0].hypot(v[1])).to_degrees())
+            };
+            for k in 0..30 {
+                if k % 2 == 0 {
+                    t.trait_(point(k as f32 / 30.0), point((k + 1) as f32 / 30.0), 1.0, hex(0xb03020), 0.75);
+                }
+            }
+            for (p, col) in [(a, 0x1d3f8a), (b, 0xb03020)] {
+                let (x, y) = proj(p.0, p.1);
+                t.disque(x, y, 2.6, hex(col), 1.0, 0.0);
+                t.disque(x, y, 1.2, hex(0xffffff), 1.0, 0.0);
+            }
+            t.ligne(&[(0.5, 0.5), (w - 0.5, 0.5), (w - 0.5, h - 0.5), (0.5, h - 0.5), (0.5, 0.5)], 1.0, hex(0x6a5a3a), 1.0);
+        })
+    });
+    papier.poser(t, x0, y0);
+    // la flotte : les petits d'abord, les Ultim par-dessus ; le premier de chaque classe cerclé,
+    // et qui palpite doucement
+    let r = (w / 110.0).clamp(1.2, 2.4);
+    let mut ordre: Vec<&[f32; 4]> = flotte.iter().collect();
+    ordre.sort_by(|a, b| b[0].total_cmp(&a[0]));
+    for b in ordre {
+        let (x, y) = proj(b[2], b[1]);
+        let col = hex(TEINTES[(b[0] as usize).min(5)]);
+        if b[3] == 1.0 {
+            t.disque(x0 + x, y0 + y, r * (2.0 + 0.4 * (t_ * 0.3).sin()), col, 0.35, 0.6);
+            t.disque(x0 + x, y0 + y, r + 1.2, hex(0xffffff), 1.0, 0.0);
+        }
+        t.disque(x0 + x, y0 + y, r, col, 1.0, 0.0);
     }
 }
 
@@ -1328,9 +1461,28 @@ mod tests {
     }
 
     #[test]
+    fn la_carte_place_la_flotte_et_les_couleurs_des_premiers_passent_aux_bateaux() {
+        let c = cadre(90.0);
+        let mut w = monde(PhaseRhum::Course, 0.5, 12.0);
+        let mut sans = vec![0u32; c.w * c.h];
+        Baie::default().peindre(&mut sans, c.w, c.h, c, &w);
+        // un bateau au milieu de l'Atlantique : la carte, en haut à droite, le montre
+        w.rhum_flotte = Some(vec![[0.0, 30.0, -35.0, 1.0]]);
+        let mut avec = vec![0u32; c.w * c.h];
+        Baie::default().peindre(&mut avec, c.w, c.h, c, &w);
+        let haut_droite = (0..c.h / 2).flat_map(|y| (c.w / 2..c.w).map(move |x| (x, y)));
+        let change = haut_droite.filter(|&(x, y)| sans[y * c.w + x] != avec[y * c.w + x]).count();
+        assert!(change > 10_000, "la carte se voit : {change} pixels");
+        // le premier Ultim prête ses couleurs à l'Ultim de la baie
+        let f = flotte(90.0, Some(&[[0, 0x123456, 0x654321]]));
+        let ultim = f.iter().rev().find(|b| b.sorte == Sorte::Ultim).unwrap();
+        assert_eq!((ultim.coque, ultim.bande), (hex(0x123456), hex(0x654321)));
+    }
+
+    #[test]
     fn avant_le_depart_les_bateaux_tirent_des_bords_dans_la_baie() {
         let (from, to) = (54.0, 126.0);
-        for b in flotte(to - from) {
+        for b in flotte(to - from, None) {
             let sens: Vec<f32> = (0..4000).step_by(50).map(|t| cap(&b, t as f32, PhaseRhum::Avant, from, to, 1.0).1).collect();
             assert!(sens.contains(&1.0) && sens.contains(&-1.0), "il vire de bord");
             for t in (0..4000).step_by(37) {

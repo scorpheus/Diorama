@@ -58,6 +58,9 @@ let rhumEnv: string | undefined
 /** A path as the plugin asked for it: off Windows the engine takes C:/… for a relative path and puts the folder in front. */
 const fakePath = (path: string) => path.replace(/\\/g, '/').replace(/^.*(?=C:\/fake\/)/, '')
 const rhumFile = { text: undefined as string | undefined, mtime: 1 }
+/** And the fleet's last report beside it. */
+const RHUM_DATA_PATH = 'C:/fake/.claude/diorama-route-du-rhum.json'
+const rhumData = { text: undefined as string | undefined, mtime: 1 }
 function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
   blits.length = 0
   reads.clear()
@@ -130,6 +133,7 @@ function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
   on('fs.read', (_$, e) => {
     const path = e.path.replace(/\\/g, '/')
     if (fakePath(path) === RHUM_PATH && rhumFile.text !== undefined) return { value: rhumFile.text }
+    if (fakePath(path) === RHUM_DATA_PATH && rhumData.text !== undefined) return { value: rhumData.text }
     if (fakePath(path) === `${SESSIONS_DIR}/4242.json`) return { value: JSON.stringify({ pid: 4242, sessionId, name: 'regate', cwd: 'C:/projets/vehigraph' }) }
     if (onDisk && path === STORE_FILE) {
       wholeReads++
@@ -1401,14 +1405,17 @@ test('the previews show every moment the engine plays, and know which ones walk 
 function fakeRhumFile(on: On, text: string | undefined) {
   rhumFile.text = text
   rhumFile.mtime = 1
+  rhumData.text = undefined
+  rhumData.mtime = 1
   on('fs.stat', (_$, e) => {
-    if (fakePath(e.path) !== RHUM_PATH || rhumFile.text === undefined) throw new Error('ENOENT')
-    return { value: { kind: 'file', size: rhumFile.text.length, mtimeMs: rhumFile.mtime, isLink: false } }
+    const f = fakePath(e.path) === RHUM_PATH ? rhumFile : fakePath(e.path) === RHUM_DATA_PATH ? rhumData : undefined
+    if (f?.text === undefined) throw new Error('ENOENT')
+    return { value: { kind: 'file', size: f.text.length, mtimeMs: f.mtime, isLink: false } }
   })
 }
 
 /** The worlds the plugin posted to the native render, as it sent them. */
-const worldsPosted = () => renderPosts.flatMap(p => p.body.split('\n')).filter(l => l.startsWith('monde ')).map(l => JSON.parse(l.split(' ').slice(7).join(' ')) as { rhum?: string })
+const worldsPosted = () => renderPosts.flatMap(p => p.body.split('\n')).filter(l => l.startsWith('monde ')).map(l => JSON.parse(l.split(' ').slice(7).join(' ')) as { rhum?: string; rhumProgress?: number; rhumFlotte?: number[][]; rhumTetes?: number[][] })
 
 test('the Route du Rhum shows in the session its file names, by pid, name or id, and leaves it when the file names another', { options: { rendu: 'oui' } }, async ($, on) => {
   fakeRhumFile(on, '4242\r\n')
@@ -1473,6 +1480,48 @@ test('at sea, the days of the race are counted', { options: { rendu: 'oui' } }, 
   await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
   expect(await ui.find({ text: '⛵ Route du Rhum · jour 3 de course · Saint-Malo → Pointe-à-Pitre, 3 542 milles' })).toBeDefined()
+})
+
+test("the fleet's last report shows on the chart, colours the bay's boats, and names each class's leader", { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  rhumData.text = JSON.stringify({
+    at: '2026-11-03T13:00:00Z',
+    bateaux: [
+      { nom: 'Trimaran Bleu', skipper: 'A. Marin', classe: 'Ultim', couleurs: ['#1d3f8a', '#f2c14e'], lat: 30.04, lon: -33.97, rang: 1, dtf: 1771.4, vitesse: 31.25 },
+      { nom: 'Trimaran Rouge', classe: 'ULTIM', lat: 31.2, lon: -32.1, rang: 2, dtf: 1850 },
+      { nom: 'Monocoque Noir', classe: 'imoca', lat: 40.5, lon: -15.2, dtf: 2600 },
+      { nom: 'Sans classe', classe: 'Optimist', lat: 40, lon: -10 },
+    ],
+  })
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 3, 15, 0) })
+  engine(on)
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await clock.advance(450)
+  const line = (await ui.find({ text: /^ {3}\S+ · 1er / }))?.text ?? ''
+  expect(line).toMatch(/^ {3}(Ultim · 1er Trimaran Bleu \(A\. Marin\) · 1 771 milles · 31,3 nœuds|IMOCA · 1er Monocoque Noir · 2 600 milles) · pointage \d\dh00$/)
+  expect(await ui.find({ text: /Route du Rhum : pointage de \d\dh00, 3 bateaux/ })).toBeDefined()
+  const w = worldsPosted().at(-1)
+  // the boat without a known class is left out; the IMOCA's rank comes from its distance
+  expect(w?.rhumFlotte).toEqual([[0, 30, -34, 1], [0, 31.2, -32.1, 2], [2, 40.5, -15.2, 1]])
+  expect(w?.rhumTetes).toEqual([[0, 0x1d3f8a, 0xf2c14e]])
+  // the scenery travels with the leaders: 1 771 of 3 542 miles still to go
+  expect(w?.rhumProgress).toBe(0.5)
+})
+
+test('a report that cannot be read is said in the log, and draws nothing', { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  rhumData.text = '{ "at": "hier", "bateaux": [] }'
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 3, 15, 0) })
+  engine(on)
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await clock.advance(450)
+  expect(await ui.find({ text: /diorama-route-du-rhum\.json illisible/ })).toBeDefined()
+  expect(worldsPosted().length).toBeGreaterThan(0)
+  expect(worldsPosted().at(-1)?.rhumFlotte).toBeUndefined()
 })
 
 /** The theme file on a fake disk: its text and when it last changed (the engine's `fs.read` serves it). */

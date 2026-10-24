@@ -277,6 +277,12 @@ mod tests {
         assert_eq!(etat.monde.rhum, Some(monde::PhaseRhum::Course));
         assert_eq!(etat.monde.plus_tard(10).rhum, Some(monde::PhaseRhum::Course));
         assert_eq!(Etat::lire(LIGNE).expect("sans elle aussi").monde.rhum, None);
+        // et le pointage : la flotte pour la carte, les couleurs des premiers
+        let ligne = LIGNE.replace(r#""clock":1012}"#, r#""clock":1012,"rhum":"race","rhumProgress":0.5,"rhumFlotte":[[0,30,-34,1],[2,40.5,-15.2,1]],"rhumTetes":[[0,1916810,15909198]]}"#);
+        let m = Etat::lire(&ligne).expect("le pointage se lit").monde;
+        assert_eq!(m.rhum_progress, Some(0.5));
+        assert_eq!(m.rhum_flotte, Some(vec![[0.0, 30.0, -34.0, 1.0], [2.0, 40.5, -15.2, 1.0]]));
+        assert_eq!(m.rhum_tetes, Some(vec![[0, 0x1d3f8a, 0xf2c14e]]));
     }
 
     #[test]

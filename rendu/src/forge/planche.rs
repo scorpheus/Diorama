@@ -83,7 +83,16 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Avant); w.month = 10; w.day = 30; w.hour = 15.0 })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.month = 11; w.day = 1; w.hour = 18.4 })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.3); w.month = 11; w.day = 3; w.hour = 11.0 })),
-        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.7); w.month = 11; w.day = 5; w.hour = 15.0 })),
+        (Activite::Idle, 0, avec(&|w| {
+            w.rhum = Some(PhaseRhum::Course);
+            w.rhum_progress = Some(0.7);
+            w.month = 11;
+            w.day = 5;
+            w.hour = 15.0;
+            // un pointage d'exemple, pour voir la carte : la flotte étirée le long de la route
+            w.rhum_flotte = Some(flotte_exemple());
+            w.rhum_tetes = Some(vec![[0, 0xf4f4f4, 0x2a8a3a], [2, 0x101018, 0xe0c020], [3, 0xd04a2a, 0xffffff]]);
+        })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.95); w.month = 11; w.day = 8; w.hour = 16.0 })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.95); w.month = 11; w.day = 8; w.hour = 22.0 })),
     ];
@@ -106,6 +115,20 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
         w.clock = *t * 7 + 1;
     }
     s
+}
+
+/// Une flotte d'exemple, pour la planche : chaque classe étirée le long de la route, les plus
+/// rapides devant (ce n'est pas un pointage).
+fn flotte_exemple() -> Vec<[f32; 4]> {
+    let mut f = Vec::new();
+    for (classe, n, devant) in [(0u32, 6, 0.72f32), (1, 6, 0.55), (2, 30, 0.5), (3, 50, 0.4), (4, 10, 0.3), (5, 14, 0.28)] {
+        for i in 0..n {
+            let a = devant * (1.0 - 0.35 * i as f32 / n as f32);
+            let j = super::pixels::hasard((classe * 97 + i) as i64) as f32 - 0.5;
+            f.push([classe as f32, 48.65 + (16.24 - 48.65) * a + j * 3.0, -2.02 + (-61.53 + 2.02) * a - j * 2.0, (i + 1) as f32]);
+        }
+    }
+    f
 }
 
 pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
