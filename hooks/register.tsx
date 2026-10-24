@@ -534,6 +534,7 @@ function worldNow(): World {
     masterpiece: anim.masterpiece,
     rare: anim.rare && anim.clock - anim.rare.since < theme.rareFor ? { kind: anim.rare.kind, age: anim.clock - anim.rare.since } : undefined,
     rhum: rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined,
+    rhumProgress: rhumHere() && anim.nowMs >= RHUM_START ? rhumProgressAt(anim.nowMs) : undefined,
     ...rackNow(),
     banner: anim.banner,
     speaking: anim.speaking,
@@ -1509,6 +1510,10 @@ const RHUM_FILE = 'diorama-route-du-rhum.txt' // in Claude Code's folder: which 
 
 const rhumHere = () => anim.rhumAsked || anim.rhumNamed
 const rhumPhaseAt = (ms: number): NonNullable<World['rhum']> => (ms < RHUM_START ? 'before' : 'race')
+// The leaders' time to Guadeloupe, about: the Ultims' record is under seven days (2022)
+const RHUM_LEAD_MS = 7 * 24 * 60 * 60 * 1000
+/** How far the race is, 0 to 1, in hundredths, at the leaders' pace: it moves the scenery on every hour and a half or so. */
+const rhumProgressAt = (ms: number) => Math.round(Math.min(1, Math.max(0, (ms - RHUM_START) / RHUM_LEAD_MS)) * 100) / 100
 
 /** The race's line beside the scene: the countdown to the start, then the days at sea. */
 function rhumLine(ms: number): string {

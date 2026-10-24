@@ -81,7 +81,11 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
         })),
         (Activite::Idle, 0, avec(&|w| { w.month = 1; w.hour = 11.0 })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Avant); w.month = 10; w.day = 30; w.hour = 15.0 })),
-        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.month = 11; w.day = 1; w.hour = 19.0 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.month = 11; w.day = 1; w.hour = 18.4 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.3); w.month = 11; w.day = 3; w.hour = 11.0 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.7); w.month = 11; w.day = 5; w.hour = 15.0 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.95); w.month = 11; w.day = 8; w.hour = 16.0 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.95); w.month = 11; w.day = 8; w.hour = 22.0 })),
     ];
     let mut trois = calme();
     trois.hour = 19.0;
@@ -106,6 +110,7 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
 
 pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
     let mut forge = Forge::default();
+    let mut baie = super::baie::Baie::default();
     let scenes = scenes();
     let cols = (super::atelier::SW + extra.clamp(0, super::atelier::GROW)) as usize;
     let (fw, fh) = (cols as i32 * CW, ROWS * CH);
@@ -120,6 +125,9 @@ pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
         let (cells, acteurs, _) = forge.image(Recadrage::Full, *a, *t, monde, true, extra, pet);
         scene.fill(0);
         peindre(&mut Cible { pixels: &mut scene, w: fw as usize, h: fh as usize }, &cells, None, cols, 0, 0, CW, CH);
+        if let Some(cadre) = super::cadre_baie(monde, 0, cols, CW, CH, fh as usize) {
+            baie.peindre(&mut scene, fw as usize, fh as usize, cadre, monde);
+        }
         for acteur in &acteurs {
             super::pet::peindre(acteur, &mut scene, fw as usize, fh as usize, 0, CW, CH);
         }

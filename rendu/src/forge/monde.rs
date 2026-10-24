@@ -180,6 +180,8 @@ pub struct Monde {
     pub rare: Option<Rare>,
     /// La session nommée pour la Route du Rhum : la mer dans la cour.
     pub rhum: Option<PhaseRhum>,
+    /// Où en est la course, de 0 au départ à 1 aux premières arrivées : le décor voyage.
+    pub rhum_progress: Option<f64>,
 }
 
 impl Default for Monde {
@@ -230,6 +232,7 @@ impl Default for Monde {
             masterpiece: false,
             rare: None,
             rhum: None,
+            rhum_progress: None,
         }
     }
 }

@@ -104,6 +104,8 @@ export type World = {
   rare?: { kind: 'star' | 'dragon'; age: number }
   /** The session named for the Route du Rhum: the sea in the yard, the fleet before its start or racing. */
   rhum?: 'before' | 'race'
+  /** Where the race stands, 0 at the start to 1 at the first arrivals: the native render's scenery travels (Saint-Malo, the open sea, the Azores, the tropics, Guadeloupe). */
+  rhumProgress?: number
 }
 
 export type Personality = 'calme' | 'jovial' | 'grognon' | 'reveur' | 'applique'
