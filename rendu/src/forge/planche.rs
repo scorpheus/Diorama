@@ -82,7 +82,9 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
         (Activite::Idle, 0, avec(&|w| { w.month = 1; w.hour = 11.0 })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Avant); w.month = 10; w.day = 30; w.hour = 15.0 })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.month = 11; w.day = 1; w.hour = 18.4 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.0); w.month = 11; w.day = 1; w.hour = 13.1 })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.3); w.month = 11; w.day = 3; w.hour = 11.0 })),
+        (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.75); w.month = 11; w.day = 6; w.hour = 23.0 })),
         (Activite::Idle, 0, avec(&|w| {
             w.rhum = Some(PhaseRhum::Course);
             w.rhum_progress = Some(0.7);

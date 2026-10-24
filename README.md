@@ -63,10 +63,10 @@ Pour la Route du Rhum 2026 (départ de Saint-Malo le dimanche 1er novembre à 13
 
 - **La flotte** : de petites voiles à l'horizon, des Class40 et des IMOCA (foils, gennaker au portant), un Ocean Fifty, et, si la cour est assez large, un ou deux Ultim en vol (la coque centrale hors de l'eau, le flotteur et ses foils dedans). Avant le départ, ils tirent des bords autour des bouées de la ligne ; après, ils filent vers l'Atlantique, sillage et embruns compris. La nuit, leurs feux de navigation s'allument.
 - **Le voyage** : le décor suit l'avancée de la course.
-  - À Saint-Malo, le quai de granit, le pavois, le phare sur son îlot.
-  - Au large, le pont de teck et ses filières, des dauphins qui sautent, une baleine qui souffle, et le Pico quand on passe les Açores.
-  - Aux tropiques, les cumulus des alizés, les poissons volants, les sargasses et les frégates.
-  - En Guadeloupe, la plage, les palmiers, les mornes de Basse-Terre et la Soufrière.
+  - À Saint-Malo, le quai de granit, le pavois, le phare sur son îlot, et le bateau-comité dont le canon tonne jusqu'au départ.
+  - Au large, le pont de teck et ses filières, des dauphins qui sautent, une baleine qui souffle, et le Pico quand on passe les Açores ; la nuit, les sillages s'allument.
+  - Aux tropiques, les cumulus des alizés, les grains et leur rideau de pluie, les poissons volants, les sargasses et les frégates.
+  - En Guadeloupe, la plage, les palmiers, les mornes de Basse-Terre et la Soufrière ; la nuit, le feu d'artifice des arrivées.
 - **Le ciel de l'heure** : le soleil qui se couche dans la mer et son reflet, la lune, les étoiles, les cumulus qui passent, l'orage.
 - **À côté des jauges** : le compte à rebours, puis le jour de course. Au coup de canon, le personnage saute de joie et le journal le note.
 
@@ -94,6 +94,8 @@ Ce fichier, quiconque a les données l'écrit : un script, un orchestrateur. Son
 - `dtf` : les milles jusqu'à l'arrivée.
 - `vitesse` : en nœuds.
 - Seuls `nom`, `classe`, `lat` et `lon` sont obligatoires ; un bateau sans eux est laissé de côté.
+
+Ce qui reste à vérifier et à brancher sur un PC, avec les vraies informations : [docs/route-du-rhum-a-faire.md](docs/route-du-rhum-a-faire.md).
 
 **Quelle session la montre**, au choix :
 - **le fichier** `diorama-route-du-rhum.txt`, dans le dossier de Claude Code (`%USERPROFILE%\.claude`, ou `CLAUDE_CONFIG_DIR`). Sa première ligne nomme la session par son pid, son nom ou son identifiant. Les sessions le relisent toutes les deux secondes, et celle qu'il nomme prend la mer. C'est ce qu'un orchestrateur écrit pour désigner une session, par exemple depuis cmd :

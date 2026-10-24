@@ -290,7 +290,7 @@ impl Baie {
         {
             let mut toile = Toile { px: &mut buf, w: c.w, h: c.h };
             self.mer(&mut toile, &c, &sky, et, t);
-            decor_anime(&mut toile, &c, &sky, et, w, t);
+            decor_anime(&mut toile, &mut self.gardees, &c, &sky, et, w, t);
             let taille = (c.room() / 40.0).clamp(0.55, 1.0);
             let phase = w.phase();
             // de l'horizon vers nous : les bateaux et les bêtes, chacun à sa profondeur
@@ -303,7 +303,9 @@ impl Baie {
             for (_, b, f) in &tous {
                 if let Some(b) = b {
                     let (u, dir) = cap(b, t, phase, c.from, c.to, taille);
-                    bateau(&mut toile, &mut self.gardees, &c, &sky, b, u, dir, t, phase, taille);
+                    // la nuit au large, la mer s'allume dans les sillages
+                    let phosphore = sky.nuit > 0.6 && matches!(et, Etape::Large | Etape::Acores | Etape::Tropiques);
+                    bateau(&mut toile, &mut self.gardees, &c, &sky, b, (u, dir), t, phase, taille, phosphore);
                 }
                 if let Some(f) = f {
                     f(&mut toile);
@@ -750,8 +752,19 @@ fn nuages(t: &mut Toile, c: &Cadre, sky: &Ciel, et: Etape, t_: f32) {
 }
 
 /// Ce qui bouge sans être un bateau ni une bête : le phare qui tourne, les bouées du départ.
-fn decor_anime(t: &mut Toile, c: &Cadre, sky: &Ciel, et: Etape, w: &Monde, t_: f32) {
+fn decor_anime(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, et: Etape, w: &Monde, t_: f32) {
     let room = c.room();
+    let course = w.phase() == PhaseRhum::Course;
+    // la semaine du départ et sa première heure : le bateau-comité, son canon
+    if et == Etape::Bretagne && room >= 20.0 && (!course || w.rhum_progress.unwrap_or(0.0) < 0.005) {
+        comite(t, gardees, c, sky, t_);
+    }
+    if et == Etape::Tropiques {
+        grain(t, gardees, c, sky, t_);
+    }
+    if et == Etape::Guadeloupe && sky.nuit > 0.5 && !sky.orage {
+        feu_d_artifice(t, c, t_);
+    }
     if et == Etape::Bretagne && room >= 40.0 && (sky.nuit > 0.2 || sky.orage) {
         // la lanterne s'allume, le faisceau balaie la baie
         let (x, y) = ((room - 10.0) * c.cw, c.y(SEA - 10.8));
@@ -776,6 +789,125 @@ fn decor_anime(t: &mut Toile, c: &Cadre, sky: &Ciel, et: Etape, w: &Monde, t_: f
             t.poly(&[(x - 0.9 * c.cw, y), (x + 0.9 * c.cw, y), (x + 0.5 * c.cw, y - 1.4 * c.demi), (x - 0.5 * c.cw, y - 1.4 * c.demi)], jaune, 1.0);
             t.trait_((x, y - 1.4 * c.demi), (x, y - 2.6 * c.demi), 1.2, mul(hex(0x2a2a30), sky.amb), 1.0);
             t.poly(&[(x, y - 2.6 * c.demi), (x + 1.2 * c.cw, y - 2.3 * c.demi), (x, y - 2.0 * c.demi)], mul(hex(0xd04a2a), sky.amb), 1.0);
+        }
+    }
+}
+
+/// Le bateau-comité au mouillage, au bout de la ligne de départ : sa coque, sa passerelle, son
+/// grand pavois ; et son canon, qui tonne à intervalles (un éclair, une bouffée qui s'étire).
+fn comite(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, t_: f32) {
+    let lane = 22.6;
+    let s = echelle(lane);
+    let l = 10.0 * s;
+    let (u, v) = (c.room() * 0.12 + l / 2.0 + 1.0, lane + 0.12 * (t_ * 0.15).sin());
+    let (x, y) = (u * c.cw, c.y(v));
+    let cle = (-300, (l * 100.0) as i32, (sky.amb[0] * 100.0) as i32, (sky.bas[2] * 10.0) as i32, 0);
+    let v_ = gardees.entry(cle).or_insert_with(|| {
+        let (w, h) = ((1.3 * l * c.cw) as usize + 8, (1.1 * l * c.demi) as usize + 8);
+        let (ox, oy) = (0.6 * l * c.cw + 4.0, 0.95 * l * c.demi + 4.0);
+        let (c, sky) = (*c, *sky);
+        Vignette::faire(w, h, ox, oy, &move |t: &mut Toile, ox: f32, oy: f32| {
+            let p = |a: f32, b: f32| (ox + a * l * c.cw, oy + b * l * c.demi);
+            let pts = |liste: &[(f32, f32)]| -> Vec<(f32, f32)> { liste.iter().map(|&(a, b)| p(a, b)).collect() };
+            let teinte = |col: u32| mix(mul(hex(col), sky.amb), sky.bas, 0.15);
+            t.poly(&pts(&[(-0.5, -0.15), (0.42, -0.17), (0.52, -0.22), (0.45, 0.0), (-0.47, 0.0)]), teinte(0x1d2a4a), 1.0);
+            t.poly(&pts(&[(-0.5, -0.15), (0.42, -0.17), (0.45, -0.15), (-0.5, -0.13)]), teinte(0xf4f4f0), 1.0);
+            t.poly(&pts(&[(-0.32, -0.15), (0.16, -0.16), (0.12, -0.33), (-0.28, -0.33)]), teinte(0xf0f0ec), 1.0);
+            t.poly(&pts(&[(-0.26, -0.27), (0.11, -0.27), (0.1, -0.3), (-0.25, -0.3)]), teinte(0x2a3a5a), 1.0);
+            t.trait_(p(-0.06, -0.33), p(-0.06, -0.85), 1.4, teinte(0x2a2a30), 1.0);
+            // le grand pavois : de l'étrave à la tête du mât, et jusqu'à la poupe
+            const FANIONS: [u32; 6] = [0xd04a2a, 0xf2c14e, 0x1d5a9a, 0xf4f4f0, 0x3c8a3c, 0x111111];
+            for (a, b) in [((0.5, -0.2), (-0.06, -0.85)), ((-0.06, -0.85), (-0.5, -0.16))] {
+                t.trait_(p(a.0, a.1), p(b.0, b.1), 0.8, teinte(0x3a3a44), 1.0);
+                for k in 1..8 {
+                    let f = k as f32 / 8.0;
+                    let (fx, fy) = (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f);
+                    let (x, y) = p(fx, fy);
+                    t.poly(&[(x - 1.6, y), (x + 1.6, y), (x + 1.6, y + 3.5), (x - 1.6, y + 3.5)], teinte(FANIONS[k % FANIONS.len()]), 1.0);
+                }
+            }
+        })
+    });
+    v_.poser(t, x, y);
+    // le coup de canon
+    let a = t_.rem_euclid(90.0);
+    let (bx, by) = (x + 0.48 * l * c.cw, y - 0.2 * l * c.demi);
+    if a < 2.0 {
+        t.disque(bx, by, 0.6 * l * c.cw * 0.25, hex(0xffd070), 0.9, 0.6);
+    }
+    if a < 40.0 {
+        let f = a / 40.0;
+        for k in 0..6 {
+            let g = k as f32 / 5.0;
+            let r = (1.0 + 3.0 * f.sqrt() * (0.6 + g * 0.4)) * s * c.demi;
+            t.disque(bx + (g * 2.5 + f * 4.0) * s * c.cw, by - (g * 0.8 + f * 2.5) * s * c.demi, r, mul(hex(0xe8e8ec), sky.amb), (1.0 - f) * 0.55, 0.8);
+        }
+    }
+}
+
+/// Un grain des tropiques : un gros nuage sombre qui traverse lentement, son rideau de pluie jusqu'à la mer.
+fn grain(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, t_: f32) {
+    let room = c.room();
+    let tour = room + 50.0;
+    let u = room + 20.0 - (t_ * 0.02 + 30.0).rem_euclid(tour);
+    let taille = 3.2;
+    let base = SEA - 6.0;
+    // la pluie : des traits penchés par le vent, qui tombent
+    let gris = mix(mul(hex(0x6a7480), sky.amb), sky.bas, 0.3);
+    for k in 0..36 {
+        let f = hasard(k * 7 + 3) as f32;
+        let x = (u + (f - 0.5) * taille * 3.0) * c.cw;
+        let chute = ((t_ * 0.9 + k as f32 * 13.0) % 30.0) / 30.0;
+        let (ya, yb) = (c.y(base + 1.0 + chute * 6.0), c.y(base + 3.0 + chute * 6.0 + hasard(k) as f32 * 4.0));
+        t.trait_((x, ya), (x - (yb - ya) * 0.25, yb), 1.0, gris, 0.35);
+    }
+    let rideau: Vec<(f32, f32)> = vec![
+        ((u - taille * 1.4) * c.cw, c.y(base + 0.5)),
+        ((u + taille * 1.4) * c.cw, c.y(base + 0.5)),
+        ((u + taille * 0.9) * c.cw, c.y(SEA + 2.5)),
+        ((u - taille * 1.9) * c.cw, c.y(SEA + 2.5)),
+    ];
+    t.poly(&rideau, gris, 0.18);
+    let cle = (-400, (c.cw * 100.0) as i32, (sky.amb[0] * 100.0) as i32, (sky.bas[2] * 10.0) as i32, 0);
+    let nuage = gardees.entry(cle).or_insert_with(|| {
+        let (w, h) = ((taille * 5.0 * c.cw) as usize, (taille * 3.0 * c.demi) as usize);
+        let (ox, oy) = (w as f32 / 2.0, h as f32 * 0.8);
+        let (c, mut sombre) = (*c, *sky);
+        sombre.orage = true;
+        sombre.amb = mul(sombre.amb, [0.9, 0.9, 0.95]);
+        Vignette::faire(w, h, ox, oy, &move |t: &mut Toile, ox: f32, oy: f32| cumulus(t, &c, &sombre, ox / c.cw, oy / c.demi, taille, 404, 1.0))
+    });
+    nuage.poser(t, u * c.cw, c.y(base));
+}
+
+/// Le feu d'artifice de l'arrivée, sur Pointe-à-Pitre, la nuit : des fusées qui montent et éclatent en gerbes.
+fn feu_d_artifice(t: &mut Toile, c: &Cadre, t_: f32) {
+    let room = c.room();
+    const TEINTES_FEU: [u32; 5] = [0xffd27a, 0xff6a5a, 0x7fd4ff, 0xb98cff, 0x8af08a];
+    for k in 0..3i64 {
+        let cycle = 56.0;
+        let a = (t_ + k as f32 * 19.0).rem_euclid(cycle);
+        let n = ((t_ + k as f32 * 19.0) / cycle).floor() as i64;
+        let (u, v) = (room * (0.35 + 0.55 * hasard(n * 7 + k) as f32), 2.5 + 6.0 * hasard(n * 13 + k) as f32);
+        let col = hex(TEINTES_FEU[(hasard(n * 3 + k) * 5.0) as usize % 5]);
+        if a < 7.0 {
+            // la fusée qui monte, sa traînée
+            let f = a / 7.0;
+            let (x, y) = (u * c.cw, c.y(SEA - 1.0 + (v - SEA + 1.0) * f));
+            t.trait_((x, y), (x, y + 2.0 * c.demi), 1.2, hex(0xffe0a0), 0.6);
+            t.disque(x, y, 1.4, hex(0xfff4d0), 1.0, 0.3);
+            continue;
+        }
+        let f = (a - 7.0) / (cycle - 7.0);
+        if f > 0.75 {
+            continue;
+        }
+        let r = f.sqrt() * 5.5;
+        for i in 0..28 {
+            let ang = i as f32 / 28.0 * 2.0 * PI + n as f32;
+            let (x, y) = ((u + ang.cos() * r) * c.cw, c.y(v + ang.sin() * r * 0.9 + f * f * 4.0));
+            t.disque(x, y, 1.7, col, (1.0 - f / 0.75) * 0.95, 0.3);
+            t.disque(x, y, 4.5, col, (1.0 - f / 0.75) * 0.25, 1.0);
         }
     }
 }
@@ -856,7 +988,7 @@ pub type Vignettes = std::collections::HashMap<(i64, i32, i32, i32, i32), Vignet
 /// Un bateau à sa place `u` (son milieu), allant dans le sens `dir` : son sillage et ses embruns,
 /// lui (une vignette par pas de tangage), ses feux la nuit.
 #[allow(clippy::too_many_arguments)]
-fn bateau(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, b: &Bateau, u: f32, dir: f32, t_: f32, phase: PhaseRhum, taille: f32) {
+fn bateau(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, b: &Bateau, (u, dir): (f32, f32), t_: f32, phase: PhaseRhum, taille: f32, phosphore: bool) {
     let (lg, mat) = gabarit(b.sorte);
     let s = echelle(b.lane);
     let l = lg * s * taille;
@@ -896,7 +1028,12 @@ fn bateau(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, b: &Bat
     for k in 0..bulles {
         let f = (k as f32 + (t_ * 0.3).fract()) / bulles as f32;
         let (px, py) = p(-0.48 - f * long, 0.01 + (hasard(k * 7 + b.graine) as f32 - 0.3) * 0.05 * f);
-        t.disque(px, py, 0.7 + s * 1.2 * (1.0 - f), blanc, (1.0 - f) * 0.7, 0.4);
+        if phosphore {
+            t.disque(px, py, 1.5 + s * 2.5 * (1.0 - f), hex(0x6ff0d8), (1.0 - f) * 0.35, 1.0);
+            t.disque(px, py, 0.6 + s * (1.0 - f), hex(0xb8fff0), (1.0 - f) * 0.9, 0.3);
+        } else {
+            t.disque(px, py, 0.7 + s * 1.2 * (1.0 - f), blanc, (1.0 - f) * 0.7, 0.4);
+        }
     }
 
     // lui, d'une vignette : dessinée une fois par pas de tangage, de vol et de sens
