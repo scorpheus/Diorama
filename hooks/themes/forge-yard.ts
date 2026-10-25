@@ -315,12 +315,14 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
   const wellAt = (x: number, y: number, c: RGB): RGB => {
     if (well === undefined || x < well || x >= well + 9 || y < 17 || y >= GROUND + 2) return c
     const dx = x - well
-    if (y >= 24) return lit((dx + (y % 2) * 2) % 3 === 0 ? hex(0x4f4a55) : hex(0x8a8494))
-    if (y === 17 || (y === 18 && dx > 0 && dx < 8)) return lit(winter ? hex(0xeef2f8) : hex(0x8a3a24))
-    if (dx === 1 || dx === 7) return lit(hex(0x5a3a1e))
-    if (y === 20 && dx > 1 && dx < 7) return lit(hex(0x7a4a24)) // the windlass
-    if (dx === 4 && y > 20 && y < 23) return lit(hex(0x8a90a0)) // the bucket's rope
-    if (dx >= 3 && dx <= 5 && y === 23) return lit(hex(0x6a4228)) // the bucket
+    // in the shade on the side away from the light, like the tree
+    const tone = (n: number) => leafOf(n, dx > 5)
+    if (y >= 24) return lit((dx + (y % 2) * 2) % 3 === 0 ? tone(0x4f4a55) : tone(0x8a8494))
+    if (y === 17 || (y === 18 && dx > 0 && dx < 8)) return lit(winter ? tone(0xeef2f8) : tone(0x8a3a24))
+    if (dx === 1 || dx === 7) return lit(tone(0x5a3a1e))
+    if (y === 20 && dx > 1 && dx < 7) return lit(tone(0x7a4a24)) // the windlass
+    if (dx === 4 && y > 20 && y < 23) return lit(tone(0x8a90a0)) // the bucket's rope
+    if (dx >= 3 && dx <= 5 && y === 23) return lit(tone(0x6a4228)) // the bucket
     return c
   }
 

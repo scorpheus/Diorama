@@ -251,6 +251,43 @@ def detourer(im):
     return im
 
 
+def sans_sol(im, epais=12, long=40):
+    """Sans les traits de sol qu'il tire sous une rangée (Gemini le fait) : un magenta plus sombre
+    que le fond, que le détourage laisse, et ce qui reste plein sur au plus `epais` pixels de haut
+    et sur plus de `long` de large. Ils souderaient les poses."""
+    px = np.array(im)
+    rose = np.minimum(px[..., 0], px[..., 2]).astype(np.int32) - px[..., 1] > 40
+    px[rose] = 0
+    im = Image.fromarray(px, 'RGBA')
+    a = np.asarray(im.getchannel('A')) > 96
+    h, w = a.shape
+    # la hauteur pleine autour de chaque pixel : ce qui est plein au-dessus et en dessous
+    haut = np.zeros((h, w), np.int32)
+    bas = np.zeros((h, w), np.int32)
+    for y in range(h):
+        haut[y] = np.where(a[y], (haut[y - 1] if y else 0) + 1, 0)
+    for y in range(h - 1, -1, -1):
+        bas[y] = np.where(a[y], (bas[y + 1] if y < h - 1 else 0) + 1, 0)
+    mince = a & (haut + bas - 1 <= epais)
+    trait = np.zeros_like(mince)
+    for y in range(h):
+        x, ligne = 0, mince[y]
+        while x < w:
+            if ligne[x]:
+                f = x
+                while f < w and ligne[f]:
+                    f += 1
+                if f - x > long:
+                    trait[y, x:f] = True
+                x = f
+            else:
+                x += 1
+    px = np.array(im)
+    px[trait] = 0
+    print(f'fond teinté retiré : {int(rose.sum())} pixels, traits de sol : {int(trait.sum())}')
+    return Image.fromarray(px, 'RGBA')
+
+
 def plages(occupe, ecart, minimum):
     """Les plages occupées d'une projection, les trous plus courts que `ecart` comblés."""
     out, debut, vide = [], None, 0
@@ -295,7 +332,7 @@ def pied(im):
 
 def importer(chemin):
     ns = noms()
-    siennes = poses(detourer(Image.open(chemin)))
+    siennes = poses(sans_sol(detourer(Image.open(chemin))))
     if len(siennes) != len(ns):
         sys.exit(f'{len(siennes)} poses trouvées dans {chemin}, il en faut {len(ns)} ({COLONNES} par rangée, '
                  'bien séparées) : rien d\'écrit')

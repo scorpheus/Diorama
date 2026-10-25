@@ -107,7 +107,9 @@ impl App {
                 note("on me demande de partir");
                 return false;
             }
-            ["bande", session, cols, rows] => {
+            ["bande", session, cols, rows, vivant @ ..] if vivant.len() <= 1 => {
+                // après un /clear, le processus va sous un autre identifiant : on le trouve par lui
+                let vivant = vivant.first().unwrap_or(session);
                 let (Ok(cols), Ok(rows)) = (cols.parse::<i32>(), rows.parse::<i32>()) else { return true };
                 if cols < 2 || rows < 1 {
                     return true;
@@ -122,10 +124,18 @@ impl App {
                     }
                     return true;
                 }
-                let Some(pid) = reperes::processus_de(session) else {
-                    note(&format!("{session} : pas de processus connu"));
+                let Some(pid) = reperes::processus_de(vivant) else {
+                    note(&format!("{session} : pas de processus connu sous {vivant}"));
                     return true;
                 };
+                // un même processus n'a qu'un bandeau : un module rechargé après un /clear en
+                // annonce un sous un autre nom, l'ancien ne se verra plus
+                self.bandes.retain(|b| {
+                    if b.pid == pid {
+                        note(&format!("{} : remplacé par {session}", b.session));
+                    }
+                    b.pid != pid
+                });
                 note(&format!("{session} (processus {pid}) : bandeau de {cols} × {rows} cellules"));
                 self.bandes.push(Bande {
                     session: session.to_string(),
@@ -259,6 +269,19 @@ impl App {
                     b.place = Some(Place { x: ici.x - r.left, y: ici.y - r.top, ..ici });
                     b.perdu_depuis = None;
                     poser(b, terminal, &ici);
+                    // les onglets d'un terminal ont leur bandeau au même endroit : celui qu'on
+                    // vient de voir à l'écran a pris la place d'un autre, que son prochain coup
+                    // d'œil n'aurait caché qu'après (jusqu'à 2 s, les deux forges l'une sur l'autre)
+                    let (ici, cols, rows) = (b.place.unwrap(), b.cols, b.rows);
+                    let session = b.session.clone();
+                    for (j, o) in self.bandes.iter_mut().enumerate() {
+                        let Some(p) = o.place.filter(|_| j != i && o.terminal == Some(terminal)) else { continue };
+                        let croise = p.x < ici.x + cols * ici.cw && ici.x < p.x + o.cols * p.cw && p.y < ici.y + rows * ici.ch && ici.y < p.y + o.rows * p.ch;
+                        if croise && o.toile.as_ref().is_some_and(|t| t.visible) {
+                            note(&format!("{} : caché, {session} est montré à sa place", o.session));
+                            o.cacher();
+                        }
+                    }
                 }
             }
         }

@@ -261,9 +261,13 @@ function later(w: World, ticks: number): World {
   }
 }
 
-/** Mark n of this session: a dark colour, each channel 0x00, 0x11 or 0x22, never black (rendu/src/reperes.rs). */
+/**
+ * Mark n of this session: a dark colour, each channel 0x00, 0x11 or 0x22, never black (rendu/src/reperes.rs).
+ * The lower half of a cell (n odd) never takes its upper half's: the app would not see where the upper one ends.
+ */
 function markOf(n: number): number {
-  const v = (((hashOf(anim.sessionId) >>> (n * 8)) & 0xff) % 26) + 1
+  const shade = (k: number) => (((hashOf(anim.sessionId) >>> (k * 8)) & 0xff) % 26) + 1
+  const v = n % 2 === 1 && shade(n) === shade(n - 1) ? (shade(n) % 26) + 1 : shade(n)
   return ((((v / 9) | 0) % 3) * 0x11) << 16 | ((((v / 3) | 0) % 3) * 0x11) << 8 | (v % 3) * 0x11
 }
 
@@ -278,14 +282,16 @@ function stillBand(columns: number, rows: number): Uint32Array {
 }
 
 /**
- * Tells the app of the band (« bande session columns rows ») once it has changed, now and then
+ * Tells the app of the band (« bande session columns rows », then the id the process goes by
+ * when a /clear has changed it) once it has changed, now and then
  * since, and more often while it does not answer; and of the world (« monde session crop extra
  * lit moment tick json ») when it is not what the app would make of the last one, ticks later:
  * standing at the anvil, nothing goes; walking, a line a tick.
  */
 function tellRender($: EngineInterface, crop: Crop, w: World, tick: number, lit: boolean) {
   if (render.busy || anim.clock - render.failedAt < RENDER_RETRY_TICKS) return
-  const band = `${anim.sessionId} ${cropWidth(crop) + anim.extra} ${theme.rows}`
+  const live = anim.liveId && anim.liveId !== anim.sessionId ? ` ${anim.liveId}` : ''
+  const band = `${anim.sessionId} ${cropWidth(crop) + anim.extra} ${theme.rows}${live}`
   const head = `${anim.sessionId} ${crop} ${anim.extra} ${lit ? 1 : 0} ${anim.current}`
   const lines: string[] = []
   const bandDue = band !== render.told || anim.clock - render.at >= RENDER_REFRESH_TICKS
@@ -422,6 +428,9 @@ const anim = {
   phase: 0,
   cubs: new Map<string, { seed: number; colour: string; born: number }>(),
   sessionId: '',
+  // the id the process goes by now: a /clear gives it another, with no session.start, while
+  // sessionId keeps the one he was born under (his look, his marks); the app finds the process by it
+  liveId: '',
   cape: 'foret',
   accessory: 'aucun' as Accessory,
   styled: false, // whether this session's look was chosen (by Haiku, or kept from before)
@@ -1534,6 +1543,7 @@ export const register: Register = (on, options) => {
     anim.banner = bannerOf(anim.project)
     // a host without session ids must not cost him his start: the project and the hour stand in
     anim.sessionId = await $.session.id().catch(() => `${anim.project}-${anim.nowMs}`)
+    anim.liveId = anim.sessionId
     anim.phase = hashOf(anim.sessionId) % 9973
     anim.title = String((await $.store.get(TITLE_PREFIX + anim.sessionId)) ?? anim.title)
     {
@@ -1645,6 +1655,7 @@ export const register: Register = (on, options) => {
         void syncClock($).catch(() => undefined)
         void flushWeek($).catch(() => undefined)
         void heartbeat($).catch(() => undefined)
+        void $.session.id().then(id => { anim.liveId = id }, () => undefined)
         void reconcileApprentices($).catch(() => undefined)
         $.ui.invalidate('ui.render')
       }),

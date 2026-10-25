@@ -236,6 +236,59 @@ mod tests {
         assert_eq!((plus.clock, plus.cat.map(|c| c.age)), (1022, Some(94)));
     }
 
+    /// Peinte par morceaux image après image, la forge est celle qu'on peindrait en entier : rien
+    /// de lui ni de ses invités ne reste où ils étaient, quand il marche ou qu'ils passent.
+    #[test]
+    fn rien_ne_reste_ou_il_etait() {
+        use crate::scene::{Image, Scene};
+        let (cw, ch) = (9u32, 19u32);
+        for recadrage in [Recadrage::Full, Recadrage::Compact, Recadrage::Solo] {
+            for extra in [0, 12] {
+                let mut base = Etat::lire(LIGNE).unwrap();
+                base.recadrage = recadrage;
+                base.extra = extra;
+                let (x0, x1) = crop(recadrage);
+                let cols = if x1 == SW { SW + extra.clamp(0, GROW) - x0 } else { x1 - x0 };
+                let (w, h) = (cols as u32 * cw, atelier::ROWS as u32 * ch);
+                let mut morceaux = SceneForge::new();
+                let mut garde = vec![0u32; (w * h) as usize];
+                for t in 0..48i64 {
+                    let mut etat = Etat::lire(LIGNE).unwrap();
+                    etat.recadrage = recadrage;
+                    etat.extra = extra;
+                    etat.tick = base.tick + t;
+                    etat.monde.clock = base.monde.clock + t;
+                    // il marche d'un bout à l'autre et revient ; un invité arrive de la coulisse
+                    let aller = t < 24;
+                    etat.monde.walking = true;
+                    etat.monde.facing = if aller { 1 } else { -1 };
+                    etat.monde.x = if aller { -12 + t as i32 } else { 12 - (t as i32 - 24) };
+                    etat.monde.guests = vec![monde::Invite {
+                        x: atelier::GUEST_SPOT + 40 - t as i32,
+                        walking: true,
+                        facing: -1,
+                        cape: [monde::Lettre(b'N'), monde::Lettre(b'L')],
+                        accessory: Accessoire::Aucun,
+                        tick: t,
+                        waving: false,
+                    }];
+                    let mut entiere = SceneForge::new();
+                    entiere.recevoir(clone_etat(&etat));
+                    morceaux.recevoir(clone_etat(&etat));
+                    let mut neuve = vec![0u32; (w * h) as usize];
+                    entiere.peindre(&mut Image { pixels: &mut neuve, w, h, cellule: (cw, ch) }, 0.15, true);
+                    morceaux.peindre(&mut Image { pixels: &mut garde, w, h, cellule: (cw, ch) }, 0.15, t == 0);
+                    let ecarts = garde.iter().zip(&neuve).filter(|(a, b)| a != b).count();
+                    assert_eq!(ecarts, 0, "{recadrage:?} +{extra}, tic {t} : {ecarts} pixels restés");
+                }
+            }
+        }
+    }
+
+    fn clone_etat(e: &Etat) -> Etat {
+        Etat { recadrage: e.recadrage, extra: e.extra, lit: e.lit, activite: e.activite, tick: e.tick, monde: e.monde.clone() }
+    }
+
     #[test]
     fn une_ligne_abimee_ne_casse_rien() {
         assert!(Etat::lire("full 0 1 idle").is_err());

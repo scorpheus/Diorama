@@ -632,7 +632,9 @@ impl Peintre {
             return c;
         }
         let dx = x - well;
-        let lit = |c| self.lit(c, 0.0);
+        // à l'ombre du côté loin de la lumière, comme l'arbre
+        let shade = if dx > 5 { 0.8 } else { 1.05 };
+        let lit = |c| self.lit(mul(c, [shade; 3]), 0.0);
         if y >= 24 {
             return lit(if (dx + (y % 2) * 2) % 3 == 0 { hex(0x4f4a55) } else { hex(0x8a8494) });
         }

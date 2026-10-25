@@ -25,13 +25,17 @@ pub fn hash(texte: &str) -> u32 {
 }
 
 /// Les quatre repères d'une session : des couleurs sombres (chaque canal 0x00, 0x11 ou 0x22),
-/// jamais le noir pur (register.tsx : markOf).
+/// jamais le noir pur (register.tsx : markOf). La moitié basse d'une cellule ne prend jamais la
+/// teinte de la haute : on ne verrait pas où finit la haute (chercher).
 pub fn reperes(session: &str) -> [u32; 4] {
     let h = hash(session);
-    std::array::from_fn(|n| {
-        let v = ((h >> (n * 8)) & 0xff) % 26 + 1;
-        (v / 9 % 3 * 0x11) << 16 | (v / 3 % 3 * 0x11) << 8 | (v % 3 * 0x11)
-    })
+    let mut v: [u32; 4] = std::array::from_fn(|n| ((h >> (n * 8)) & 0xff) % 26 + 1);
+    for n in [1, 3] {
+        if v[n] == v[n - 1] {
+            v[n] = v[n] % 26 + 1;
+        }
+    }
+    v.map(|v| (v / 9 % 3 * 0x11) << 16 | (v / 3 % 3 * 0x11) << 8 | (v % 3 * 0x11))
 }
 
 /// Où se tient le bandeau à l'écran, en pixels physiques.
@@ -312,6 +316,18 @@ mod tests {
     #[ignore]
     fn dort() {
         std::thread::sleep(std::time::Duration::from_secs(5));
+    }
+
+    /// Les deux moitiés d'une cellule repère diffèrent : sinon la moitié haute n'a pas de fin, et
+    /// le bandeau ne se trouve jamais (une session sur 26, comme b7ddbbed…).
+    #[test]
+    fn les_deux_moities_d_un_repere_different() {
+        let mut sessions: Vec<String> = (0..2000).map(|i| format!("session-{i}")).collect();
+        sessions.push("b7ddbbed-9ee5-40fd-be13-64342728212d".into());
+        for s in &sessions {
+            let [a, b, c, d] = reperes(s);
+            assert!(a != b && c != d, "{s} : {a:06x} {b:06x} {c:06x} {d:06x}");
+        }
     }
 
     #[test]

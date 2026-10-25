@@ -927,6 +927,34 @@ test('with the native render, the app is launched and told of the band, and the 
   expect(blits.length).toBe(0)
 })
 
+test('the two halves of a mark cell differ, else the app never finds the band', { options: { rendu: 'oui' } }, async ($, on) => {
+  // its first cell came out one colour, top and bottom: the app never saw where the top ended
+  mock.clock(on, { now: Date.UTC(2026, 9, 2, 12, 0) })
+  engine(on)
+  sessionId = 'b7ddbbed-9ee5-40fd-be13-64342728212d'
+  on('tool.call', () => ({ result: 'ok' }))
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  const raster = await ui.find({ type: 'Raster', key: 'diorama' })
+  const bytes = Uint8Array.from(atob(String(raster?.props.cells)), c => c.charCodeAt(0))
+  const words = new Uint32Array(bytes.buffer)
+  const n = words.length
+  expect(words[1]).not.toBe(words[2])
+  expect(words[n - 2]).not.toBe(words[n - 1])
+})
+
+test('after a /clear, the app is told the new session id, to find the process by', { options: { rendu: 'oui' }, timeoutMs: 60_000 }, async ($, on) => {
+  const { clock } = await start($, on)
+  renderAnswers = true
+  await clock.advance(3000)
+  // a /clear: the process goes on under another id, and no session.start fires
+  sessionId = 'sess-2'
+  await clock.advance(45_000)
+  const bands = renderPosts.map(p => p.body.split('\n')[0] ?? '').filter(l => l.startsWith('bande '))
+  // the band keeps its name (its marks, its look); the id it is found by comes after
+  expect(bands.at(-1)).toMatch(/^bande sess-1 \d+ \d+ sess-2$/)
+})
+
 test('the visits are looked for in the store read whole, once a look', { timeoutMs: 120_000 }, async ($, on) => {
   // forty ravens of sessions long gone: in the file, never asked for one by one
   const old = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`news:old-${i}`, { kind: 'done', project: 'Vieux', at: START - 86_400_000 }]))

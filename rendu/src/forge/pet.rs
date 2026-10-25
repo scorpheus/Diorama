@@ -189,6 +189,9 @@ pub fn cases(ch: u32, cape: u8, acc: Accessoire) -> Option<Arc<Cases>> {
         return Some(c.clone());
     }
     let mut planches = PLANCHES.iter().map(|p| decoder(p)).collect::<Option<Vec<_>>>()?;
+    for (w, rgba) in &mut planches {
+        reparer(*w, rgba);
+    }
     // l'accessoire avant la cape : le bandeau, de son vert, en prend la teinte
     if let Some((_, calque)) = CALQUES.iter().find(|(a, _)| *a == acc) {
         if let Some(calque) = decoder(calque) {
@@ -316,6 +319,68 @@ fn decoder(planche: &[u8]) -> Option<(usize, Vec<[f32; 4]>)> {
         })
         .collect::<Vec<_>>();
     (rgba.len() == (w * h) as usize).then_some((w as usize, rgba))
+}
+
+/// Ce que le détourage du fond magenta a laissé sur une planche. Au bord du personnage et en
+/// points perdus, le magenta mêlé aux couleurs (plus de rouge et de bleu que de vert, ce que ni la fourrure, ni la
+/// cape, ni la crête n'ont) en est ôté. Et ce qu'il a pris pour du fond au-dedans (l'intérieur
+/// des oreilles, des traînées dans la fourrure), un trou que le fond du dehors n'atteint pas, est
+/// rempli des couleurs autour, du bord vers le centre.
+fn reparer(w: usize, rgba: &mut [[f32; 4]]) {
+    let h = rgba.len() / w;
+    let vide = |p: &[f32; 4]| p[3] <= 40.0;
+    let voisins = |i: usize| {
+        let (x, y) = (i % w, i / w);
+        [(-1, 0), (1, 0), (0, -1), (0, 1)].into_iter().filter_map(move |(dx, dy): (i32, i32)| {
+            let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+            ((0..w as i32).contains(&nx) && (0..h as i32).contains(&ny)).then(|| ny as usize * w + nx as usize)
+        })
+    };
+    for p in rgba.iter_mut() {
+        let m = p[0].min(p[2]) - p[1];
+        if m > 0.0 {
+            p[0] -= m;
+            p[2] -= m;
+        }
+    }
+    // le fond du dehors : le vide qui touche le bord de la planche
+    let mut dehors = vec![false; rgba.len()];
+    let mut pile: Vec<usize> = (0..rgba.len()).filter(|&i| (i % w == 0 || i % w == w - 1 || i < w || i >= w * (h - 1)) && vide(&rgba[i])).collect();
+    pile.iter().for_each(|&i| dehors[i] = true);
+    while let Some(i) = pile.pop() {
+        for n in voisins(i) {
+            if !dehors[n] && vide(&rgba[n]) {
+                dehors[n] = true;
+                pile.push(n);
+            }
+        }
+    }
+    let mut trous: Vec<usize> = (0..rgba.len()).filter(|&i| !dehors[i] && vide(&rgba[i])).collect();
+    let mut plein: Vec<bool> = rgba.iter().map(|p| !vide(p)).collect();
+    while !trous.is_empty() {
+        let mut faits = Vec::new();
+        for &i in &trous {
+            let (mut somme, mut n) = ([0.0f32; 3], 0.0);
+            for v in voisins(i).filter(|&v| plein[v]) {
+                let p = rgba[v];
+                for c in 0..3 {
+                    somme[c] += p[c] / p[3] * 255.0;
+                }
+                n += 1.0;
+            }
+            if n > 0.0 {
+                faits.push((i, [somme[0] / n, somme[1] / n, somme[2] / n, 255.0]));
+            }
+        }
+        if faits.is_empty() {
+            break;
+        }
+        for &(i, p) in &faits {
+            rgba[i] = p;
+            plein[i] = true;
+        }
+        trous.retain(|&i| !plein[i]);
+    }
 }
 
 /// Lanczos à deux lobes : net sans trop d'auréole sur les contours d'un pixel art.
@@ -529,6 +594,53 @@ mod tests {
             for i in 0..n {
                 assert!(c.case(r, i).is_some_and(|k| k.w > 0), "{r:?} {i}");
             }
+        }
+    }
+
+    /// Le fond magenta ne se voit plus : ni trou au-dedans du personnage, ni liseré rose autour.
+    #[test]
+    fn le_fond_ne_reste_ni_dedans_ni_autour() {
+        for planche in PLANCHES {
+            let (w, mut rgba) = decoder(planche).unwrap();
+            reparer(w, &mut rgba);
+            let rose = rgba.iter().filter(|p| p[3] > 0.0 && p[0].min(p[2]) - p[1] > 40.0 * p[3] / 255.0).count();
+            assert_eq!(rose, 0, "pixels rosés");
+            // le vide que le fond du dehors n'atteint pas
+            let h = rgba.len() / w;
+            let mut dehors = vec![false; rgba.len()];
+            let mut pile: Vec<usize> = (0..w).chain((0..h).map(|y| y * w)).collect();
+            while let Some(i) = pile.pop() {
+                if dehors[i] || rgba[i][3] > 40.0 {
+                    continue;
+                }
+                dehors[i] = true;
+                let (x, y) = (i % w, i / w);
+                if x > 0 { pile.push(i - 1) }
+                if x + 1 < w { pile.push(i + 1) }
+                if y > 0 { pile.push(i - w) }
+                if y + 1 < h { pile.push(i + w) }
+            }
+            let trous = (0..rgba.len()).filter(|&i| !dehors[i] && rgba[i][3] <= 40.0).count();
+            assert_eq!(trous, 0, "pixels de trou");
+        }
+    }
+
+    /// La planche réparée, en RGBA brut non prémultiplié, pour la regarder : PLANCHE_SORTIE=<fichier>.
+    #[test]
+    #[ignore]
+    fn ecrire_la_planche_reparee() {
+        let sortie = std::env::var("PLANCHE_SORTIE").unwrap();
+        for (k, planche) in PLANCHES.iter().enumerate() {
+            let (w, mut rgba) = decoder(planche).unwrap();
+            reparer(w, &mut rgba);
+            let brut: Vec<u8> = rgba
+                .iter()
+                .flat_map(|p| {
+                    let a = p[3].max(1e-3) / 255.0;
+                    [(p[0] / a) as u8, (p[1] / a) as u8, (p[2] / a) as u8, p[3] as u8]
+                })
+                .collect();
+            std::fs::write(format!("{sortie}.{k}.{w}.rgba"), brut).unwrap();
         }
     }
 
