@@ -1538,6 +1538,54 @@ test("the fleet's last report shows on the chart, colours the bay's boats, and n
   expect(w?.rhumProgress).toBe(0.5)
 })
 
+/** The show the worlds posted carry, by when they were posted. */
+const showsPosted = () => worldsPosted().map(w => (w as { rhumFete?: { kind: string; age: number } }).rhumFete)
+
+test('the session that shows the race opens with its start played again, once the app answers', { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 26, 8, 0) })
+  engine(on)
+  on('tool.call', (_$, e) => answerTools(e))
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  // the app not up yet: nothing is played to nobody
+  await clock.advance(6000)
+  expect(showsPosted().filter(Boolean)).toEqual([])
+  renderAnswers = true
+  await clock.advance(10_000)
+  const shows = showsPosted().filter(Boolean)
+  expect(shows[0]).toEqual({ kind: 'start', age: 0 })
+  expect(await ui.find({ text: /Route du Rhum : le départ, rejoué/ })).toBeDefined()
+  // played once: some thirty seconds later, the bay is the race's again
+  await clock.advance(30_000)
+  expect(showsPosted().at(-1)).toBeUndefined()
+  const before = showsPosted().filter(Boolean).length
+  await clock.advance(30_000)
+  expect(showsPosted().filter(Boolean).length).toBe(before)
+})
+
+test('once boats have finished, the show is their arrival, and names those not cheered yet', { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  rhumData.text = JSON.stringify({
+    at: '2026-11-08T05:00:00Z',
+    bateaux: [
+      { nom: 'Trimaran Bleu', classe: 'Ultim', lat: 16.23, lon: -61.53, rang: 1, dtf: 0, statut: 'ARV' },
+      { nom: 'Trimaran Rouge', classe: 'Ultim', lat: 17.9, lon: -59.1, rang: 2, dtf: 160.2, statut: 'RAC' },
+    ],
+  })
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 8, 7, 0) })
+  engine(on)
+  on('tool.call', (_$, e) => answerTools(e))
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  renderAnswers = true
+  await clock.advance(12_000)
+  expect(showsPosted().find(Boolean)?.kind).toBe('finish')
+  expect(await ui.find({ text: /Route du Rhum : arrivé à Pointe-à-Pitre : Trimaran Bleu \(Ultim\)/ })).toBeDefined()
+})
+
 test('a boat out of the race stays on the chart, but leads nothing and moves no scenery', { options: { rendu: 'oui' } }, async ($, on) => {
   fakeRhumFile(on, undefined)
   rhumEnv = '1'

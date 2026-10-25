@@ -751,8 +751,12 @@ fn draw_messenger(ctx: &Contexte, g: &mut Grille, m: &Messager) {
     g.stamp(x + CLAWS.0, y + CLAWS.1, if m.kind == Nouvelle::Waiting { &["WFW", ".F."][..] } else { &["WWV"][..] });
 }
 
-/// La cour selon le temps : une flaque après l'orage, un bonhomme de neige l'hiver, des feuilles l'automne.
+/// La cour selon le temps : une flaque après l'orage, un bonhomme de neige l'hiver, des feuilles
+/// l'automne. Rien quand la baie de la Route du Rhum en tient la place.
 fn draw_yard(g: &mut Grille, w: &Monde) {
+    if w.rhum.is_some() {
+        return;
+    }
     if w.weather == Some(Temps::Storm) {
         g.stamp(YARD + 2, SH - 1, &[".cbbbc."]);
     }
@@ -1717,4 +1721,24 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
     ctx.draw_cubs(cour, &mut g, &world.apprentices, world.weather == Some(Temps::Storm));
     draw_yard_weather(cour, &mut g, world, YARD, ctx.edge);
     g
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::monde::PhaseRhum;
+
+    /// Les feuilles de l'automne, la flaque et le bonhomme de neige sont ceux de la cour : sur le
+    /// quai de la Route du Rhum, ils resteraient en carrés opaques par-dessus la baie.
+    #[test]
+    fn sur_le_quai_de_la_route_du_rhum_la_cour_ne_pose_rien() {
+        let mut w = Monde { month: 11, day: 2, hour: 14.0, ..Monde::default() };
+        let mut g = Grille::new(SW, SH);
+        draw_yard(&mut g, &w);
+        assert_ne!(g.at(YARD + 1, SH - 1), b'.', "l'automne, des feuilles dans la cour");
+        w.rhum = Some(PhaseRhum::Avant);
+        let mut g = Grille::new(SW, SH);
+        draw_yard(&mut g, &w);
+        assert!((YARD..SW).all(|x| (0..SH).all(|y| g.at(x, y) == b'.')), "rien sur le quai");
+    }
 }

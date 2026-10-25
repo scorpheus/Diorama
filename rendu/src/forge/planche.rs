@@ -276,6 +276,45 @@ mod film {
         std::fs::write(std::env::var("FILM").unwrap(), super::png(&out, ((vue + 4) * n) as u32, h as u32)).unwrap();
     }
 
+    /// Le spectacle de la Route du Rhum au lancement d'une session, une image tous les AGES tics,
+    /// l'une sous l'autre : SPECTACLE=start|finish FILM=<sortie.png> cargo test --release film_rhum -- --ignored
+    /// HEURE : l'heure du jour (11 par défaut) ; COURSE=1 : le vrai départ déjà donné
+    #[test]
+    #[ignore]
+    fn film_rhum() {
+        let (cw, ch, cols) = (9i32, 19i32, 144i32);
+        let (w, h) = (cols * cw, 16 * ch);
+        let arrivee = std::env::var("SPECTACLE").is_ok_and(|s| s == "finish");
+        let heure = std::env::var("HEURE").ok().and_then(|v| v.parse().ok()).unwrap_or(11.0);
+        let course = arrivee || std::env::var("COURSE").is_ok_and(|s| s == "1");
+        let mut monde = Monde { clock: 1, month: 10, day: 26, hour: heure, ..Monde::default() };
+        monde.rhum = Some(if course { PhaseRhum::Course } else { PhaseRhum::Avant });
+        monde.rhum_progress = course.then_some(if arrivee { 0.97 } else { 0.4 });
+        monde.rhum_fete = Some(SpectacleRhum { kind: if arrivee { FeteRhum::Arrivee } else { FeteRhum::Depart }, age: 0 });
+        let mut s = SceneForge::new();
+        s.recevoir(Etat { recadrage: Recadrage::Full, extra: 72, lit: true, activite: Activite::Idle, tick: 0, monde });
+        let mut px = vec![0u32; (w * h) as usize];
+        let pas = std::env::var("AGES").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
+        let (x0, vue) = (super::super::atelier::YARD * cw - 60, cols * cw - super::super::atelier::YARD * cw + 60);
+        let ages: Vec<i64> = (0..super::super::baie::FETE + 30).step_by(pas).collect();
+        let mut out = vec![0xFF16_1616u32; (vue * (h + 4) * ages.len() as i32) as usize];
+        let mut k = 0;
+        for age in 0..super::super::baie::FETE + 30 {
+            s.peindre(&mut Image { pixels: &mut px, w: w as u32, h: h as u32, cellule: (cw as u32, ch as u32) }, 0.15, age == 0);
+            if age % pas as i64 != 0 {
+                continue;
+            }
+            for y in 0..h {
+                for x in 0..vue {
+                    let p = px[(y * w + x0 + x) as usize];
+                    out[((k * (h + 4) + y) * vue + x) as usize] = if p >> 24 == 0 { 0xFF0C_0C0C } else { p };
+                }
+            }
+            k += 1;
+        }
+        std::fs::write(std::env::var("FILM").unwrap(), super::png(&out, vue as u32, ((h + 4) * ages.len() as i32) as u32)).unwrap();
+    }
+
     /// Ce que coûte une image de la Route du Rhum, baie comprise, à côté de la cour ordinaire,
     /// scène par scène de la planche : cargo test --release chrono_baie -- --ignored --nocapture
     #[test]

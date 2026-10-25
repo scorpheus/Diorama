@@ -43,6 +43,10 @@ sorte!(ModeChat { Roof = "roof", Walk = "walk", Flee = "flee" });
 sorte!(Cadeau { Coin = "coin", Cookie = "cookie", Ore = "ore" });
 sorte!(Nouvelle { Done = "done", Waiting = "waiting" });
 sorte!(Rarete { Star = "star", Dragon = "dragon" });
+sorte!(
+    /// Le spectacle de la Route du Rhum au lancement d'une session : le départ rejoué, ou une arrivée.
+    FeteRhum { Depart = "start", Arrivee = "finish" }
+);
 sorte!(Recadrage { Full = "full", Compact = "compact", Solo = "solo" });
 sorte!(
     /// La Route du Rhum, dans la session qui la montre : la flotte avant le départ, ou en course.
@@ -126,6 +130,12 @@ pub struct Rare {
     pub age: i64,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct SpectacleRhum {
+    pub kind: FeteRhum,
+    pub age: i64,
+}
+
 /// Ce que fait le personnage du travail, quoi qu'on dessine.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -187,6 +197,8 @@ pub struct Monde {
     pub rhum_flotte: Option<Vec<[f32; 4]>>,
     /// Les couleurs du premier de chaque classe, pour les bateaux de la baie : (classe, coque, bande).
     pub rhum_tetes: Option<Vec<[u32; 3]>>,
+    /// Le spectacle en cours, et depuis combien de tics.
+    pub rhum_fete: Option<SpectacleRhum>,
 }
 
 impl Default for Monde {
@@ -240,6 +252,7 @@ impl Default for Monde {
             rhum_progress: None,
             rhum_flotte: None,
             rhum_tetes: None,
+            rhum_fete: None,
         }
     }
 }

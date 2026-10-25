@@ -110,6 +110,8 @@ export type World = {
   rhumFlotte?: ReadonlyArray<readonly [number, number, number, number]>
   /** Each class leader's colours, for the boats in the bay: [class, hull, stripe], 0xRRGGBB. */
   rhumTetes?: ReadonlyArray<readonly [number, number, number]>
+  /** The show a session plays when it takes the sea: the start played again, or the arrival; its age in ticks. */
+  rhumFete?: { kind: 'start' | 'finish'; age: number }
 }
 
 export type Personality = 'calme' | 'jovial' | 'grognon' | 'reveur' | 'applique'

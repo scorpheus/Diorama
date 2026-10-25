@@ -135,11 +135,14 @@ deux secondes, et le journal doit dire « Route du Rhum : pointage de 14h00, 3 b
 
 Faites :
 - la baie au vrai pixel, le voyage de Saint-Malo à la Guadeloupe, la carte ;
-- le bateau-comité et son canon, le feu d'artifice, les grains, les sillages phosphorescents.
+- le bateau-comité et son canon, le feu d'artifice, les grains, les sillages phosphorescents ;
+- le spectacle du lancement de session (25 octobre) : le départ rejoué, ou l'arrivée avec la ligne,
+  un Ultim qui la coupe, le feu d'artifice même de jour, et les arrivés nommés (README). Il couvre
+  l'idée 1 ci-dessous. Pour le regarder hors écran :
+  `SPECTACLE=start FILM=depart.png cargo test --release film_rhum -- --ignored` (ou `finish`).
 
 À faire, dans l'ordre où elles rendraient le plus :
-1. **Les arrivées** : quand un bateau a `dtf` à 0, le personnage saute de joie, un toast le nomme,
-   et la baie de Guadeloupe montre la ligne d'arrivée et un bateau qui la coupe.
+1. ~~**Les arrivées**~~ : faites, par le spectacle (voir plus haut).
 2. **Un nouveau premier** dans une classe : une ligne au journal, une réplique du personnage.
 3. **Les abandons** : la source les donne (`RET`), et le plugin les envoie à l'appli avec le rang 0. Il reste à les griser sur la carte.
 4. **La trace du premier** sur la carte : garder ses positions des derniers pointages et tracer son sillage.

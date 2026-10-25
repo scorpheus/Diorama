@@ -69,6 +69,10 @@ Pour la Route du Rhum 2026 (départ de Saint-Malo le dimanche 1er novembre à 13
   - En Guadeloupe, la plage, les palmiers, les mornes de Basse-Terre et la Soufrière ; la nuit, le feu d'artifice des arrivées.
 - **Le ciel de l'heure** : le soleil qui se couche dans la mer et son reflet, la lune, les étoiles, les cumulus qui passent, l'orage.
 - **À côté des jauges** : le compte à rebours, puis le jour de course. Au coup de canon, le personnage saute de joie et le journal le note.
+- **Le spectacle du lancement** : quand une session prend la mer (à son ouverture, ou quand on la désigne), elle joue une vingtaine de secondes, dès que l'appli l'a trouvée.
+  - Jusqu'aux premières arrivées, c'est **le départ rejoué** à Saint-Malo : la flotte alignée sur la ligne, le coup de canon du bateau-comité, le personnage qui saute de joie, la flotte lâchée vers le large. Avant le 1er novembre, les bateaux reviennent ensuite tirer leurs bords.
+  - Ensuite, c'est **l'arrivée** à Pointe-à-Pitre : un Ultim aux couleurs du premier coupe la ligne, un feu d'artifice part, de jour comme de nuit, et un message nomme les bateaux arrivés que la machine n'a pas encore fêtés (`rhum:arrivees` dans le magasin du plugin). Un pointage qui apporte une arrivée la fait jouer aussitôt dans la session ouverte.
+  - Le vrai départ, à 13h02, joue le même lâcher de la flotte.
 
 **Les vraies données.** La session désignée lit aussi `diorama-route-du-rhum.json`, à côté du fichier de désignation, dès qu'il change. Quand il est là :
 - une carte de l'Atlantique s'épingle dans la cour : la route de Saint-Malo à Pointe-à-Pitre et chaque bateau à sa place, coloré par classe, le premier de chaque classe cerclé ;

@@ -138,6 +138,9 @@ impl Monde {
         if let Some(r) = w.rare.as_mut() {
             r.age += e;
         }
+        if let Some(f) = w.rhum_fete.as_mut() {
+            f.age += e;
+        }
         w
     }
 }

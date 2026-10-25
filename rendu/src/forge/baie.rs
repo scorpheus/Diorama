@@ -11,7 +11,7 @@
 
 use std::f32::consts::PI;
 
-use super::monde::{Monde, PhaseRhum, Temps};
+use super::monde::{FeteRhum, Monde, PhaseRhum, Temps};
 use super::pixels::hasard;
 use super::trace::{bande, fois, hex, mix, mul, pack, smooth, unpack, Rgb, Toile};
 
@@ -28,9 +28,31 @@ pub enum Etape {
     Guadeloupe,
 }
 
-/// L'étape d'un monde : Saint-Malo jusqu'au départ et dans les premières heures ; puis le large,
-/// les Açores au passage, les tropiques, la Guadeloupe aux arrivées.
+/// Le spectacle du lancement d'une session : au tic COUP, le canon tonne (ou le premier coupe la
+/// ligne d'arrivée) ; à SORTIE après lui, les plus lents ont quitté la baie ; il dure FETE tics.
+pub const COUP: f32 = 24.0;
+const SORTIE: f32 = 110.0;
+pub const FETE: i64 = 170;
+/// La graine du bateau qui coupe la ligne d'arrivée : il ne fait pas partie de la flotte.
+const HEROS: i64 = -7;
+
+/// Le spectacle en cours, et son âge.
+fn fete(w: &Monde) -> Option<(FeteRhum, f32)> {
+    w.rhum_fete.as_ref().filter(|f| w.rhum.is_some() && (0..FETE).contains(&f.age)).map(|f| (f.kind, f.age as f32))
+}
+
+/// L'étape d'un monde : celle du spectacle s'il s'en joue un, sinon celle de la course.
 pub fn etape(w: &Monde) -> Etape {
+    match fete(w) {
+        Some((FeteRhum::Depart, _)) => Etape::Bretagne,
+        Some((FeteRhum::Arrivee, _)) => Etape::Guadeloupe,
+        None => etape_de_la_course(w),
+    }
+}
+
+/// Saint-Malo jusqu'au départ et dans les premières heures ; puis le large, les Açores au
+/// passage, les tropiques, la Guadeloupe aux arrivées.
+fn etape_de_la_course(w: &Monde) -> Etape {
     if w.rhum != Some(PhaseRhum::Course) {
         return Etape::Bretagne;
     }
@@ -228,6 +250,39 @@ pub fn cap(b: &Bateau, t: f32, phase: PhaseRhum, from: f32, to: f32, taille: f32
     ((centre + a.sin() * portee).clamp(from + 2.0 + l / 2.0, to - l / 2.0), if a.cos() >= 0.0 { 1.0 } else { -1.0 })
 }
 
+/// Le départ rejoué : alignés sous la ligne jusqu'au coup de canon, puis lâchés vers le large,
+/// les plus vifs devant. Quand le vrai départ n'est pas encore donné, ils reviennent ensuite de
+/// la droite tirer leurs bords (`retour` : où leur cap ordinaire les met).
+fn au_depart(b: &Bateau, a: f32, from: f32, to: f32, taille: f32, retour: Option<(f32, f32)>) -> (f32, f32, PhaseRhum) {
+    let l = gabarit(b.sorte).0 * echelle(b.lane) * taille;
+    // étalés le long de la ligne, du bateau-comité à la bouée du large
+    let room = to - from;
+    let ligne = (from + room * (0.22 + 0.55 * hasard(b.graine * 5) as f32)).clamp(from + l / 2.0, to - l / 2.0);
+    if a < COUP {
+        return (ligne + (a * 0.09 + b.graine as f32).sin() * 0.6, 1.0, PhaseRhum::Avant);
+    }
+    let d = a - COUP;
+    let duree = SORTIE * (1.0 - 0.5 * (b.vitesse / 0.33).clamp(0.1, 1.0));
+    let loin = to + l + 4.0;
+    if d < duree {
+        let f = d / duree;
+        return (ligne + (loin - ligne) * f * f, 1.0, PhaseRhum::Course);
+    }
+    match retour {
+        Some((u, dir)) if d >= SORTIE => {
+            let f = ((d - SORTIE) / (FETE as f32 - COUP - SORTIE)).clamp(0.0, 1.0);
+            let e = f * f * (3.0 - 2.0 * f);
+            (loin + (u - loin) * e, if f < 1.0 { -1.0 } else { dir }, PhaseRhum::Avant)
+        }
+        _ => (loin + 50.0, 1.0, PhaseRhum::Course),
+    }
+}
+
+/// Où la ligne d'arrivée coupe la baie, en colonnes depuis la porte.
+fn ligne_d_arrivee(c: &Cadre) -> f32 {
+    c.room() * 0.55
+}
+
 /// Ce que la baie garde d'une image à l'autre : le fond immobile, et la table des sinus.
 #[derive(Default)]
 pub struct Baie {
@@ -293,8 +348,17 @@ impl Baie {
             decor_anime(&mut toile, &mut self.gardees, &c, &sky, et, w, t);
             let taille = (c.room() / 40.0).clamp(0.55, 1.0);
             let phase = w.phase();
+            let spectacle = fete(w);
             // de l'horizon vers nous : les bateaux et les bêtes, chacun à sa profondeur
-            let mut tous: Vec<(f32, Option<Bateau>, Option<Box<dyn Fn(&mut Toile)>>)> = flotte(c.room(), w.rhum_tetes.as_deref()).into_iter().map(|b| (b.lane, Some(b), None)).collect();
+            let la_flotte = flotte(c.room(), w.rhum_tetes.as_deref());
+            let mut tous: Vec<(f32, Option<Bateau>, Option<Box<dyn Fn(&mut Toile)>>)> = la_flotte.iter().cloned().map(|b| (b.lane, Some(b), None)).collect();
+            // à l'arrivée, le premier Ultim, à ses couleurs, coupe la ligne au plus près
+            // (à sa place : on ne le verrait pas deux fois)
+            if let (Some((FeteRhum::Arrivee, _)), Some(premier)) = (spectacle, la_flotte.iter().rev().find(|b| b.sorte == Sorte::Ultim).or(la_flotte.last())) {
+                tous.retain(|(_, b, _)| b.as_ref().is_none_or(|b| b.graine != premier.graine));
+                let heros = Bateau { lane: 27.2, graine: HEROS, ..premier.clone() };
+                tous.push((heros.lane, Some(heros), None));
+            }
             tous.extend(faune(&c, &sky, et, t).into_iter().map(|(lane, f)| (lane, None, Some(f))));
             tous.sort_by(|a, b| a.0.total_cmp(&b.0));
             if self.gardees.len() > 400 {
@@ -302,7 +366,22 @@ impl Baie {
             }
             for (_, b, f) in &tous {
                 if let Some(b) = b {
-                    let (u, dir) = cap(b, t, phase, c.from, c.to, taille);
+                    let ordinaire = || cap(b, t, phase, c.from, c.to, taille);
+                    let (u, dir, phase) = match spectacle {
+                        Some((FeteRhum::Depart, a)) => {
+                            let retour = (phase == PhaseRhum::Avant && etape_de_la_course(w) == Etape::Bretagne).then(ordinaire);
+                            au_depart(b, a, c.from, c.to, taille, retour)
+                        }
+                        Some((FeteRhum::Arrivee, a)) if b.graine == HEROS => {
+                            let l = gabarit(b.sorte).0 * echelle(b.lane) * taille;
+                            let (debut, ligne) = (c.from - l, c.from + ligne_d_arrivee(&c));
+                            (debut + (ligne - debut) * a / COUP, 1.0, PhaseRhum::Course)
+                        }
+                        _ => {
+                            let (u, dir) = ordinaire();
+                            (u, dir, phase)
+                        }
+                    };
                     // la nuit au large, la mer s'allume dans les sillages
                     let phosphore = sky.nuit > 0.6 && matches!(et, Etape::Large | Etape::Acores | Etape::Tropiques);
                     bateau(&mut toile, &mut self.gardees, &c, &sky, b, (u, dir), t, phase, taille, phosphore);
@@ -755,15 +834,30 @@ fn nuages(t: &mut Toile, c: &Cadre, sky: &Ciel, et: Etape, t_: f32) {
 fn decor_anime(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, et: Etape, w: &Monde, t_: f32) {
     let room = c.room();
     let course = w.phase() == PhaseRhum::Course;
-    // la semaine du départ et sa première heure : le bateau-comité, son canon
-    if et == Etape::Bretagne && room >= 20.0 && (!course || w.rhum_progress.unwrap_or(0.0) < 0.005) {
-        comite(t, gardees, c, sky, t_);
+    let spectacle = fete(w);
+    let depart = matches!(spectacle, Some((FeteRhum::Depart, _)));
+    // la semaine du départ et sa première heure, et le départ rejoué : le bateau-comité, son
+    // canon (au coup du spectacle, sinon à intervalles)
+    if et == Etape::Bretagne && room >= 20.0 && (!course || w.rhum_progress.unwrap_or(0.0) < 0.005 || depart) {
+        let (coup, fort) = match spectacle {
+            Some((FeteRhum::Depart, a)) => (if a < COUP { 1000.0 } else { a - COUP }, 1.8),
+            _ => (t_.rem_euclid(90.0), 1.0),
+        };
+        comite(t, gardees, c, sky, t_, coup, fort);
     }
     if et == Etape::Tropiques {
         grain(t, gardees, c, sky, t_);
     }
-    if et == Etape::Guadeloupe && sky.nuit > 0.5 && !sky.orage {
-        feu_d_artifice(t, c, t_);
+    match spectacle {
+        Some((FeteRhum::Arrivee, a)) => {
+            ligne_arrivee(t, c, sky, t_);
+            // le feu d'artifice part quand la ligne est coupée, de jour comme de nuit, nourri
+            if a >= COUP {
+                feu_d_artifice(t, c, a - COUP, 6, 9.0, 1.5, sky.nuit < 0.5);
+            }
+        }
+        _ if et == Etape::Guadeloupe && sky.nuit > 0.5 && !sky.orage => feu_d_artifice(t, c, t_, 3, 19.0, 1.0, false),
+        _ => {}
     }
     if et == Etape::Bretagne && room >= 40.0 && (sky.nuit > 0.2 || sky.orage) {
         // la lanterne s'allume, le faisceau balaie la baie
@@ -779,7 +873,7 @@ fn decor_anime(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, et
             t.poly(&[(x, y - 2.0), (x + dx, y - 2.0 - 0.07 * long), (x + dx, y + 2.0 + 0.07 * long), (x, y + 2.0)], hex(0xfff2a0), 0.13 * force * a.sin().abs());
         }
     }
-    if w.phase() == PhaseRhum::Avant && room >= 20.0 {
+    if (w.phase() == PhaseRhum::Avant || depart) && room >= 20.0 {
         // les bouées de la ligne de départ, qui dansent
         for (k, f) in [0.3, 0.72].into_iter().enumerate() {
             let u = room * f;
@@ -794,8 +888,8 @@ fn decor_anime(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, et
 }
 
 /// Le bateau-comité au mouillage, au bout de la ligne de départ : sa coque, sa passerelle, son
-/// grand pavois ; et son canon, qui tonne à intervalles (un éclair, une bouffée qui s'étire).
-fn comite(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, t_: f32) {
+/// grand pavois ; et son canon (un éclair, une bouffée qui s'étire), `coup` tics après qu'il a tonné.
+fn comite(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, t_: f32, coup: f32, fort: f32) {
     let lane = 22.6;
     let s = echelle(lane);
     let l = 10.0 * s;
@@ -830,16 +924,18 @@ fn comite(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, t_: f32
     });
     v_.poser(t, x, y);
     // le coup de canon
-    let a = t_.rem_euclid(90.0);
+    let a = coup;
     let (bx, by) = (x + 0.48 * l * c.cw, y - 0.2 * l * c.demi);
-    if a < 2.0 {
-        t.disque(bx, by, 0.6 * l * c.cw * 0.25, hex(0xffd070), 0.9, 0.6);
+    if a < 2.0 * fort {
+        t.disque(bx, by, 0.6 * l * c.cw * 0.25 * fort, hex(0xffd070), 0.9, 0.6);
+        t.disque(bx, by, 1.5 * l * c.cw * 0.25 * fort, hex(0xfff0c0), 0.35, 1.0);
     }
-    if a < 40.0 {
-        let f = a / 40.0;
+    let duree = 40.0 * fort;
+    if a < duree {
+        let f = a / duree;
         for k in 0..6 {
             let g = k as f32 / 5.0;
-            let r = (1.0 + 3.0 * f.sqrt() * (0.6 + g * 0.4)) * s * c.demi;
+            let r = (1.0 + 3.0 * f.sqrt() * (0.6 + g * 0.4)) * s * c.demi * fort;
             t.disque(bx + (g * 2.5 + f * 4.0) * s * c.cw, by - (g * 0.8 + f * 2.5) * s * c.demi, r, mul(hex(0xe8e8ec), sky.amb), (1.0 - f) * 0.55, 0.8);
         }
     }
@@ -880,16 +976,44 @@ fn grain(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, t_: f32)
     nuage.poser(t, u * c.cw, c.y(base));
 }
 
-/// Le feu d'artifice de l'arrivée, sur Pointe-à-Pitre, la nuit : des fusées qui montent et éclatent en gerbes.
-fn feu_d_artifice(t: &mut Toile, c: &Cadre, t_: f32) {
+/// La ligne d'arrivée de Pointe-à-Pitre : deux bouées jaunes, leur damier, qui dansent.
+fn ligne_arrivee(t: &mut Toile, c: &Cadre, sky: &Ciel, t_: f32) {
+    let u = ligne_d_arrivee(c);
+    for (k, v) in [21.0f32, 25.6].into_iter().enumerate() {
+        let s = echelle(v);
+        let v = v + (t_ * 0.25 + k as f32 * 2.0).sin() * 0.2;
+        let (x, y) = (c.x(c.from + u), c.y(v));
+        let (bw, bh) = (1.4 * s * c.cw, 2.6 * s * c.demi);
+        t.poly(&[(x - bw, y), (x + bw, y), (x + 0.6 * bw, y - bh), (x - 0.6 * bw, y - bh)], mul(hex(0xf2c14e), sky.amb), 1.0);
+        let haut = y - 2.4 * bh;
+        t.trait_((x, y - bh), (x, haut), 1.2, mul(hex(0x2a2a30), sky.amb), 1.0);
+        // le damier, qui claque au vent
+        let (cw, ch) = (0.7 * s * c.cw, 0.5 * s * c.demi);
+        for i in 0..4 {
+            for j in 0..3 {
+                let ondule = ((t_ * 0.4 + i as f32) * 0.9).sin() * 0.3 * ch;
+                let (x0, y0) = (x + i as f32 * cw, haut + j as f32 * ch + ondule);
+                let col = if (i + j) % 2 == 0 { hex(0x1a1a20) } else { hex(0xf4f4f0) };
+                t.poly(&[(x0, y0), (x0 + cw, y0), (x0 + cw, y0 + ch), (x0, y0 + ch)], mul(col, sky.amb), 1.0);
+            }
+        }
+    }
+}
+
+/// Le feu d'artifice de l'arrivée, sur Pointe-à-Pitre : des fusées qui montent et éclatent en
+/// gerbes, `n_fusees` à la fois, à `ecart` tics l'une de l'autre, `fort` fois plus grandes. De
+/// jour, des teintes franches et des rayons : les pastels de la nuit s'y perdraient dans le bleu.
+fn feu_d_artifice(t: &mut Toile, c: &Cadre, t_: f32, n_fusees: i64, ecart: f32, fort: f32, jour: bool) {
     let room = c.room();
-    const TEINTES_FEU: [u32; 5] = [0xffd27a, 0xff6a5a, 0x7fd4ff, 0xb98cff, 0x8af08a];
-    for k in 0..3i64 {
+    const TEINTES_NUIT: [u32; 5] = [0xffd27a, 0xff6a5a, 0x7fd4ff, 0xb98cff, 0x8af08a];
+    const TEINTES_JOUR: [u32; 5] = [0xffb000, 0xe8281c, 0x1c4ee8, 0xc01cb0, 0x10a040];
+    let teintes = if jour { TEINTES_JOUR } else { TEINTES_NUIT };
+    for k in 0..n_fusees {
         let cycle = 56.0;
-        let a = (t_ + k as f32 * 19.0).rem_euclid(cycle);
-        let n = ((t_ + k as f32 * 19.0) / cycle).floor() as i64;
+        let a = (t_ + k as f32 * ecart).rem_euclid(cycle);
+        let n = ((t_ + k as f32 * ecart) / cycle).floor() as i64;
         let (u, v) = (room * (0.35 + 0.55 * hasard(n * 7 + k) as f32), 2.5 + 6.0 * hasard(n * 13 + k) as f32);
-        let col = hex(TEINTES_FEU[(hasard(n * 3 + k) * 5.0) as usize % 5]);
+        let col = hex(teintes[(hasard(n * 3 + k) * 5.0) as usize % 5]);
         if a < 7.0 {
             // la fusée qui monte, sa traînée
             let f = a / 7.0;
@@ -902,12 +1026,17 @@ fn feu_d_artifice(t: &mut Toile, c: &Cadre, t_: f32) {
         if f > 0.75 {
             continue;
         }
-        let r = f.sqrt() * 5.5;
+        let r = f.sqrt() * 5.5 * fort;
+        let reste = 1.0 - f / 0.75;
         for i in 0..28 {
             let ang = i as f32 / 28.0 * 2.0 * PI + n as f32;
             let (x, y) = ((u + ang.cos() * r) * c.cw, c.y(v + ang.sin() * r * 0.9 + f * f * 4.0));
-            t.disque(x, y, 1.7, col, (1.0 - f / 0.75) * 0.95, 0.3);
-            t.disque(x, y, 4.5, col, (1.0 - f / 0.75) * 0.25, 1.0);
+            if jour {
+                let (xi, yi) = ((u + ang.cos() * r * 0.55) * c.cw, c.y(v + ang.sin() * r * 0.5 + f * f * 4.0));
+                t.trait_((xi, yi), (x, y), 1.6, col, reste * 0.8);
+            }
+            t.disque(x, y, 1.7 * fort, col, reste * 0.95, 0.3);
+            t.disque(x, y, 4.5 * fort, col, reste * if jour { 0.15 } else { 0.25 }, 1.0);
         }
     }
 }
@@ -1564,6 +1693,31 @@ mod tests {
         assert_eq!(etape(&monde(PhaseRhum::Avant, 0.5, 12.0)), Etape::Bretagne);
         let etapes: Vec<Etape> = [0.0, 0.1, 0.3, 0.5, 0.7, 0.95].iter().map(|&p| etape(&monde(PhaseRhum::Course, p, 12.0))).collect();
         assert_eq!(etapes, [Etape::Bretagne, Etape::Large, Etape::Acores, Etape::Large, Etape::Tropiques, Etape::Guadeloupe]);
+    }
+
+    /// Le spectacle du lancement : le départ se joue à Saint-Malo et l'arrivée en Guadeloupe, où
+    /// qu'en soit la course ; au départ, la flotte s'aligne, file au coup de canon, et revient tirer
+    /// ses bords quand le vrai départ n'est pas encore donné.
+    #[test]
+    fn le_spectacle_rejoue_le_depart_ou_l_arrivee() {
+        use super::super::monde::SpectacleRhum;
+        let mut w = monde(PhaseRhum::Course, 0.5, 12.0);
+        w.rhum_fete = Some(SpectacleRhum { kind: FeteRhum::Depart, age: 10 });
+        assert_eq!(etape(&w), Etape::Bretagne);
+        w.rhum_fete = Some(SpectacleRhum { kind: FeteRhum::Arrivee, age: 10 });
+        assert_eq!(etape(&w), Etape::Guadeloupe);
+        w.rhum_fete = Some(SpectacleRhum { kind: FeteRhum::Arrivee, age: FETE });
+        assert_eq!(etape(&w), Etape::Large, "fini, la course reprend sa place");
+        let (from, to) = (54.0, 144.0);
+        for b in flotte(to - from, None) {
+            let ordinaire = cap(&b, 99.0, PhaseRhum::Avant, from, to, 1.0);
+            let (u, _, phase) = au_depart(&b, COUP - 1.0, from, to, 1.0, Some(ordinaire));
+            assert!((from..to).contains(&u) && phase == PhaseRhum::Avant, "{:?} aligné dans la baie : {u}", b.sorte);
+            let (u, _, _) = au_depart(&b, COUP + SORTIE - 1.0, from, to, 1.0, Some(ordinaire));
+            assert!(u > to, "{:?} parti au large : {u}", b.sorte);
+            let (u, dir, _) = au_depart(&b, FETE as f32, from, to, 1.0, Some(ordinaire));
+            assert_eq!((u, dir), ordinaire, "{:?} revenu à son bord", b.sorte);
+        }
     }
 
     #[test]

@@ -258,6 +258,7 @@ function later(w: World, ticks: number): World {
     gift: w.gift && { ...w.gift, age: w.gift.age + ticks },
     messenger: w.messenger && { ...w.messenger, age: w.messenger.age + ticks },
     rare: w.rare && { ...w.rare, age: w.rare.age + ticks },
+    rhumFete: w.rhumFete && { ...w.rhumFete, age: w.rhumFete.age + ticks },
   }
 }
 
@@ -474,6 +475,8 @@ const anim = {
   rhumPhase: undefined as World['rhum'], // the phase last shown, to cheer the start
   rhumDataStamp: undefined as number | undefined, // the report's last change, as last read
   rhumFleet: undefined as RhumFleet | undefined, // the fleet at its last report
+  // the show played when the session takes the sea: its start once the app answers, what it plays
+  rhumShow: undefined as { since?: number; kind?: 'start' | 'finish'; quiet?: boolean } | undefined,
   themeWanted: 'forge', // the `theme` option
   themeStamp: undefined as number | undefined, // the theme file's last change, when it is one
   doings: [] as string[], // the main thread's actions on the task at hand, for its status
@@ -547,6 +550,7 @@ function worldNow(): World {
     rhum: rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined,
     rhumProgress: rhumHere() && anim.nowMs >= RHUM_START ? rhumProgressAt(anim.nowMs) : undefined,
     ...rhumWorld(),
+    rhumFete: rhumShowNow(),
     ...rackNow(),
     banner: anim.banner,
     speaking: anim.speaking,
@@ -1539,7 +1543,7 @@ function rhumProgressAt(ms: number): number {
 const RHUM_DATA = 'diorama-route-du-rhum.json'
 /** The race's classes, in the order the native render numbers them. */
 const RHUM_CLASSES = ['Ultim', 'Ocean Fifty', 'IMOCA', 'Class40', 'Rhum Multi', 'Rhum Mono'] as const
-type RhumBoat = { name: string; skipper?: string; cls: number; colours?: readonly [number, number]; lat: number; lon: number; rank?: number; dtf?: number; speed?: number; out?: true }
+type RhumBoat = { name: string; skipper?: string; cls: number; colours?: readonly [number, number]; lat: number; lon: number; rank?: number; dtf?: number; speed?: number; out?: true; arrived?: true }
 /** The statuses of a boat out of the race: retired, not started, disqualified (GeoVoile says RET). */
 const RHUM_OUT = /^(ret|abd|abandon|dnf|dns|dsq|np)$/i
 type RhumFleet = { at: number; boats: RhumBoat[] }
@@ -1579,11 +1583,14 @@ function readFleet(text: string): RhumFleet | undefined {
     if (cls < 0 || lat === undefined || lon === undefined || typeof b.nom !== 'string') continue
     const pair = Array.isArray(b.couleurs) ? b.couleurs.map(hexOf) : []
     const out = RHUM_OUT.test(String(b.statut ?? ''))
+    // arrived: so the report says, or, when it says nothing, nothing left to sail
+    const arrived = !out && (/^arv$/i.test(String(b.statut ?? '')) || (b.statut === undefined && numberOf(b.dtf) === 0))
     boats.push({
       name: b.nom, cls, lat, lon,
       ...(typeof b.skipper === 'string' ? { skipper: b.skipper } : {}),
       ...(pair[0] !== undefined && pair[1] !== undefined ? { colours: [pair[0], pair[1]] as const } : {}),
       ...(out ? { out: true as const } : {}),
+      ...(arrived ? { arrived: true as const } : {}),
       ...(!out && numberOf(b.rang) !== undefined ? { rank: numberOf(b.rang) } : {}),
       ...(!out && numberOf(b.dtf) !== undefined ? { dtf: numberOf(b.dtf) } : {}),
       ...(numberOf(b.vitesse) !== undefined ? { speed: numberOf(b.vitesse) } : {}),
@@ -1647,6 +1654,8 @@ async function watchRhumData($: EngineInterface) {
   const fleet = stamp === undefined ? undefined : readFleet(await $.fs.read(file).catch(() => ''))
   const was = anim.rhumFleet?.at
   anim.rhumFleet = fleet
+  // boats just arrived, and this session up: their arrival is played now
+  if (fleet && !anim.rhumShow && (await rhumFreshArrivals($)).length > 0) anim.rhumShow = {}
   if (fleet && fleet.at !== was) {
     const t = new Date(fleet.at)
     await note($, `Route du Rhum : pointage de ${String(t.getHours()).padStart(2, '0')}h${String(t.getMinutes()).padStart(2, '0')}, ${fleet.boats.length} bateaux`)
@@ -1654,6 +1663,77 @@ async function watchRhumData($: EngineInterface) {
     await note($, `Route du Rhum : ${RHUM_DATA} illisible`)
   }
   $.ui.invalidate('ui.render')
+}
+
+// The show a session plays when it takes the sea (rendu/src/forge/baie.rs: COUP, FETE): the gun,
+// or the finish line crossed, at RHUM_GUN ticks; over at RHUM_SHOW_TICKS. It waits for the app to
+// answer, and RHUM_SHOW_WAIT more for it to find the band: played to nobody, it is lost.
+const RHUM_GUN = 24
+const RHUM_SHOW_TICKS = 170
+const RHUM_SHOW_WAIT = 20
+const RHUM_CHEERED = 'rhum:arrivees' // the boats whose arrival a show has cheered, on this machine
+
+/** The show as the app plays it: what, and how many ticks in; nothing before it starts or after it ends. */
+function rhumShowNow(): World['rhumFete'] {
+  const s = anim.rhumShow
+  if (!s?.kind || s.since === undefined || !rhumHere()) return undefined
+  const age = anim.clock - s.since
+  return age >= 0 && age < RHUM_SHOW_TICKS ? { kind: s.kind, age } : undefined
+}
+
+/** The boats arrived at the last report that no show has cheered yet on this machine. */
+async function rhumFreshArrivals($: EngineInterface): Promise<RhumBoat[]> {
+  const f = anim.rhumFleet
+  if (!f || !f.boats.some(b => b.arrived)) return []
+  const raw = await $.store.get(RHUM_CHEERED).catch(() => undefined)
+  const cheered = new Set(Array.isArray(raw) ? raw.map(String) : [])
+  return f.boats.filter(b => b.arrived && !cheered.has(b.name))
+}
+
+/**
+ * The show, tick by tick: it starts once the app answers, and plays the start again, or the
+ * arrival once boats have finished (or a report brings fresh ones); its gun is cheered.
+ */
+async function rhumShowTick($: EngineInterface, voice: string) {
+  const s = anim.rhumShow
+  if (!s) return
+  if (!rhumHere()) {
+    anim.rhumShow = undefined
+    return
+  }
+  if (s.since === undefined) {
+    if (render.world === undefined) return
+    s.since = anim.clock + RHUM_SHOW_WAIT
+    const late = rhumPhaseAt(anim.nowMs) === 'race' && rhumProgressAt(anim.nowMs) >= 0.9
+    s.kind ??= late || (await rhumFreshArrivals($)).length > 0 ? 'finish' : 'start'
+    return
+  }
+  const age = anim.clock - s.since
+  if (age === RHUM_GUN && s.kind && !s.quiet) await rhumCheer($, s.kind, voice)
+  if (age >= RHUM_SHOW_TICKS) anim.rhumShow = undefined
+}
+
+/** The show's gun: the start played again, or the boats arrived since the last one, named. */
+async function rhumCheer($: EngineInterface, kind: 'start' | 'finish', voice: string) {
+  let line: string
+  if (kind === 'finish') {
+    const fresh = await rhumFreshArrivals($)
+    const names = fresh.map(b => `${b.name} (${RHUM_CLASSES[b.cls]})`)
+    line = names.length === 0
+      ? 'la flotte arrive à Pointe-à-Pitre'
+      : `${names.length > 1 ? 'arrivés' : 'arrivé'} à Pointe-à-Pitre : ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` et ${names.length - 3} autres` : ''}`
+    if (fresh.length > 0) {
+      const raw = await $.store.get(RHUM_CHEERED).catch(() => undefined)
+      await $.store.set(RHUM_CHEERED, [...(Array.isArray(raw) ? raw.map(String) : []), ...fresh.map(b => b.name)])
+    }
+  } else {
+    const left = RHUM_START - anim.nowMs
+    line = left > 0 ? `le départ, rejoué : le vrai dans ${countdown(left)}` : 'le départ, rejoué'
+  }
+  $.ui.toast(`${anim.name} : ${line} !`)
+  await note($, `Route du Rhum : ${line}`)
+  if (voice !== 'aucune') await say($, kind === 'finish' ? 'Bravo, les marins !' : 'Bon vent, les marins !', true)
+  if (anim.current === 'idle' && !anim.trip) await setAct($, 'jumping', kind === 'finish' ? "l'arrivée !" : 'le départ !', 2400)
 }
 
 /** The race's line beside the scene: the countdown to the start, then the days at sea. */
@@ -1695,6 +1775,8 @@ async function watchRhum($: EngineInterface) {
   const named = word !== '' && (await namesThis($, word))
   if (named === anim.rhumNamed) return
   anim.rhumNamed = named
+  // the session takes the sea with a show
+  if (named) anim.rhumShow ??= {}
   if (!anim.rhumAsked) await note($, named ? 'la Route du Rhum se montre ici' : 'la Route du Rhum se montre ailleurs')
   $.ui.invalidate('ui.render')
 }
@@ -1705,6 +1787,8 @@ async function rhumStart($: EngineInterface, voice: string) {
   const was = anim.rhumPhase
   anim.rhumPhase = phase
   if (was !== 'before' || phase !== 'race') return
+  // the real gun: the fleet let go off Saint-Malo, cheered here rather than by the show
+  anim.rhumShow = { kind: 'start', quiet: true }
   $.ui.toast(`${anim.name} : la Route du Rhum est partie de Saint-Malo !`)
   await note($, 'Route du Rhum : le départ est donné')
   if (voice !== 'aucune') await say($, 'Bon vent, les marins !', true)
@@ -1782,6 +1866,7 @@ export const register: Register = (on, options) => {
       anim.rhumFleet = undefined
       await watchRhumData($).catch(() => undefined)
       anim.rhumPhase = rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined
+      anim.rhumShow = rhumHere() && rendered ? anim.rhumShow ?? {} : undefined
     }
     anim.masterpiece = (await $.store.get(`master:${anim.sessionId}`)) !== undefined
     await heartbeat($)
@@ -1814,6 +1899,7 @@ export const register: Register = (on, options) => {
         }
         // he walks toward where the moment wants him, or where he fancies
         steer()
+        if (anim.rhumShow) void rhumShowTick($, voice).catch(() => undefined)
         if (anim.trip?.phase === 'out' && anim.x >= offstageNow()) void arriveAway($).catch(() => undefined)
         if (anim.trip?.phase === 'away' && anim.nowMs >= anim.trip.until) void endTrip($, true).catch(() => undefined)
         if ((anim.clock + anim.phase) % HANDOFF_TICKS === 0) {
