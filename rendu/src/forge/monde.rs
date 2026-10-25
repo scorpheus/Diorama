@@ -199,6 +199,9 @@ pub struct Monde {
     pub rhum_tetes: Option<Vec<[u32; 3]>>,
     /// Le spectacle en cours, et depuis combien de tics.
     pub rhum_fete: Option<SpectacleRhum>,
+    /// La trace du premier de chaque classe, pour la carte : (classe, latitude, longitude,
+    /// latitude, longitude…), des plus anciens points au dernier pointage.
+    pub rhum_traces: Option<Vec<Vec<f32>>>,
 }
 
 impl Default for Monde {
@@ -253,6 +256,7 @@ impl Default for Monde {
             rhum_flotte: None,
             rhum_tetes: None,
             rhum_fete: None,
+            rhum_traces: None,
         }
     }
 }

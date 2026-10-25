@@ -1586,6 +1586,59 @@ test('once boats have finished, the show is their arrival, and names those not c
   expect(await ui.find({ text: /Route du Rhum : arrivé à Pointe-à-Pitre : Trimaran Bleu \(Ultim\)/ })).toBeDefined()
 })
 
+test("each class leader's track goes to the chart, and a new leader is said", { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  const report = (first: string, second: string) => JSON.stringify({
+    at: '2026-11-03T13:00:00Z',
+    bateaux: [
+      { nom: first, classe: 'Ultim', lat: 30.04, lon: -33.97, rang: 1, dtf: 1771.4, trace: [[48.65, -2.02], [44.33, -9.87], [30.04, -33.97]] },
+      { nom: second, classe: 'Ultim', lat: 31.2, lon: -32.1, rang: 2, dtf: 1850, trace: [[48.65, -2.02], [31.2, -32.1]] },
+    ],
+  })
+  rhumData.text = report('Trimaran Bleu', 'Trimaran Rouge')
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 3, 15, 0) })
+  engine(on)
+  on('tool.call', (_$, e) => answerTools(e))
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await clock.advance(450)
+  // the leader's track only, a tenth of a degree
+  expect((worldsPosted().at(-1) as { rhumTraces?: number[][] }).rhumTraces).toEqual([[0, 48.7, -2, 44.3, -9.9, 30, -34]])
+  expect(await ui.find({ text: /nouveau premier/ })).toBeUndefined()
+  // the next report: the red one leads
+  rhumData.text = report('Trimaran Rouge', 'Trimaran Bleu')
+  rhumData.mtime = 2
+  await clock.advance(3000)
+  expect(await ui.find({ text: /Route du Rhum : Ultim · nouveau premier, Trimaran Rouge \(devant Trimaran Bleu\)/ })).toBeDefined()
+})
+
+test('the session that shows the race fetches its report every quarter of an hour, and no other', { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 26, 8, 0) })
+  engine(on)
+  on('tool.call', (_$, e) => answerTools(e))
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const fetches = () => launched.filter(argv => argv.some(a => a.endsWith('tools/route-du-rhum-suivre.mts')) && argv.includes('--une-fois')).length
+  await clock.advance(10_000)
+  expect(fetches()).toBe(1)
+  await clock.advance(10 * 60_000)
+  expect(fetches()).toBe(1)
+  await clock.advance(6 * 60_000)
+  expect(fetches()).toBe(2)
+})
+
+test('a session that does not show the race fetches nothing', { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 26, 8, 0) })
+  engine(on)
+  on('tool.call', (_$, e) => answerTools(e))
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  await clock.advance(20 * 60_000)
+  expect(launched.filter(argv => argv.some(a => a.endsWith('tools/route-du-rhum-suivre.mts'))).length).toBe(0)
+})
+
 test('a boat out of the race stays on the chart, but leads nothing and moves no scenery', { options: { rendu: 'oui' } }, async ($, on) => {
   fakeRhumFile(on, undefined)
   rhumEnv = '1'

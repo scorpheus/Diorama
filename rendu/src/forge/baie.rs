@@ -1012,7 +1012,8 @@ fn feu_d_artifice(t: &mut Toile, c: &Cadre, t_: f32, n_fusees: i64, ecart: f32, 
         let cycle = 56.0;
         let a = (t_ + k as f32 * ecart).rem_euclid(cycle);
         let n = ((t_ + k as f32 * ecart) / cycle).floor() as i64;
-        let (u, v) = (room * (0.35 + 0.55 * hasard(n * 7 + k) as f32), 2.5 + 6.0 * hasard(n * 13 + k) as f32);
+        // à gauche de la carte, qui tient le haut à droite
+        let (u, v) = (room * (0.08 + 0.52 * hasard(n * 7 + k) as f32), 2.5 + 6.0 * hasard(n * 13 + k) as f32);
         let col = hex(teintes[(hasard(n * 3 + k) * 5.0) as usize % 5]);
         if a < 7.0 {
             // la fusée qui monte, sa traînée
@@ -1489,20 +1490,14 @@ fn poisson_volant(t: &mut Toile, c: &Cadre, sky: &Ciel, u: f32, lane: f32, f: f3
 /// Guadeloupe qui se balancent.
 fn premier_plan(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, et: Etape, w: &Monde, t_: f32) {
     let room = c.room();
-    if let Some(f) = w.rhum_flotte.as_deref().filter(|f| !f.is_empty() && room >= 40.0) {
-        carte(t, gardees, c, f, t_);
-    }
     match et {
         Etape::Bretagne => {
             let couleurs = [0xd04a2a, 0xf2c14e, 0x1d5a9a, 0xf4f4f0, 0x3c8a3c];
             let (x0, x1) = (12.0, room - 1.0);
-            if x1 - x0 < 4.0 {
-                return;
-            }
             let corde = |u: f32| 2.0 + 2.5 * (PI * (u - x0) / (x1 - x0)).sin();
             let mut k = 0;
             let mut u = x0 + 0.6;
-            while u < x1 - 1.2 {
+            while x1 - x0 >= 4.0 && u < x1 - 1.2 {
                 let a = corde(u);
                 let b = corde(u + 1.2);
                 let vent = (t_ * 0.35 + u * 0.7).sin() * 0.35;
@@ -1532,6 +1527,10 @@ fn premier_plan(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, e
             }
         }
         _ => {}
+    }
+    // la carte, par-dessus tout, tout le temps ; elle laisse la place au spectacle, le temps qu'il se joue
+    if room >= 40.0 && fete(w).is_none() {
+        carte(t, gardees, c, sky, w, t_);
     }
 }
 
@@ -1565,10 +1564,27 @@ const ILES: [(f32, f32, f32); 17] = [
 /// Les classes sur la carte : Ultim, Ocean Fifty, IMOCA, Class40, Rhum Multi, Rhum Mono.
 const TEINTES: [u32; 6] = [0xd8402e, 0x8a4ad0, 0x1a1a24, 0xf0a020, 0x2e9a4a, 0x2a8ad8];
 
+/// Un point de la route de Saint-Malo à Pointe-à-Pitre, sur l'arc de grand cercle : `f` de 0 à 1 ;
+/// (longitude, latitude).
+fn sur_la_route(f: f32) -> (f32, f32) {
+    let vers = |p: (f32, f32)| {
+        let (lo, la) = (p.0.to_radians(), p.1.to_radians());
+        [la.cos() * lo.cos(), la.cos() * lo.sin(), la.sin()]
+    };
+    let (va, vb) = (vers(SAINT_MALO), vers(POINTE_A_PITRE));
+    let om = (va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2]).acos();
+    let (ka, kb) = (((1.0 - f) * om).sin() / om.sin(), (f * om).sin() / om.sin());
+    let v = [ka * va[0] + kb * vb[0], ka * va[1] + kb * vb[1], ka * va[2] + kb * vb[2]];
+    (v[1].atan2(v[0]).to_degrees(), v[2].atan2(v[0].hypot(v[1])).to_degrees())
+}
+
 /// La carte de la course, épinglée en haut à droite de la cour : la côte, les îles, la route de
-/// Saint-Malo à Pointe-à-Pitre, et chaque bateau à sa place au dernier pointage, le premier de
-/// chaque classe cerclé. Le papier se dessine une fois ; les bateaux, à chaque image.
-fn carte(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, flotte: &[[f32; 4]], t_: f32) {
+/// Saint-Malo à Pointe-à-Pitre, la trace des premiers, et chaque bateau à sa place au dernier
+/// pointage, le premier de chaque classe cerclé, ceux qui ont abandonné en gris. Sans pointage,
+/// la flotte à l'estime : au port avant le départ, puis sur la route. Le papier se dessine une
+/// fois ; le reste, à chaque image.
+fn carte(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, monde: &Monde, t_: f32) {
+    let flotte: &[[f32; 4]] = monde.rhum_flotte.as_deref().unwrap_or(&[]);
     let room = c.room();
     let w = (room * c.cw * 0.34).min(300.0);
     let h = w * 0.66;
@@ -1599,18 +1615,24 @@ fn carte(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, flotte: &[[f32; 4]],
                 t.disque(x, y, (r * w / 120.0).max(1.0), terre, 1.0, 0.0);
                 t.disque(x, y, (r * w / 120.0).max(1.0) + 0.5, trait_cote, 0.4, 0.8);
             }
+            // la rose des vents, au large, dans le coin vide du sud-est
+            let (rx, ry) = proj(-28.0, 20.0);
+            let rr = w * 0.07;
+            let encre = hex(0x6a5a3a);
+            for k in 0..8 {
+                let a = k as f32 * PI / 4.0;
+                let long = if k % 2 == 0 { rr } else { rr * 0.55 };
+                let (dx, dy) = (a.sin(), -a.cos());
+                let cote = (dy * 0.18 * rr, -dx * 0.18 * rr);
+                let pointe = (rx + dx * long, ry + dy * long);
+                t.poly(&[(rx + cote.0, ry + cote.1), pointe, (rx - cote.0, ry - cote.1)], if k == 0 { hex(0xb03020) } else { encre }, 0.75);
+            }
+            t.disque(rx, ry, rr * 0.16, hex(0xe9dcb8), 1.0, 0.0);
             // la route, en tirets, sur l'arc de grand cercle
             let (a, b) = (SAINT_MALO, POINTE_A_PITRE);
-            let vers = |p: (f32, f32)| {
-                let (lo, la) = (p.0.to_radians(), p.1.to_radians());
-                [la.cos() * lo.cos(), la.cos() * lo.sin(), la.sin()]
-            };
-            let (va, vb) = (vers(a), vers(b));
-            let om = (va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2]).acos();
             let point = |f: f32| {
-                let (ka, kb) = (((1.0 - f) * om).sin() / om.sin(), (f * om).sin() / om.sin());
-                let v = [ka * va[0] + kb * vb[0], ka * va[1] + kb * vb[1], ka * va[2] + kb * vb[2]];
-                proj(v[1].atan2(v[0]).to_degrees(), v[2].atan2(v[0].hypot(v[1])).to_degrees())
+                let (lo, la) = sur_la_route(f);
+                proj(lo, la)
             };
             for k in 0..30 {
                 if k % 2 == 0 {
@@ -1623,22 +1645,56 @@ fn carte(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, flotte: &[[f32; 4]],
                 t.disque(x, y, 1.2, hex(0xffffff), 1.0, 0.0);
             }
             t.ligne(&[(0.5, 0.5), (w - 0.5, 0.5), (w - 0.5, h - 0.5), (0.5, h - 0.5), (0.5, 0.5)], 1.0, hex(0x6a5a3a), 1.0);
+            // la punaise qui la tient
+            t.disque(w * 0.5 + 1.0, 4.5, 3.4, [0.0, 0.0, 0.0], 0.3, 0.6);
+            t.disque(w * 0.5, 3.5, 3.0, hex(0xc0392b), 1.0, 0.0);
+            t.disque(w * 0.5 - 0.9, 2.6, 1.0, hex(0xffb0a0), 0.9, 0.3);
         })
     });
     papier.poser(t, x0, y0);
+    // la trace des premiers, de leurs pointages passés à leur place
+    for trace in monde.rhum_traces.as_deref().unwrap_or(&[]) {
+        let Some((&classe, pts)) = trace.split_first() else { continue };
+        let pts: Vec<(f32, f32)> = pts.chunks_exact(2).map(|p| {
+            let (x, y) = proj(p[1], p[0]);
+            (x0 + x, y0 + y)
+        }).collect();
+        if pts.len() >= 2 {
+            t.ligne(&pts, 1.3, hex(TEINTES[(classe as usize).min(5)]), 0.75);
+        }
+    }
+    // sans pointage, la flotte à l'estime : au port, puis là où le rythme d'un Ultim la met
+    if flotte.is_empty() {
+        let f = if monde.phase() == PhaseRhum::Course { monde.rhum_progress.unwrap_or(0.0) as f32 } else { 0.0 };
+        let (lo, la) = sur_la_route(f.clamp(0.0, 1.0));
+        let (x, y) = proj(lo, la);
+        let palpite = 0.5 + 0.5 * (t_ * 0.25).sin();
+        t.disque(x0 + x, y0 + y, 3.0 + 3.0 * palpite, hex(0xd8402e), 0.45 * (1.0 - palpite) + 0.1, 0.8);
+        t.disque(x0 + x, y0 + y, 2.6, hex(0xffffff), 1.0, 0.0);
+        t.disque(x0 + x, y0 + y, 1.7, hex(0xd8402e), 1.0, 0.0);
+    }
     // la flotte : les petits d'abord, les Ultim par-dessus ; le premier de chaque classe cerclé,
     // et qui palpite doucement
     let r = (w / 110.0).clamp(1.2, 2.4);
     let mut ordre: Vec<&[f32; 4]> = flotte.iter().collect();
-    ordre.sort_by(|a, b| b[0].total_cmp(&a[0]));
+    ordre.sort_by(|a, b| (a[3] != 0.0).cmp(&(b[3] != 0.0)).then(b[0].total_cmp(&a[0])));
     for b in ordre {
         let (x, y) = proj(b[2], b[1]);
+        // hors course : un point gris, sans éclat
+        if b[3] == 0.0 {
+            t.disque(x0 + x, y0 + y, r * 0.85, hex(0x8a8478), 0.7, 0.0);
+            continue;
+        }
         let col = hex(TEINTES[(b[0] as usize).min(5)]);
         if b[3] == 1.0 {
             t.disque(x0 + x, y0 + y, r * (2.0 + 0.4 * (t_ * 0.3).sin()), col, 0.35, 0.6);
             t.disque(x0 + x, y0 + y, r + 1.2, hex(0xffffff), 1.0, 0.0);
         }
         t.disque(x0 + x, y0 + y, r, col, 1.0, 0.0);
+    }
+    // la nuit, le papier n'a que la lueur du ciel
+    if sky.nuit > 0.05 {
+        t.poly(&[(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)], hex(0x0a1430), sky.nuit.min(1.0) * 0.5);
     }
 }
 
@@ -1757,13 +1813,21 @@ mod tests {
         let mut w = monde(PhaseRhum::Course, 0.5, 12.0);
         let mut sans = vec![0u32; c.w * c.h];
         Baie::default().peindre(&mut sans, c.w, c.h, c, &w);
-        // un bateau au milieu de l'Atlantique : la carte, en haut à droite, le montre
+        // sans pointage, la carte est là, en haut à droite : son papier
+        let haut_droite = || (0..c.h / 2).flat_map(|y| (c.w / 2..c.w).map(move |x| (x, y)));
+        let papier = haut_droite().filter(|&(x, y)| sans[y * c.w + x] & 0xffffff == 0xe9dcb8).count();
+        assert!(papier > 300, "le papier de la carte se voit : {papier} pixels");
+        // un bateau au milieu de l'Atlantique : la carte le montre, et seule la flotte y change
         w.rhum_flotte = Some(vec![[0.0, 30.0, -35.0, 1.0]]);
         let mut avec = vec![0u32; c.w * c.h];
         Baie::default().peindre(&mut avec, c.w, c.h, c, &w);
-        let haut_droite = (0..c.h / 2).flat_map(|y| (c.w / 2..c.w).map(move |x| (x, y)));
-        let change = haut_droite.filter(|&(x, y)| sans[y * c.w + x] != avec[y * c.w + x]).count();
-        assert!(change > 10_000, "la carte se voit : {change} pixels");
+        let change = haut_droite().filter(|&(x, y)| sans[y * c.w + x] != avec[y * c.w + x]).count();
+        assert!(change > 20 && change < 2000, "le bateau se place : {change} pixels");
+        // pendant le spectacle, la carte laisse la place
+        w.rhum_fete = Some(super::super::monde::SpectacleRhum { kind: FeteRhum::Depart, age: 50 });
+        let mut fete = vec![0u32; c.w * c.h];
+        Baie::default().peindre(&mut fete, c.w, c.h, c, &w);
+        assert_eq!(haut_droite().filter(|&(x, y)| fete[y * c.w + x] & 0xffffff == 0xe9dcb8).count(), 0);
         // le premier Ultim prête ses couleurs à l'Ultim de la baie
         let f = flotte(90.0, Some(&[[0, 0x123456, 0x654321]]));
         let ultim = f.iter().rev().find(|b| b.sorte == Sorte::Ultim).unwrap();

@@ -93,7 +93,14 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
             w.hour = 15.0;
             // un pointage d'exemple, pour voir la carte : la flotte étirée le long de la route
             w.rhum_flotte = Some(flotte_exemple());
+            w.rhum_traces = Some(traces_exemple());
             w.rhum_tetes = Some(vec![[0, 0xf4f4f4, 0x2a8a3a], [2, 0x101018, 0xe0c020], [3, 0xd04a2a, 0xffffff]]);
+            // ou un vrai pointage, tel que le greffon l'envoie : RHUM_JSON=<fichier> (rhumFlotte, rhumTraces, rhumTetes)
+            if let Some(v) = std::env::var("RHUM_JSON").ok().and_then(|f| std::fs::read_to_string(f).ok()).and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()) {
+                w.rhum_flotte = serde_json::from_value(v["rhumFlotte"].clone()).ok();
+                w.rhum_traces = serde_json::from_value(v["rhumTraces"].clone()).ok();
+                w.rhum_tetes = serde_json::from_value(v["rhumTetes"].clone()).ok();
+            }
         })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.95); w.month = 11; w.day = 8; w.hour = 16.0 })),
         (Activite::Idle, 0, avec(&|w| { w.rhum = Some(PhaseRhum::Course); w.rhum_progress = Some(0.95); w.month = 11; w.day = 8; w.hour = 22.0 })),
@@ -127,10 +134,29 @@ fn flotte_exemple() -> Vec<[f32; 4]> {
         for i in 0..n {
             let a = devant * (1.0 - 0.35 * i as f32 / n as f32);
             let j = super::pixels::hasard((classe * 97 + i) as i64) as f32 - 0.5;
-            f.push([classe as f32, 48.65 + (16.24 - 48.65) * a + j * 3.0, -2.02 + (-61.53 + 2.02) * a - j * 2.0, (i + 1) as f32]);
+            // un sur sept a abandonné, rentré vers la côte
+            let rang = if i % 7 == 6 { 0.0 } else { (i + 1) as f32 };
+            let a = if rang == 0.0 { 0.04 * a } else { a };
+            f.push([classe as f32, 48.65 + (16.24 - 48.65) * a + j * 3.0, -2.02 + (-61.53 + 2.02) * a - j * 2.0, rang]);
         }
     }
     f
+}
+
+/// La trace d'exemple des premiers : de Saint-Malo à leur place, en louvoyant un peu.
+fn traces_exemple() -> Vec<Vec<f32>> {
+    [(0u32, 0.72f32), (2, 0.5), (3, 0.4)]
+        .into_iter()
+        .map(|(classe, devant)| {
+            let mut t = vec![classe as f32];
+            for k in 0..=24 {
+                let a = devant * k as f32 / 24.0;
+                let j = (k as f32 * 0.9 + classe as f32).sin() * 0.6 - 0.5;
+                t.extend([48.65 + (16.24 - 48.65) * a + j * 3.0, -2.02 + (-61.53 + 2.02) * a - j * 2.0]);
+            }
+            t
+        })
+        .collect()
 }
 
 pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {

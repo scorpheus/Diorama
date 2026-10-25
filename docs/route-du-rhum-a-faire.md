@@ -102,8 +102,9 @@ sans dépendance. Rejoué sur 2022 (`--annee 2022 --instant 2022-11-12T14:00Z`),
 et un premier par classe. **Reste à faire** quand la carte 2026 sera en ligne, sans doute avant le
 1er novembre :
 - le relancer une fois, pour vérifier les noms des classes et l'état avant le départ ;
-- le faire tourner pendant la course (une tâche planifiée avec `--une-fois`, ou une fenêtre qui le
-  laisse tourner).
+- ~~le faire tourner pendant la course~~ : fait, la session désignée le lance tous les quarts
+  d'heure (`rhumFetch` dans `hooks/register.tsx`), d'une semaine avant le départ à quarante jours
+  après.
 
 Le rejeu a montré un piège, déjà corrigé dans le plugin : un bateau qui abandonne a, chez GeoVoile,
 le rang 0 et 0 mille à faire. Il serait devenu premier de sa classe, et le décor serait parti en
@@ -125,7 +126,7 @@ Les pistes de départ, pour mémoire (la VM n'y avait pas accès) :
    la carte les montre au port.
 
 **Où l'écrire** :
-- **Fait** : `tools/route-du-rhum-suivre.mts`. Il va chercher la source, la convertit, écrit le fichier, et recommence toutes les 15 minutes. Une tâche planifiée Windows ou l'orchestrateur le lance.
+- **Fait** : `tools/route-du-rhum-suivre.mts`. Il va chercher la source, la convertit et écrit le fichier, trace des premiers comprise. La session désignée le lance avec `--une-fois` tous les quarts d'heure : pas de tâche planifiée Windows, donc pas de console qui clignote, et rien ne tourne quand la session est fermée.
 - **Si la source est un simple JSON ou CSV**, la session désignée peut aussi la chercher elle-même : `$.http.fetch` dans `hooks/register.tsx`, à côté de `watchRhumData`. Toujours à un rythme raisonnable, et en respectant les conditions d'utilisation du site.
 
 Tester : écrire le fichier à la main avec deux ou trois bateaux. La carte doit apparaître dans les
@@ -143,9 +144,15 @@ Faites :
 
 À faire, dans l'ordre où elles rendraient le plus :
 1. ~~**Les arrivées**~~ : faites, par le spectacle (voir plus haut).
-2. **Un nouveau premier** dans une classe : une ligne au journal, une réplique du personnage.
-3. **Les abandons** : la source les donne (`RET`), et le plugin les envoie à l'appli avec le rang 0. Il reste à les griser sur la carte.
-4. **La trace du premier** sur la carte : garder ses positions des derniers pointages et tracer son sillage.
+2. ~~**Un nouveau premier**~~ : fait, une ligne au journal et une réplique du personnage.
+3. ~~**Les abandons**~~ : faits, en gris sur la carte, sous les autres.
+4. ~~**La trace du premier**~~ : faite, lue sur le tracker (`trace`), une quarantaine de points
+   par premier. Vue sur le rejeu 2022 :
+   `RHUM_JSON=<monde.json> rendu.exe --planche planche.png --large 72` dessine la carte d'un vrai
+   pointage (au format du monde : `rhumFlotte`, `rhumTraces`, `rhumTetes`).
+
+Faits aussi, le 25 octobre : la carte toujours affichée (la flotte à l'estime sans pointage), une
+rose des vents, une punaise, et un voile de nuit sur le papier.
 5. **Le ciré jaune** : un accessoire du personnage pour la semaine (un calque du pet, comme les
    autres accessoires : `tools/pet/chatgpt.py --tenue`, voir `tools/pet/CHATGPT.md`).
 6. **Le vrai vent** : la vitesse et la direction du vent sur la flotte (si la source les donne) pour

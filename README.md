@@ -74,8 +74,12 @@ Pour la Route du Rhum 2026 (départ de Saint-Malo le dimanche 1er novembre à 13
   - Ensuite, c'est **l'arrivée** à Pointe-à-Pitre : un Ultim aux couleurs du premier coupe la ligne, un feu d'artifice part, de jour comme de nuit, et un message nomme les bateaux arrivés que la machine n'a pas encore fêtés (`rhum:arrivees` dans le magasin du plugin). Un pointage qui apporte une arrivée la fait jouer aussitôt dans la session ouverte.
   - Le vrai départ, à 13h02, joue le même lâcher de la flotte.
 
+**La carte.** Une carte de l'Atlantique reste épinglée dans la cour, sauf le temps du spectacle : la côte, les îles, la rose des vents, la route de Saint-Malo à Pointe-à-Pitre. Sans pointage, elle montre la flotte à l'estime (au port avant le départ, puis sur la route).
+
 **Les vraies données.** La session désignée lit aussi `diorama-route-du-rhum.json`, à côté du fichier de désignation, dès qu'il change. Quand il est là :
-- une carte de l'Atlantique s'épingle dans la cour : la route de Saint-Malo à Pointe-à-Pitre et chaque bateau à sa place, coloré par classe, le premier de chaque classe cerclé ;
+- chaque bateau est à sa place sur la carte, coloré par classe, le premier de chaque classe cerclé, ceux qui ont abandonné en gris ;
+- la trace du premier de chaque classe, depuis Saint-Malo ;
+- quand une classe change de premier, le journal le note et le personnage le dit ;
 - les bateaux de la baie prennent les couleurs du premier de leur classe ;
 - le décor avance avec la distance qui reste au premier ;
 - une ligne donne, à tour de rôle, le premier de chaque classe, sa distance à l'arrivée, sa vitesse et l'heure du pointage.
@@ -97,7 +101,8 @@ Ce fichier, quiconque a les données l'écrit : un script, un orchestrateur. Son
 - `rang` : le rang dans la classe, déduit de `dtf` s'il manque.
 - `dtf` : les milles jusqu'à l'arrivée.
 - `vitesse` : en nœuds.
-- `statut` : `RAC` en course, `ARV` arrivé, `RET` (ou `ABD`, `DNF`, `DNS`, `DSQ`) hors course. Un bateau hors course reste sur la carte, sans rang ni distance : il ne mène pas sa classe et ne fait pas avancer le décor.
+- `statut` : `RAC` en course, `ARV` arrivé, `RET` (ou `ABD`, `DNF`, `DNS`, `DSQ`) hors course. Un bateau hors course reste sur la carte, en gris, sans rang ni distance : il ne mène pas sa classe et ne fait pas avancer le décor.
+- `trace` : facultative, la route parcourue, `[[lat, lon], …]` des plus anciens points au dernier. La carte dessine celle des premiers.
 - Seuls `nom`, `classe`, `lat` et `lon` sont obligatoires ; un bateau sans eux est laissé de côté.
 
 **L'outil qui l'écrit**, d'après le tracker GeoVoile de la course (`routedurhum.geovoile.com/2026/tracker/`). Les positions y arrivent chiffrées, et seul le JavaScript de la carte les décode : l'outil charge donc la carte dans Edge (ou Chrome) sans fenêtre et lit la flotte décodée en mémoire. Il n'y a rien à installer. Il écrit à côté, puis renomme.
@@ -108,6 +113,8 @@ node tools/route-du-rhum-suivre.mts --annee 2022 --instant 2022-11-12T14:00Z --s
                                                   rejoue un instant de 2022, à l'écran
 ```
 Tant que la carte 2026 n'est pas en ligne, il le dit et n'écrit rien.
+
+**Personne n'a à le lancer** : la session désignée le lance elle-même, avec `--une-fois`, tous les quarts d'heure, d'une semaine avant le départ à quarante jours après. Elle le fait sans fenêtre, et tant qu'elle est ouverte.
 
 Ce qui reste à vérifier et à brancher sur un PC, avec les vraies informations : [docs/route-du-rhum-a-faire.md](docs/route-du-rhum-a-faire.md).
 

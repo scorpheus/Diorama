@@ -112,6 +112,8 @@ export type World = {
   rhumTetes?: ReadonlyArray<readonly [number, number, number]>
   /** The show a session plays when it takes the sea: the start played again, or the arrival; its age in ticks. */
   rhumFete?: { kind: 'start' | 'finish'; age: number }
+  /** Each class leader's track, for the chart: [class, latitude, longitude, latitude, longitude…], oldest first. */
+  rhumTraces?: ReadonlyArray<ReadonlyArray<number>>
 }
 
 export type Personality = 'calme' | 'jovial' | 'grognon' | 'reveur' | 'applique'

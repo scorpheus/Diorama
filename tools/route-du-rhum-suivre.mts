@@ -63,6 +63,13 @@ const LIRE = (quand: number | null) => {
   const pointage = quand === null ? pointages[pointages.length - 1] : [...pointages].reverse().find(p => p.timecode <= quand)
   const lignes: Record<string, any> = {}
   for (const l of pointage?.lines ?? []) lignes[l.boat] = l
+  // la route d'un premier de classe : au plus une quarantaine de points, jusqu'au pointage
+  const trace = (b: any) => {
+    const locs: any[] = (b.track?.locations ?? []).filter((l: any) => quand === null || l.timecode <= quand)
+    const pas = Math.max(1, Math.ceil(locs.length / 40))
+    const gardes = locs.filter((_, i) => i % pas === 0 || i === locs.length - 1)
+    return gardes.map(l => [Math.round(l.lat * 100) / 100, Math.round(l.lng * 100) / 100])
+  }
   const position = (b: any) => {
     const locs: any[] = b.track?.locations ?? []
     const loc = quand === null ? b.track?.lastLocation : [...locs].reverse().find(l => l.timecode <= quand)
@@ -86,6 +93,7 @@ const LIRE = (quand: number | null) => {
         dtf: l?.dtf ?? null,
         vitesse: l?.speed ?? null,
         statut: l?.racestatus ?? null,
+        trace: l?.rank === 1 && /^(RAC|ARV)$/.test(l?.racestatus ?? '') ? trace(b) : null,
       }
     }),
   }
@@ -183,6 +191,7 @@ async function pointer(): Promise<void> {
       ...(typeof b.dtf === 'number' ? { dtf: arrondi(b.dtf, 1) } : {}),
       ...(typeof b.vitesse === 'number' ? { vitesse: arrondi(b.vitesse, 1) } : {}),
       ...(b.statut ? { statut: b.statut } : {}),
+      ...(Array.isArray(b.trace) && b.trace.length > 1 ? { trace: b.trace } : {}),
     }]
   })
   if (bateaux.length === 0) {
