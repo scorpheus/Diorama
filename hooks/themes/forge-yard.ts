@@ -137,6 +137,94 @@ function placeAll(from: number, to: number): Layout {
   return { wheel, tree, well, falls }
 }
 
+// --- the Route du Rhum: the bay of Saint-Malo for the mountains, and the fleet on it -------
+
+const SEA = 17 // the horizon: the sea from this row down to the quay
+
+/**
+ * The boats side on, bow to the right: m the mast, M the mainsail, S its stripe, J the jib,
+ * b the boom, H the hull, h its bow, f a float or a foil. The last row but `under` sits on
+ * the water; the rows after it are in the water, half seen.
+ */
+type Hull = { rows: readonly string[]; under: number }
+const ULTIM: Hull = {
+  rows: [
+    '........m......',
+    '.......Mm......',
+    '.......MmJ.....',
+    '......MMmJ.....',
+    '......MSmJJ....',
+    '.....MMSmJJ....',
+    '.....MMSmJJJ...',
+    '....MMMMSJJJ...',
+    '...MMMMMmJJJJ..',
+    '..MMMMMMmJJJJ..',
+    '..bbbbbbm......',
+    '.HHHHHHHHHHHHHh',
+    '..fff.....ffff.',
+  ],
+  under: 1,
+}
+const IMOCA: Hull = {
+  rows: [
+    '.....m....',
+    '....Mm....',
+    '....MmJ...',
+    '...MSmJ...',
+    '...MSmJJ..',
+    '..MMSmJJ..',
+    '..MMMmJJJ.',
+    '.bbbbm....',
+    'HHHHHHHHHh',
+    '.....f....',
+  ],
+  under: 1,
+}
+const CLASS40: Hull = { rows: ['...m...', '..Mm...', '..MmJ..', '.MSmJ..', '.bbm...', 'HHHHHHh'], under: 0 }
+const SPECK: Hull = { rows: ['..m..', '.MmJ.', 'MMmJ.', 'HHHHh'], under: 0 }
+
+/** A boat of the fleet: its shape, the row its hull rides, its pace, its colours, how far off it sails. */
+type Sail = { hull: Hull; lane: number; speed: number; seed: number; colours: { H: number; h: number; M: number; S: number }; far: number }
+
+/** The fleet a bay of this width holds, from the horizon in: the more room, the bigger the boats. */
+function fleetOf(room: number): Sail[] {
+  const fleet: Sail[] = [
+    { hull: SPECK, lane: 19, speed: 0.07, seed: 3, colours: { H: 0xe8e8ec, h: 0xc0392b, M: 0xf4f4f0, S: 0xf4f4f0 }, far: 0.55 },
+    { hull: SPECK, lane: 20, speed: 0.09, seed: 17, colours: { H: 0x2a3a6a, h: 0x2a3a6a, M: 0xf4f4f0, S: 0xf4f4f0 }, far: 0.5 },
+    { hull: CLASS40, lane: 22, speed: 0.15, seed: 29, colours: { H: 0xf2c14e, h: 0x2a2a30, M: 0xf6f6f2, S: 0x3f80dc }, far: 0.3 },
+  ]
+  fleet.push({ hull: IMOCA, lane: 24, speed: 0.24, seed: 41, colours: { H: 0x24242c, h: 0xd04a2a, M: 0xe8e8ea, S: 0xd04a2a }, far: 0.15 })
+  if (room >= 34) fleet.push({ hull: ULTIM, lane: 26, speed: 0.42, seed: 59, colours: { H: 0x1d3f8a, h: 0xe8e8ec, M: 0xf8f8f6, S: 0x1d3f8a }, far: 0.02 })
+  if (room >= 70) fleet.push({ hull: ULTIM, lane: 26, speed: 0.38, seed: 83, colours: { H: 0xc0392b, h: 0xf2f2f2, M: 0xf8f8f6, S: 0xc0392b }, far: 0.02 })
+  return fleet
+}
+
+/**
+ * Where a boat is at `t`: the column of its left edge, and which way it goes. Racing, it
+ * crosses the bay left to right, out to the Atlantic, and comes round again after a while;
+ * before the start, it tacks to and fro about its own spot, waiting for the gun.
+ */
+function sailing(s: Sail, t: number, rhum: 'before' | 'race', from: number, to: number): { x: number; dir: 1 | -1 } {
+  const w = s.hull.rows[0]?.length ?? 0, room = to - from
+  if (rhum === 'race') {
+    const lap = room + w + 4 + Math.floor(rand(s.seed) * 16)
+    return { x: from - w + Math.floor((((t * s.speed + rand(s.seed * 7) * lap) % lap) + lap) % lap), dir: 1 }
+  }
+  const reach = Math.max(2, Math.min(14, (room - w) / 3)), centre = from + 2 + rand(s.seed * 3) * Math.max(0, room - w - 4)
+  const a = (t * s.speed * 0.5) / reach + rand(s.seed * 11) * 6.28
+  return { x: Math.max(from + 2, Math.min(to - w, Math.round(centre + Math.sin(a) * reach))), dir: Math.cos(a) >= 0 ? 1 : -1 }
+}
+
+/** Two gulls over the bay, gliding on wide loops, a wingbeat now and then: their place at `t`, and their wings up or down. */
+const gulls = (t: number, from: number, to: number) => [0, 1].map(i => {
+  const room = to - from
+  return {
+    x: Math.round(from + room * (0.5 + 0.4 * Math.sin(t / (90 + i * 37) + i * 2.1))),
+    y: Math.round(7 + i * 2 + 2 * Math.sin(t / (23 + i * 9) + i)),
+    up: Math.floor(t / 2 + i) % 7 < 2,
+  }
+})
+
 const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
 const pack = (c: RGB) => (byte(c[0]) << 16) | (byte(c[1]) << 8) | byte(c[2])
 
@@ -457,9 +545,135 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
     return undefined
   }
 
+  /**
+   * The Route du Rhum: the bay of Saint-Malo where the mountains were, the fleet on it (tacking
+   * about before the gun, racing out to the Atlantic after it), two gulls over it, in a wide
+   * yard an islet and its lighthouse, and the quay's granite under foot. Neither tree, well nor
+   * wheel: the sea has their place.
+   */
+  const rhum = w.rhum, room = to - from
+  const fleet = rhum === undefined ? [] : fleetOf(room)
+  const lamps = sky.night || sky.dusk || sky.storm // the boats' lights, the lighthouse's
+  let placed: Array<{ s: Sail; x: number; dir: 1 | -1 }> | undefined
+  /** Where the boats are in this frame: read by every pixel that could carry one, so that one moves. */
+  const boats = () => {
+    const t = now() // read by every pixel asking, not only the first: each one is marked moving
+    return (placed ??= fleet.map(s => ({ s, ...sailing(s, t, rhum ?? 'race', from, to) })))
+  }
+  const seaAt = (x: number, y: number): RGB => {
+    const k = (y - SEA) / (GROUND - 1 - SEA) // 0 at the horizon, 1 against the quay
+    let c = lit(mix(sky.storm ? hex(0x34424e) : hex(0x1d5a78), sky.storm ? hex(0x4a5a64) : hex(0x2c8090), k), 0.45 * (1 - k))
+    // the wavelets: dashes of light going with the swell, longer and quicker toward us; more whitecaps in a storm
+    const len = 2 + k * 4, speed = (0.04 + k * 0.12) * (sky.storm ? 2 : 1)
+    if (rand(Math.floor((x + now() * speed) / len) * 13 + y * 101) > (sky.storm ? 0.8 : 0.88)) c = mix(c, lit(hex(0xe2f2f6), 0.3 * (1 - k)), sky.storm ? 0.8 : 0.5)
+    // the surf against the quay
+    if (y === GROUND - 1 && rand(x * 7 + Math.floor(now() / 2) * 3) > 0.62) c = mix(c, lit(hex(0xf2fbff)), 0.7)
+    return c
+  }
+  const boatAt = (x: number, y: number): RGB | undefined => {
+    const all = boats()
+    // the nearest first: it hides those behind
+    for (let i = all.length - 1; i >= 0; i--) {
+      const { s, x: bx, dir } = all[i] as { s: Sail; x: number; dir: 1 | -1 }
+      const rows = s.hull.rows, wide = rows[0]?.length ?? 0, top = s.lane - (rows.length - 1 - s.hull.under)
+      if (y < top || y > s.lane + s.hull.under || x < bx || x >= bx + wide) continue
+      const ch = rows[y - top]?.[dir > 0 ? x - bx : bx + wide - 1 - x]
+      if (ch === undefined || ch === '.') continue
+      // after dusk, the masthead light and the bow's, green or red by the side we see
+      if (lamps && ch === 'm' && y === top) return hex(0xfff6d0)
+      if (lamps && ch === 'h') return dir > 0 ? hex(0x6fe07a) : hex(0xff5a4a)
+      const own = s.colours
+      const c = ch === 'm' ? hex(0x2a2a30) : ch === 'b' ? hex(0x3a3a44) : ch === 'J' ? mul(hex(own.M), [0.88, 0.9, 0.94])
+        : ch === 'f' ? mul(hex(own.H), [0.7, 0.7, 0.75]) : hex(own[ch as 'H' | 'h' | 'M' | 'S'] ?? own.H)
+      const seen = lit(c, s.far)
+      return y > s.lane ? mix(seaAt(x, y), seen, 0.5) : seen // what is in the water, half seen
+    }
+    return undefined
+  }
+  /** How white the water is at (x, y): the bow wave, and the wake behind, long when they race. */
+  const foamAt = (x: number, y: number): number => {
+    let f = 0
+    for (const { s, x: bx, dir } of boats()) {
+      if (y !== s.lane && y !== s.lane + 1) continue
+      const wide = s.hull.rows[0]?.length ?? 0, len = Math.round(wide * (rhum === 'race' ? 1.4 : 0.5))
+      const bow = dir > 0 ? bx + wide : bx - 1, back = ((dir > 0 ? bx - 1 : bx + wide) - x) * dir
+      if (rhum === 'race' && x === bow && y === s.lane) f = Math.max(f, 0.9)
+      if (back >= 0 && back < len && rand(x * 13 + y * 7 + Math.floor(now() * 0.7) * 31) < (1 - back / len) * (y === s.lane ? 0.8 : 0.45)) f = Math.max(f, 1 - back / len)
+    }
+    return f
+  }
+  // the islet and its lighthouse, out on the right of a wide bay, its light turning after dusk
+  const isle = room >= 44 ? to - 10 : undefined
+  const beacon = () => lamps && Math.floor(now()) % 28 < 3
+  const isleAt = (x: number, y: number): RGB | undefined => {
+    if (isle === undefined || y > SEA || y < SEA - 11) return undefined
+    const d = Math.abs(x - isle - 0.5)
+    if (d < 7 && y >= SEA + 0.5 - (3 - d * 0.45 + roll(x / 2, 61) * 1.2)) return lit(rand(x * 5 + y * 3) > 0.7 ? hex(0x8a8494) : hex(0x5d5866), 0.35)
+    if (x !== isle && x !== isle + 1) return undefined
+    if (y === SEA - 11) return lit(hex(0x2a2a30), 0.3) // the lantern's cap
+    if (y === SEA - 10) return lamps ? (beacon() ? hex(0xfff2a0) : lit(hex(0x7a7050), 0.3)) : lit(hex(0x9ab0c0), 0.3)
+    if (y <= SEA - 3) return lit(y <= SEA - 8 ? hex(0xc0392b) : hex(0xeef0f4), 0.3)
+    return undefined
+  }
+  let flock: ReturnType<typeof gulls> | undefined
+  const gullAt = (x: number, y: number) => {
+    if (sky.night || y < 3 || y > 13) return false // they sleep at night
+    const t = now()
+    for (const g of (flock ??= gulls(t, from, to))) {
+      const dx = x - g.x, dy = y - g.y
+      if (g.up ? (Math.abs(dx) === 1 && dy === -1) || (dx === 0 && dy === 0) : (Math.abs(dx) <= 1 && dy === 0) || (Math.abs(dx) === 2 && dy === 1)) return true
+    }
+    return false
+  }
+  const quay = (x: number, y: number): RGB => {
+    if (y === GROUND) return lit(winter ? hex(0xeef2f8) : (x - from) % 6 === 0 ? hex(0x5d5866) : hex(0xa8a4ae)) // its coping stones, along the edge
+    if (winter && rand(x * 3 + y * 5) > 0.35) return lit(hex(0xeaf0f7))
+    const row = y % 2, stone = Math.floor((x + row * 2) / 4)
+    return lit((x + row * 2) % 4 === 0 ? hex(0x4a4048) : rand(stone * 13 + y) > 0.5 ? hex(0x8a8490) : hex(0x76707c))
+  }
+  const bollard = room >= 26 ? from + 19 : undefined
+  const buoys = rhum === 'before' && room >= 20 ? [from + Math.round(room * 0.3), from + Math.round(room * 0.72)] : []
+  // the bunting, from the eave's end to the yard's edge, as on the quays the week of the start
+  const BUNTING = [0xd04a2a, 0xf2c14e, 0x1d5a9a, 0xf4f4f0, 0x3c8a3c]
+  const flagAt = (x: number, y: number): RGB | undefined => {
+    const x0 = from + 12, x1 = to - 1
+    if (x <= x0 || x >= x1 || y > 7) return undefined
+    const rope = 2 + Math.round(2.5 * Math.sin((Math.PI * (x - x0)) / (x1 - x0)))
+    if (y === rope) return lit(hex(0x3a3a44))
+    const k = x - x0
+    return k % 3 !== 0 && (y === rope + 1 || (y === rope + 2 && k % 3 === 1)) ? lit(hex(BUNTING[Math.floor(k / 3) % BUNTING.length] ?? 0xf4f4f0)) : undefined
+  }
+  const harbour = (x: number, y: number): RGB => {
+    if (y >= GROUND) return quay(x, y)
+    const flag = flagAt(x, y)
+    if (flag) return flag
+    if (bollard !== undefined && y >= GROUND - 2 && (x === bollard || x === bollard + 1 || (y === GROUND - 2 && x === bollard - 1))) return lit(y === GROUND - 2 ? hex(0x3a3a44) : hex(0x24242c))
+    const boat = y >= 14 ? boatAt(x, y) : undefined
+    if (boat) return boat
+    if (y < SEA || (y === SEA && isle !== undefined)) {
+      const rock = isleAt(x, y)
+      if (rock) return rock
+    }
+    if (y < SEA) {
+      if (gullAt(x, y)) return lit(hex(0xf4f4f0))
+      const c = skyAt(x, y)
+      // the lighthouse's beam, sweeping out over the bay as it flashes
+      return isle !== undefined && y === SEA - 10 && x < isle && isle - x < 14 && beacon() ? mix(c, hex(0xfff2a0), 0.55 * (1 - (isle - x) / 14)) : c
+    }
+    let c = seaAt(x, y)
+    // the start line's buoys, bobbing
+    for (const bx of buoys) {
+      const top = x === bx && y >= 22 && y <= 24 ? 22 + (Math.sin(now() / 4 + bx) > 0 ? 0 : 1) : -1
+      if (y === top || y === top + 1) c = lit(y === top ? hex(0xf2c14e) : hex(0xc08a20), 0.15)
+    }
+    const f = y >= 18 ? foamAt(x, y) : 0
+    return f > 0 ? mix(c, lit(hex(0xf2fbff)), 0.45 + 0.45 * f) : c
+  }
+
   const paint = (x: number, y: number): number => {
     let c = door(x, y)
-    if (c === undefined) {
+    if (c === undefined && rhum !== undefined) c = harbour(x, y)
+    else if (c === undefined) {
       // under the leaves, neither sky nor hills are painted
       c = crown(x, y) ?? (y >= GROUND ? ground(x, y) : hills(x, y))
       c = millAt(x, y, wellAt(x, y, c))
@@ -468,7 +682,7 @@ export function outdoors(w: World, working: boolean, from: number, to: number) {
   }
   // painted whole once a sky, a season and a width; then, frame after frame, only what moves
   const width = Math.max(0, to - from)
-  const key = `${from},${to},${se},${sky.night},${sky.dusk},${sky.storm},${sky.flash}`
+  const key = `${from},${to},${se},${sky.night},${sky.dusk},${sky.storm},${sky.flash},${rhum}`
   let still = stills.get(key)
   const colours = new Int32Array(width * HEIGHT)
   if (still === undefined) {
@@ -512,7 +726,7 @@ export function drawYardWeather(g: Grid, w: World, from: number, to: number) {
       dot(g, 2 * fx, 2 * fy, 'w', '.')
     }
   }
-  if (se === 'autumn' || se === 'spring') {
+  if ((se === 'autumn' || se === 'spring') && w.rhum === undefined) { // by the sea, no tree
     // from the tree's crown down to the grass, turning over, the wind taking them left
     const { tree } = layout(from, to)
     const colours = se === 'autumn' ? 'FyF' : 'MMi'

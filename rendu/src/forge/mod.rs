@@ -4,6 +4,7 @@
 
 pub mod accessoires;
 pub mod atelier;
+pub mod baie;
 pub mod cellules;
 pub mod cour;
 pub mod gerbe;
@@ -13,6 +14,7 @@ pub mod pet;
 pub mod pixels;
 pub mod planche;
 pub mod poses;
+pub mod trace;
 
 
 use atelier::{compose, Contexte, C, GROW, IMPACT, ROWS, SH, SW, YARD};
@@ -81,6 +83,24 @@ impl Forge {
         }
         (pixels::to_cells(&scene, &accessoires::PALETTE, x0, fin, Some(&mut lumiere)), acteurs, coup)
     }
+}
+
+/// Où se peint la baie de la Route du Rhum dans le bandeau : la cour, de la porte au bord ;
+/// rien quand le monde ne la montre pas ou que le recadrage n'a pas de cour.
+pub fn cadre_baie(monde: &Monde, x0: i32, cols: usize, cw: i32, ch: i32, h: usize) -> Option<baie::Cadre> {
+    let debut = YARD - x0;
+    if monde.rhum.is_none() || debut < 0 || debut >= cols as i32 {
+        return None;
+    }
+    Some(baie::Cadre {
+        left: debut * cw,
+        w: ((cols as i32 - debut) * cw) as usize,
+        h: ((ROWS * ch) as usize).min(h),
+        cw: cw as f32,
+        demi: ch as f32 / 2.0,
+        from: YARD as f32,
+        to: (x0 + cols as i32) as f32,
+    })
 }
 
 impl Monde {
@@ -156,6 +176,7 @@ pub struct SceneForge {
     depuis: i64,
     avant: Vec<u32>,
     gerbe: gerbe::Gerbe,
+    baie: baie::Baie,
     /// le tic du dernier coup de marteau : un message du plugin qui le redonne ne frappe pas deux fois
     frappe: i64,
     pub images: u64,
@@ -163,7 +184,7 @@ pub struct SceneForge {
 
 impl SceneForge {
     pub fn new() -> Self {
-        SceneForge { forge: Forge::default(), etat: None, depuis: 0, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), frappe: i64::MIN, images: 0 }
+        SceneForge { forge: Forge::default(), etat: None, depuis: 0, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), baie: baie::Baie::default(), frappe: i64::MIN, images: 0 }
     }
 
     pub fn recevoir(&mut self, etat: Etat) {
@@ -197,9 +218,22 @@ impl crate::scene::Scene for SceneForge {
         let (w, h) = (image.w as usize, image.h as usize);
         let mut cible = cellules::Cible { pixels: image.pixels, w, h };
         let mut zone = cellules::peindre(&mut cible, &cells, if neuve { None } else { Some(&self.avant) }, cols, 0, 0, cw, ch);
+        let mut cells = cells;
+        // la Route du Rhum : la baie, au vrai pixel, sous les cellules que la cour laisse
+        // transparentes ; elle bouge à chaque image, ces cellules se repeignent donc toujours
+        if let Some(cadre) = cadre_baie(&monde, x0, cols, cw, ch, h) {
+            if let Some(z) = self.baie.peindre(image.pixels, w, h, cadre, &monde) {
+                zone = Some(zone.map_or(z, |a| (a.0.min(z.0), a.1.min(z.1), a.2.max(z.2), a.3.max(z.3))));
+            }
+            let debut = (YARD - x0).max(0) as usize;
+            for rangee in cells.chunks_mut(cols * 3) {
+                for cell in rangee.chunks_mut(3).skip(debut) {
+                    cell[0] = u32::MAX;
+                }
+            }
+        }
         let mut peints: Vec<_> = acteurs.iter().filter_map(|a| pet::peindre(a, image.pixels, w, h, x0, cw, ch)).collect();
         peints.extend(self.gerbe.peindre(image.pixels, w, h));
-        let mut cells = cells;
         for (l, t, r, b) in peints {
             zone = Some(zone.map_or((l, t, r, b), |z| (z.0.min(l), z.1.min(t), z.2.max(r), z.3.max(b))));
             // sous lui et sous la gerbe, les cellules ne sont plus ce que `cells` en dit : à
@@ -287,6 +321,21 @@ mod tests {
 
     fn clone_etat(e: &Etat) -> Etat {
         Etat { recadrage: e.recadrage, extra: e.extra, lit: e.lit, activite: e.activite, tick: e.tick, monde: e.monde.clone() }
+    }
+
+    #[test]
+    fn la_route_du_rhum_se_lit_du_monde_et_se_garde_entre_deux_messages() {
+        let ligne = LIGNE.replace(r#""clock":1012}"#, r#""clock":1012,"rhum":"race"}"#);
+        let etat = Etat::lire(&ligne).expect("la ligne du plugin se lit");
+        assert_eq!(etat.monde.rhum, Some(monde::PhaseRhum::Course));
+        assert_eq!(etat.monde.plus_tard(10).rhum, Some(monde::PhaseRhum::Course));
+        assert_eq!(Etat::lire(LIGNE).expect("sans elle aussi").monde.rhum, None);
+        // et le pointage : la flotte pour la carte, les couleurs des premiers
+        let ligne = LIGNE.replace(r#""clock":1012}"#, r#""clock":1012,"rhum":"race","rhumProgress":0.5,"rhumFlotte":[[0,30,-34,1],[2,40.5,-15.2,1]],"rhumTetes":[[0,1916810,15909198]]}"#);
+        let m = Etat::lire(&ligne).expect("le pointage se lit").monde;
+        assert_eq!(m.rhum_progress, Some(0.5));
+        assert_eq!(m.rhum_flotte, Some(vec![[0.0, 30.0, -34.0, 1.0], [2.0, 40.5, -15.2, 1.0]]));
+        assert_eq!(m.rhum_tetes, Some(vec![[0, 0x1d3f8a, 0xf2c14e]]));
     }
 
     #[test]

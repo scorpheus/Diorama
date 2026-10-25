@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
-use super::monde::{Monde, Saison, Temps};
+use super::monde::{Monde, PhaseRhum, Saison, Temps};
 use super::pixels::{arrondi, hasard, Grille};
 
 pub type Rgb = [f64; 3];
@@ -195,6 +195,9 @@ fn place_all(from: i32, to: i32) -> Plan {
     Plan { wheel, tree, well, falls }
 }
 
+/// Un pixel de la cour que la baie de la Route du Rhum peint dessous : les cellules l'y laissent transparent.
+const BAIE: u32 = u32::MAX;
+
 /// La cour immobile pour un ciel, une saison et une largeur : la couleur de chaque pixel, et
 /// ceux qui lisent l'horloge, à repeindre à chaque image.
 struct Immobile {
@@ -202,7 +205,7 @@ struct Immobile {
     moving: Vec<u32>,
 }
 
-type Cle = (i32, i32, u8, bool, bool, bool, bool);
+type Cle = (i32, i32, u8, bool, bool, bool, bool, u8);
 const STILLS: usize = 12; // les derniers ciels et largeurs gardés ; l'heure et la fenêtre changent lentement
 
 /// Ce que la cour garde d'une image à l'autre : ce qui ne bouge pas n'est jamais peint deux fois.
@@ -224,7 +227,7 @@ pub struct Dehors {
 impl Dehors {
     pub fn back(&self, x: i32, y: i32) -> Option<u32> {
         if x >= self.from && x < self.to && (0..HEIGHT).contains(&y) {
-            self.colours.get((y * (self.to - self.from) + x - self.from) as usize).copied()
+            self.colours.get((y * (self.to - self.from) + x - self.from) as usize).copied().filter(|&c| c != BAIE)
         } else {
             None
         }
@@ -265,6 +268,7 @@ impl Cour {
         let p = Peintre {
             sky,
             se,
+            rhum: w.rhum,
             winter: se == Saison::Hiver,
             clock: w.clock,
             working,
@@ -277,7 +281,7 @@ impl Cour {
             pouring: RefCell::new(None),
         };
         // peinte entière une fois par ciel, saison et largeur ; puis, image après image, ce qui bouge
-        let key: Cle = (from, to, se as u8, sky.night, sky.dusk, sky.storm, sky.flash);
+        let key: Cle = (from, to, se as u8, sky.night, sky.dusk, sky.storm, sky.flash, w.rhum.map_or(0, |r| r as u8 + 1));
         let mut colours = vec![0u32; (width * HEIGHT) as usize];
         match self.stills.get(&key) {
             None => {
@@ -316,6 +320,7 @@ impl Cour {
 struct Peintre {
     sky: Ciel,
     se: Saison,
+    rhum: Option<PhaseRhum>,
     winter: bool,
     clock: i64,
     working: bool,
@@ -902,6 +907,8 @@ impl Peintre {
     fn paint(&self, x: i32, y: i32) -> u32 {
         let c = match self.door(x, y) {
             Some(c) => c,
+            // la Route du Rhum : la baie se peint dessous, au vrai pixel (baie.rs)
+            None if self.rhum.is_some() => return BAIE,
             None => {
                 // sous les feuilles, ni ciel ni collines ne se peignent
                 let c = self.crown(x, y).unwrap_or_else(|| if y >= GROUND { self.ground(x, y) } else { self.hills(x, y) });
@@ -939,8 +946,8 @@ pub fn draw_yard_weather(cour: &mut Cour, g: &mut Grille, w: &Monde, from: i32, 
             g.dot(2.0 * fx, 2.0 * fy, b'w', Some(clair));
         }
     }
-    if se == Saison::Automne || se == Saison::Printemps {
-        // de la couronne de l'arbre jusqu'à l'herbe, en tournoyant, le vent les prenant à gauche
+    if (se == Saison::Automne || se == Saison::Printemps) && w.rhum.is_none() {
+        // au bord de la mer, pas d'arbre ; ailleurs, de la couronne de l'arbre jusqu'à l'herbe, en tournoyant, le vent les prenant à gauche
         let (tx, tr) = cour.layout(from, to).tree;
         let colours = if se == Saison::Automne { b"FyF" } else { b"MMi" };
         for i in 0..3i64 {
@@ -958,5 +965,23 @@ pub fn draw_yard_weather(cour: &mut Cour, g: &mut Grille, w: &Monde, from: i32, 
                 g.dot(fx + dx, fy + dy, colours[i as usize], Some(clair));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pour_la_route_du_rhum_la_cour_laisse_la_place_a_la_baie() {
+        let (from, to) = (54, 144);
+        let mut w = Monde { month: 11, day: 2, hour: 14.0, ..Monde::default() };
+        let mut cour = Cour::default();
+        let montagnes = cour.outdoors(&w, false, from, to);
+        w.rhum = Some(PhaseRhum::Course);
+        let baie = cour.outdoors(&w, false, from, to);
+        assert!(montagnes.back(from + 40, 20).is_some());
+        assert_eq!(baie.back(from + 40, 20), None, "la baie se peint dessous");
+        assert_eq!(baie.back(from, 20), montagnes.back(from, 20), "la porte reste");
     }
 }

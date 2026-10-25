@@ -57,6 +57,64 @@ Quand un personnage part en visite, le passeur le fait voler pour de vrai : il s
 
 Pour voir un vol sans attendre une visite : `node tools/envol.mts forge --de <session | pid> --vers <session | pid>`. Sans arguments, l'outil liste les sessions ouvertes.
 
+## La Route du Rhum
+
+Pour la Route du Rhum 2026 (départ de Saint-Malo le dimanche 1er novembre à 13h02), une session de la machine, et une seule, voit la cour de la forge devenir la mer. L'appli native la peint au vrai pixel de l'écran ; le dessin au terminal (`rendu` à `non`) en garde une version en gros pixels, à Saint-Malo seulement.
+
+- **La flotte** : de petites voiles à l'horizon, des Class40 et des IMOCA (foils, gennaker au portant), un Ocean Fifty, et, si la cour est assez large, un ou deux Ultim en vol (la coque centrale hors de l'eau, le flotteur et ses foils dedans). Avant le départ, ils tirent des bords autour des bouées de la ligne ; après, ils filent vers l'Atlantique, sillage et embruns compris. La nuit, leurs feux de navigation s'allument.
+- **Le voyage** : le décor suit l'avancée de la course.
+  - À Saint-Malo, le quai de granit, le pavois, le phare sur son îlot, et le bateau-comité dont le canon tonne jusqu'au départ.
+  - Au large, le pont de teck et ses filières, des dauphins qui sautent, une baleine qui souffle, et le Pico quand on passe les Açores ; la nuit, les sillages s'allument.
+  - Aux tropiques, les cumulus des alizés, les grains et leur rideau de pluie, les poissons volants, les sargasses et les frégates.
+  - En Guadeloupe, la plage, les palmiers, les mornes de Basse-Terre et la Soufrière ; la nuit, le feu d'artifice des arrivées.
+- **Le ciel de l'heure** : le soleil qui se couche dans la mer et son reflet, la lune, les étoiles, les cumulus qui passent, l'orage.
+- **À côté des jauges** : le compte à rebours, puis le jour de course. Au coup de canon, le personnage saute de joie et le journal le note.
+
+**Les vraies données.** La session désignée lit aussi `diorama-route-du-rhum.json`, à côté du fichier de désignation, dès qu'il change. Quand il est là :
+- une carte de l'Atlantique s'épingle dans la cour : la route de Saint-Malo à Pointe-à-Pitre et chaque bateau à sa place, coloré par classe, le premier de chaque classe cerclé ;
+- les bateaux de la baie prennent les couleurs du premier de leur classe ;
+- le décor avance avec la distance qui reste au premier ;
+- une ligne donne, à tour de rôle, le premier de chaque classe, sa distance à l'arrivée, sa vitesse et l'heure du pointage.
+
+Ce fichier, quiconque a les données l'écrit : un script, un orchestrateur. Son format :
+
+```json
+{
+  "at": "2026-11-03T13:00:00Z",
+  "bateaux": [
+    { "nom": "…", "skipper": "…", "classe": "Ultim", "couleurs": ["#1d3f8a", "#f2c14e"],
+      "lat": 30.04, "lon": -33.97, "rang": 1, "dtf": 1771.4, "vitesse": 31.2 }
+  ]
+}
+```
+
+- `classe` : `Ultim`, `Ocean Fifty`, `IMOCA`, `Class40`, `Rhum Multi` ou `Rhum Mono`.
+- `couleurs` : la coque, puis la bande.
+- `rang` : le rang dans la classe, déduit de `dtf` s'il manque.
+- `dtf` : les milles jusqu'à l'arrivée.
+- `vitesse` : en nœuds.
+- Seuls `nom`, `classe`, `lat` et `lon` sont obligatoires ; un bateau sans eux est laissé de côté.
+
+Ce qui reste à vérifier et à brancher sur un PC, avec les vraies informations : [docs/route-du-rhum-a-faire.md](docs/route-du-rhum-a-faire.md).
+
+**Quelle session la montre**, au choix :
+- **le fichier** `diorama-route-du-rhum.txt`, dans le dossier de Claude Code (`%USERPROFILE%\.claude`, ou `CLAUDE_CONFIG_DIR`). Sa première ligne nomme la session par son pid, son nom ou son identifiant. Les sessions le relisent toutes les deux secondes, et celle qu'il nomme prend la mer. C'est ce qu'un orchestrateur écrit pour désigner une session, par exemple depuis cmd :
+  ```
+  echo 12345> "%USERPROFILE%\.claude\diorama-route-du-rhum.txt"
+  ```
+  ou avec l'outil : sans argument, il dit qui la montre et liste les sessions ouvertes avec leur pid ; avec un pid, un nom ou un identifiant, il désigne cette session ; avec `--aucune`, plus aucune ne la montre.
+  ```
+  node tools/route-du-rhum.mts
+  node tools/route-du-rhum.mts 12345
+  node tools/route-du-rhum.mts --aucune
+  ```
+- **l'environnement** de la session, à son lancement : `DIORAMA_ROUTE_DU_RHUM=1`. Pour ouvrir depuis l'orchestrateur une fenêtre cmd qui la montre :
+  ```
+  start "Route du Rhum" cmd /k "set DIORAMA_ROUTE_DU_RHUM=1&& claude"
+  ```
+
+Il faut l'option *Lumière* à `oui` (par défaut) pour le dessin au terminal. La mer est celle de la forge ; un thème JSON garde son propre décor.
+
 ## Un thème à soi
 
 Le forgeron n'est qu'un thème. Un personnage différent, avec son décor et ses mots, tient dans **un seul fichier JSON**.
@@ -114,6 +172,8 @@ Le code se répartit ainsi :
 | `hooks/flight.ts` | découpe le personnage de sa scène, pour le passeur |
 | `passeur/passeur.ps1`, `passeur/passeur.cs` | le passeur : lancement en PowerShell, cœur en C# compilé à la volée |
 | `tools/envol.mts` | un vol d'essai entre deux sessions |
+| `tools/route-du-rhum.mts` | désigne la session qui montre la Route du Rhum |
+| `rendu/src/forge/baie.rs`, `trace.rs` | la Route du Rhum peinte au vrai pixel, et ce qui dessine (polygones, traits, disques lissés) |
 
 ## Licence
 
