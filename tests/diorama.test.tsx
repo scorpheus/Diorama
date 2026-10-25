@@ -1538,6 +1538,30 @@ test("the fleet's last report shows on the chart, colours the bay's boats, and n
   expect(w?.rhumProgress).toBe(0.5)
 })
 
+test('a boat out of the race stays on the chart, but leads nothing and moves no scenery', { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  // as GeoVoile gives them: a retired boat has rank 0 and 0 miles to go, back in Saint-Malo
+  rhumData.text = JSON.stringify({
+    at: '2026-11-03T13:00:00Z',
+    bateaux: [
+      { nom: 'Trimaran Bleu', classe: 'Ultim', lat: 37.05, lon: -24.86, rang: 1, dtf: 2377.4, vitesse: 25.5, statut: 'RAC' },
+      { nom: 'Trimaran Cassé', classe: 'Ultim', lat: 48.65, lon: -2.02, dtf: 0, statut: 'RET' },
+      { nom: 'Monocoque Noir', classe: 'IMOCA', lat: 42.13, lon: -18.98, dtf: 2745.4 },
+      { nom: 'Monocoque Rentré', classe: 'IMOCA', lat: 47.73, lon: -3.37, dtf: 0, statut: 'RET' },
+    ],
+  })
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 3, 15, 0) })
+  engine(on)
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await clock.advance(450)
+  const w = worldsPosted().at(-1)
+  expect(w?.rhumFlotte).toEqual([[0, 37.1, -24.9, 1], [0, 48.7, -2, 0], [2, 42.1, -19, 1], [2, 47.7, -3.4, 0]])
+  // 2 377 of 3 542 miles still to go for the leaders: the retired ones' 0 is no finish
+  expect(w?.rhumProgress).toBe(0.33)
+})
+
 test('a report that cannot be read is said in the log, and draws nothing', { options: { rendu: 'oui' } }, async ($, on) => {
   fakeRhumFile(on, undefined)
   rhumEnv = '1'

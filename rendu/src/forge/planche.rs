@@ -275,6 +275,33 @@ mod film {
         }
         std::fs::write(std::env::var("FILM").unwrap(), super::png(&out, ((vue + 4) * n) as u32, h as u32)).unwrap();
     }
+
+    /// Ce que coûte une image de la Route du Rhum, baie comprise, à côté de la cour ordinaire,
+    /// scène par scène de la planche : cargo test --release chrono_baie -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn chrono_baie() {
+        use std::time::Instant;
+        let n = 200;
+        for (cw, ch) in [(9i32, 19i32), (14, 30)] {
+            let (w, h) = (144 * cw, 16 * ch);
+            let mut px = vec![0u32; (w * h) as usize];
+            for (i, (activite, tick, monde)) in super::scenes().into_iter().enumerate() {
+                if monde.rhum.is_none() && i != 0 {
+                    continue;
+                }
+                let mut s = SceneForge::new();
+                s.recevoir(Etat { recadrage: Recadrage::Full, extra: 72, lit: true, activite, tick, monde });
+                let mut image = Image { pixels: &mut px, w: w as u32, h: h as u32, cellule: (cw as u32, ch as u32) };
+                s.peindre(&mut image, 0.15, true);
+                let t = Instant::now();
+                for _ in 0..n {
+                    std::hint::black_box(s.peindre(&mut image, 0.15, false));
+                }
+                println!("{cw}×{ch}, scène {i} : {:.3} ms l'image", t.elapsed().as_secs_f64() * 1000.0 / n as f64);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

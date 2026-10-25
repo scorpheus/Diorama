@@ -93,7 +93,17 @@ Ce fichier, quiconque a les données l'écrit : un script, un orchestrateur. Son
 - `rang` : le rang dans la classe, déduit de `dtf` s'il manque.
 - `dtf` : les milles jusqu'à l'arrivée.
 - `vitesse` : en nœuds.
+- `statut` : `RAC` en course, `ARV` arrivé, `RET` (ou `ABD`, `DNF`, `DNS`, `DSQ`) hors course. Un bateau hors course reste sur la carte, sans rang ni distance : il ne mène pas sa classe et ne fait pas avancer le décor.
 - Seuls `nom`, `classe`, `lat` et `lon` sont obligatoires ; un bateau sans eux est laissé de côté.
+
+**L'outil qui l'écrit**, d'après le tracker GeoVoile de la course (`routedurhum.geovoile.com/2026/tracker/`). Les positions y arrivent chiffrées, et seul le JavaScript de la carte les décode : l'outil charge donc la carte dans Edge (ou Chrome) sans fenêtre et lit la flotte décodée en mémoire. Il n'y a rien à installer. Il écrit à côté, puis renomme.
+```
+node tools/route-du-rhum-suivre.mts               un pointage toutes les 15 minutes
+node tools/route-du-rhum-suivre.mts --une-fois    un seul (pour une tâche planifiée)
+node tools/route-du-rhum-suivre.mts --annee 2022 --instant 2022-11-12T14:00Z --sortie -
+                                                  rejoue un instant de 2022, à l'écran
+```
+Tant que la carte 2026 n'est pas en ligne, il le dit et n'écrit rien.
 
 Ce qui reste à vérifier et à brancher sur un PC, avec les vraies informations : [docs/route-du-rhum-a-faire.md](docs/route-du-rhum-a-faire.md).
 

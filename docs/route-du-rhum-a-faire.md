@@ -22,13 +22,19 @@ Saint-Malo, pour 3 542 milles jusqu'à Pointe-à-Pitre.
   - le décor avance avec la distance du premier ;
   - une ligne près des jauges nomme le premier de chaque classe.
   
-  **Personne n'écrit encore ce fichier** : c'est le travail du §2.
+  `tools/route-du-rhum-suivre.mts` l'écrit d'après le tracker GeoVoile (§2) ; la carte 2026 n'est pas
+  encore en ligne (25 octobre).
 - Sans fichier, le décor avance au rythme d'un Ultim (7 jours pour la traversée), à partir de l'heure du départ.
 
 ## 1. Vérifier sur Windows, avant tout
 
-Rien de l'appli n'a tourné sous Windows : elle a été compilée pour Windows (`cargo check --target
-x86_64-pc-windows-gnu`), et son dessin testé sous Linux avec un faux module `windows`.
+**Fait sur le PC, le 25 octobre** (branche fusionnée dans `main`) : `cargo test` passe (20 tests),
+la version release se compile, `claude plugin test .` passe (89 tests). La planche a été regardée :
+rien ne déborde, les bateaux de la Guadeloupe sont sur l'eau et les palmiers devant. Le coût est mesuré
+hors écran (`cargo test --release chrono_baie -- --ignored --nocapture`) : entre 0,7 et 1,9 ms par image
+avec la baie, contre 0,4 ms pour la cour seule, en cellules de 9×19 comme de 14×30. À 150 ms la
+cadence, cela fait environ 1 % d'un cœur : rien à optimiser. **Restent à voir à l'œil** : la vitrine
+(point 3) et la vraie session (point 4).
 
 1. Les tests et la compilation :
    ```
@@ -83,7 +89,27 @@ Les classes : `Ultim`, `Ocean Fifty`, `IMOCA`, `Class40`, `Rhum Multi`, `Rhum Mo
 rang dans la classe (déduit de `dtf` s'il manque), `dtf` les milles jusqu'à l'arrivée, `vitesse` en
 nœuds. Écrire dans un fichier à côté, puis le renommer : la session ne doit jamais lire un fichier à moitié écrit.
 
-**Trouver la source** (la VM n'y avait pas accès) :
+**Fait sur le PC, le 25 octobre** : la source est le tracker GeoVoile,
+`routedurhum.geovoile.com/2026/tracker/`. Il répond « Mise en ligne à venir » pour l'instant. Celui de
+2022 est encore en ligne, avec les mêmes objets en mémoire :
+- `tracker._boats` : nom, skipper, `hullColors`, trace ;
+- `tracker._boatClassesByIds` : les classes, dont « Ultim 32/23 » ;
+- `tracker._reports` : les pointages, avec `rank` dans la classe, `dtf`, `speed` et `racestatus`
+  (`RAC`, `ARV` ou `RET`).
+
+`tools/route-du-rhum-suivre.mts` lit ces objets dans Edge sans fenêtre, par le protocole DevTools,
+sans dépendance. Rejoué sur 2022 (`--annee 2022 --instant 2022-11-12T14:00Z`), il donne 138 bateaux
+et un premier par classe. **Reste à faire** quand la carte 2026 sera en ligne, sans doute avant le
+1er novembre :
+- le relancer une fois, pour vérifier les noms des classes et l'état avant le départ ;
+- le faire tourner pendant la course (une tâche planifiée avec `--une-fois`, ou une fenêtre qui le
+  laisse tourner).
+
+Le rejeu a montré un piège, déjà corrigé dans le plugin : un bateau qui abandonne a, chez GeoVoile,
+le rang 0 et 0 mille à faire. Il serait devenu premier de sa classe, et le décor serait parti en
+Guadeloupe. Le plugin lit maintenant `statut`.
+
+Les pistes de départ, pour mémoire (la VM n'y avait pas accès) :
 1. **Le site officiel**, `routedurhum.com` : la cartographie et les classements. Ouvrir les outils
    de développement du navigateur (onglet *Réseau*) sur ces pages, et chercher ce qu'elles chargent :
    du JSON, ou des fichiers de classement (Excel ou CSV, publiés à chaque pointage, comme ceux du
@@ -99,7 +125,7 @@ nœuds. Écrire dans un fichier à côté, puis le renommer : la session ne doit
    la carte les montre au port.
 
 **Où l'écrire** :
-- **Le plus simple** : un outil Node, `tools/route-du-rhum.mts --suivre` par exemple. Il va chercher la source, la convertit, écrit le fichier, et recommence toutes les 15 minutes. Une tâche planifiée Windows ou l'orchestrateur le lance.
+- **Fait** : `tools/route-du-rhum-suivre.mts`. Il va chercher la source, la convertit, écrit le fichier, et recommence toutes les 15 minutes. Une tâche planifiée Windows ou l'orchestrateur le lance.
 - **Si la source est un simple JSON ou CSV**, la session désignée peut aussi la chercher elle-même : `$.http.fetch` dans `hooks/register.tsx`, à côté de `watchRhumData`. Toujours à un rythme raisonnable, et en respectant les conditions d'utilisation du site.
 
 Tester : écrire le fichier à la main avec deux ou trois bateaux. La carte doit apparaître dans les
@@ -115,7 +141,7 @@ Faites :
 1. **Les arrivées** : quand un bateau a `dtf` à 0, le personnage saute de joie, un toast le nomme,
    et la baie de Guadeloupe montre la ligne d'arrivée et un bateau qui la coupe.
 2. **Un nouveau premier** dans une classe : une ligne au journal, une réplique du personnage.
-3. **Les abandons** (si la source les donne) : grisés sur la carte.
+3. **Les abandons** : la source les donne (`RET`), et le plugin les envoie à l'appli avec le rang 0. Il reste à les griser sur la carte.
 4. **La trace du premier** sur la carte : garder ses positions des derniers pointages et tracer son sillage.
 5. **Le ciré jaune** : un accessoire du personnage pour la semaine (un calque du pet, comme les
    autres accessoires : `tools/pet/chatgpt.py --tenue`, voir `tools/pet/CHATGPT.md`).

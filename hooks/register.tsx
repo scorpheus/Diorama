@@ -1539,7 +1539,9 @@ function rhumProgressAt(ms: number): number {
 const RHUM_DATA = 'diorama-route-du-rhum.json'
 /** The race's classes, in the order the native render numbers them. */
 const RHUM_CLASSES = ['Ultim', 'Ocean Fifty', 'IMOCA', 'Class40', 'Rhum Multi', 'Rhum Mono'] as const
-type RhumBoat = { name: string; skipper?: string; cls: number; colours?: readonly [number, number]; lat: number; lon: number; rank?: number; dtf?: number; speed?: number }
+type RhumBoat = { name: string; skipper?: string; cls: number; colours?: readonly [number, number]; lat: number; lon: number; rank?: number; dtf?: number; speed?: number; out?: true }
+/** The statuses of a boat out of the race: retired, not started, disqualified (GeoVoile says RET). */
+const RHUM_OUT = /^(ret|abd|abandon|dnf|dns|dsq|np)$/i
 type RhumFleet = { at: number; boats: RhumBoat[] }
 
 /** A class by its name, however written: « class 40 », « Ocean50 », « rhum-mono ». */
@@ -1555,8 +1557,10 @@ const numberOf = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? 
 /**
  * The report, as written in the file: `{ "at": "2026-11-02T14:00:00Z", "bateaux": [{ "nom",
  * "skipper", "classe", "couleurs": ["#coque", "#bande"], "lat", "lon", "rang", "dtf", "vitesse" }] }`
- * (rang: within its class; dtf: miles to the finish; vitesse: knots). A boat without a known
- * class or a position is left out; a file without a boat, refused.
+ * (rang: within its class; dtf: miles to the finish; vitesse: knots; statut: RAC, ARV, RET…).
+ * A boat without a known class or a position is left out; a file without a boat, refused. A boat
+ * out of the race stays on the chart, without a rank or a distance: GeoVoile gives it rank 0
+ * and 0 miles to go, which would make it its class's leader, and move the scenery to Guadeloupe.
  */
 function readFleet(text: string): RhumFleet | undefined {
   let raw: unknown
@@ -1574,19 +1578,21 @@ function readFleet(text: string): RhumFleet | undefined {
     const lat = numberOf(b?.lat), lon = numberOf(b?.lon)
     if (cls < 0 || lat === undefined || lon === undefined || typeof b.nom !== 'string') continue
     const pair = Array.isArray(b.couleurs) ? b.couleurs.map(hexOf) : []
+    const out = RHUM_OUT.test(String(b.statut ?? ''))
     boats.push({
       name: b.nom, cls, lat, lon,
       ...(typeof b.skipper === 'string' ? { skipper: b.skipper } : {}),
       ...(pair[0] !== undefined && pair[1] !== undefined ? { colours: [pair[0], pair[1]] as const } : {}),
-      ...(numberOf(b.rang) !== undefined ? { rank: numberOf(b.rang) } : {}),
-      ...(numberOf(b.dtf) !== undefined ? { dtf: numberOf(b.dtf) } : {}),
+      ...(out ? { out: true as const } : {}),
+      ...(!out && numberOf(b.rang) !== undefined ? { rank: numberOf(b.rang) } : {}),
+      ...(!out && numberOf(b.dtf) !== undefined ? { dtf: numberOf(b.dtf) } : {}),
       ...(numberOf(b.vitesse) !== undefined ? { speed: numberOf(b.vitesse) } : {}),
     })
   }
   if (boats.length === 0) return undefined
   // the rank in its class, from the distance to the finish when the report gives none
   for (let cls = 0; cls < RHUM_CLASSES.length; cls++) {
-    const mine = boats.filter(b => b.cls === cls)
+    const mine = boats.filter(b => b.cls === cls && !b.out)
     if (mine.some(b => b.rank === undefined)) {
       mine.sort((a, b) => (a.dtf ?? Infinity) - (b.dtf ?? Infinity)).forEach((b, i) => { b.rank = i + 1 })
     }
