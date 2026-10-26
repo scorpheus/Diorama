@@ -8,6 +8,7 @@ pub mod baie;
 pub mod cellules;
 pub mod cour;
 pub mod gerbe;
+pub mod jauges;
 pub mod lumiere;
 pub mod monde;
 pub mod pet;
@@ -235,7 +236,9 @@ impl crate::scene::Scene for SceneForge {
                 }
             }
         }
-        let mut peints: Vec<_> = acteurs.iter().filter_map(|a| pet::peindre(a, image.pixels, w, h, x0, cw, ch)).collect();
+        // les jauges au sol, sous lui quand il passe dessus
+        let mut peints: Vec<_> = jauges::peindre(image.pixels, w, h, cw, ch, &monde).into_iter().collect();
+        peints.extend(acteurs.iter().filter_map(|a| pet::peindre(a, image.pixels, w, h, x0, cw, ch)));
         peints.extend(self.gerbe.peindre(image.pixels, w, h));
         for (l, t, r, b) in peints {
             zone = Some(zone.map_or((l, t, r, b), |z| (z.0.min(l), z.1.min(t), z.2.max(r), z.3.max(b))));

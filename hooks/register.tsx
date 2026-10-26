@@ -35,8 +35,9 @@ const KEY = 'diorama'
 const DECOR_OF: Record<string, Crop> = { complet: 'full', compact: 'compact', seul: 'solo' }
 const WORDS = 44 // columns kept for the words beside the scene: the gauges, the info line, the log
 const WORDS_ROOMY = 58 // the words with gauges of a fair length: past it, a scene that grows takes the rest
-const SLIM = 11 // the three gauges alone, a column apart: « ctx ▅  42% »; the scene takes the rest
 const LEVELS = '▁▂▃▄▅▆▇█' // a gauge in one cell, by eighths
+const GROUND_INK = 0xf2e8d0 // the names of the gauges on the ground
+const GROUND_ROOM = 32 // the columns the gauges take side by side on the ground: a narrower scene keeps the panel
 const TICK_MS = 150
 const SLEEP_TICKS = Math.round((10 * 60 * 1000) / TICK_MS) // ten idle minutes
 const RESEND_TICKS = Math.round(3000 / TICK_MS) // an unchanged picture is sent again after this long
@@ -216,6 +217,32 @@ const NEEDS_YOU: Readonly<Record<string, string>> = {
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
 /** Standard padded base64 of the words' little-endian bytes (RasterProps.cells): the runtime's own where it has one, thirty times quicker. */
+/**
+ * The gauges on the ground, for the terminal's own drawing (the app paints its own): « ctx ▆ 64% »
+ * and the two windows, side by side on the bottom row, right-aligned a column from the edge, over
+ * the ground's colour; the spaces leave the ground be.
+ */
+function onTheGround(words: Uint32Array, columns: number, rows: number): Uint32Array {
+  if (!anim.groundGauges) return words
+  const runs: Array<[string, number]> = []
+  for (const [name, p] of [['ctx', anim.ctx], ['5h', anim.fuel5h], ['7j', anim.fuel7d]] as const) {
+    if (p === undefined) continue
+    const c = parseInt(tone(p).slice(1), 16)
+    if (runs.length > 0) runs.push(['  ', GROUND_INK])
+    runs.push([`${name} `, GROUND_INK], [LEVELS[clamp(Math.ceil((p / 100) * LEVELS.length) - 1, 0, LEVELS.length - 1)] ?? '', c], [` ${Math.round(p)}%`, c])
+  }
+  let x = Math.max(0, columns - 1 - runs.reduce((n, [t]) => n + t.length, 0))
+  for (const [text, c] of runs) {
+    for (const ch of text) {
+      if (x >= columns) break
+      const i = ((rows - 1) * columns + x) * 3
+      if (ch !== ' ') { words[i] = ch.codePointAt(0) ?? 0x20; words[i + 1] = c }
+      x++
+    }
+  }
+  return words
+}
+
 function encode(words: Uint32Array): string {
   const bytes = new Uint8Array(words.buffer, words.byteOffset, words.byteLength)
   const native = (bytes as Uint8Array & { toBase64?: () => string }).toBase64
@@ -475,6 +502,7 @@ const anim = {
   rare: undefined as { kind: 'star' | 'dragon'; since: number } | undefined,
   rhumAsked: false, // DIORAMA_ROUTE_DU_RHUM in this session's environment: the Route du Rhum here
   panel: undefined as string | undefined, // DIORAMA_PANNEAU in this session's environment: the panel option, for it alone
+  groundGauges: false, // the discreet panel: the gauges on the scene's ground, the scene alone in the band
   rhumNamed: false, // the Route du Rhum's file names this session
   rhumStamp: undefined as number | undefined, // that file's last change, as last read
   rhumPhase: undefined as World['rhum'], // the phase last shown, to cheer the start
@@ -568,6 +596,7 @@ function worldNow(): World {
     ctx: anim.ctx,
     fuel5h: anim.fuel5h,
     fuel7d: anim.fuel7d,
+    gauges: anim.groundGauges ? true : undefined,
     hourglasses: anim.jobs,
     turnTicks: anim.isWorking && anim.turnStart >= 0 ? anim.clock - anim.turnStart : 0,
     clock: anim.clock + anim.phase,
@@ -2000,7 +2029,7 @@ export const register: Register = (on, options) => {
           tellRender($, anim.crop, worldNow(), poseTick(), lit)
           return
         }
-        const cells = encode(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit, anim.extra))
+        const cells = encode(onTheGround(theme.frame(anim.crop, anim.current, poseTick(), worldNow(), lit, anim.extra), cropWidth(anim.crop) + anim.extra, theme.rows))
         // nothing moved: the terminal keeps what it shows, and is spared a repaint (sent again
         // now and then all the same, should the band have been drawn anew behind our back)
         if (cells === anim.shown && anim.clock - anim.shownAt < RESEND_TICKS) return
@@ -2265,14 +2294,17 @@ export const register: Register = (on, options) => {
     const { Box, Text } = $.ui.resolve(e)
     // The sprite needs the terminal's Raster and room beside the words; else the words alone.
     const ROWS = theme.rows
-    // beside the whole panel, or, when the option wants it or the panel would cut the scene, beside the gauges alone
+    // beside the whole panel, or, when the option wants it or the panel would cut the scene, the
+    // scene alone, the whole band wide, its gauges on its ground
     const panelMode = anim.panel ?? panelOption
     const drawn = e.surface === 'terminal' && e.props.maxRows >= ROWS
     const roomy = drawn ? fitCrop(allowed, columns) : undefined
-    const slimCrop = drawn && panelMode !== 'complet' ? fitCrop(allowed, columns, SLIM) : undefined
-    const slim = slimCrop !== undefined && (panelMode === 'discret' || roomy !== cropsOf(allowed)[0])
+    const slimCrop = drawn && panelMode !== 'complet' ? fitCrop(allowed, columns, 0) : undefined
+    const slim = slimCrop !== undefined && cropWidth(slimCrop) + growOf(slimCrop, columns, 0) >= GROUND_ROOM
+      && (panelMode === 'discret' || roomy !== cropsOf(allowed)[0])
     const crop = slim ? slimCrop : roomy
-    const extra = crop ? growOf(crop, columns, slim ? SLIM : undefined) : 0
+    const extra = crop ? growOf(crop, columns, slim ? 0 : undefined) : 0
+    anim.groundGauges = slim
     const sceneColumns = crop ? cropWidth(crop) + extra + 2 : 0
     const room = columns - sceneColumns
     const barWidth = clamp(room - 34, 8, 40)
@@ -2396,6 +2428,7 @@ export const register: Register = (on, options) => {
 
     if (e.surface !== 'terminal' || crop === undefined) {
       anim.bandId = undefined
+      anim.groundGauges = false
       return panel
     }
 
@@ -2403,27 +2436,13 @@ export const register: Register = (on, options) => {
     anim.crop = crop
     anim.extra = extra
     const { Raster } = $.ui.resolve(e)
-    const cells = encode(rendered ? stillBand(cropWidth(crop) + extra, ROWS) : theme.frame(crop, anim.current, poseTick(), worldNow(), lit, extra))
+    const cells = encode(rendered ? stillBand(cropWidth(crop) + extra, ROWS) : onTheGround(theme.frame(crop, anim.current, poseTick(), worldNow(), lit, extra), cropWidth(crop) + extra, ROWS))
     anim.shown = cells
     anim.shownAt = anim.clock
-    // the gauges alone: the context and the two windows, a cell of level each
-    const level = (name: string, p: number | undefined) => p === undefined ? null : (
-      <Text key={`slim-${name}`} wrap="truncate">
-        <Text dimColor>{name.padEnd(4)}</Text>
-        <Text color={tone(p)}>{LEVELS[clamp(Math.ceil((p / 100) * LEVELS.length) - 1, 0, LEVELS.length - 1)]}</Text>
-        <Text color={tone(p)} bold>{` ${String(Math.round(p)).padStart(3)}%`}</Text>
-      </Text>
-    )
     return (
-      <Box flexDirection="row" gap={slim ? 1 : 2}>
+      <Box flexDirection="row" gap={2}>
         <Raster key={KEY} columns={cropWidth(crop) + extra} rows={ROWS} cells={cells} />
-        {slim ? (
-          <Box flexDirection="column" justifyContent="center">
-            {level('ctx', u?.ctx)}
-            {level('5h', five?.percent)}
-            {level('7j', seven?.percent)}
-          </Box>
-        ) : panel}
+        {slim ? null : panel}
       </Box>
     )
   })

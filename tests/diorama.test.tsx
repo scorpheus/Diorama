@@ -482,7 +482,7 @@ test('a middling width drops the furnace first, then the anvil', { options: { pa
 
 /** The band at a width, with the context at 64 %, the 5h window at 27 % and the week at 41 %. */
 async function bandAt($: Engine, on: On, bodyColumns: number) {
-  mock.clock(on, { now: Date.UTC(2026, 9, 2, 12, 0) })
+  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 2, 12, 0) })
   engine(on)
   await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
   await $.session.measure({
@@ -493,43 +493,64 @@ async function bandAt($: Engine, on: On, bodyColumns: number) {
     ],
     changed: ['context', 'rateLimits'],
   })
-  return $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns } })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns } })
+  return { ui, clock }
 }
 
-test('a band too narrow for the whole scene and the panel keeps the scene and three gauges', async ($, on) => {
-  const ui = await bandAt($, on, 89)
-  // 89 columns: the whole forge, the yard widened by what the gauges spare (89 - 72 - 11)
-  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(78)
-  expect(await ui.find({ text: 'ctx ' })).toBeDefined()
-  expect(await ui.find({ text: '▆' })).toBeDefined() // 64 %: six eighths
-  expect(await ui.find({ text: '  64%' })).toBeDefined()
-  expect(await ui.find({ text: '  27%' })).toBeDefined()
-  expect(await ui.find({ text: '  41%' })).toBeDefined()
-  // nothing else: no name, no xp, no info line
+/** The bottom row of the band's Raster, as text. */
+async function groundOf(ui: Awaited<ReturnType<typeof bandAt>>['ui']): Promise<string> {
+  const raster = await ui.find({ type: 'Raster', key: 'diorama' })
+  const cols = raster?.props.columns as number, rows = raster?.props.rows as number
+  const words = new Uint32Array(Uint8Array.from(atob(String(raster?.props.cells)), c => c.charCodeAt(0)).buffer)
+  let row = ''
+  for (let x = 0; x < cols; x++) row += String.fromCodePoint(words[((rows - 1) * cols + x) * 3] ?? 0x20)
+  return row
+}
+
+test('a band too narrow for the whole scene and the panel keeps the scene, its gauges on the ground', { options: { rendu: 'non' } }, async ($, on) => {
+  const { ui } = await bandAt($, on, 89)
+  // 89 columns: the whole forge, the yard widened by all the rest (89 - 72)
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(89)
+  // on its bottom row, right-aligned a column from the edge: the context (six eighths at 64 %) and
+  // the two windows; between the words, the ground
+  expect(await groundOf(ui)).toMatch(/ctx.▆.64%..5h.▃.27%..7j.▄.41%.$/)
+  // nothing beside it: no name, no xp, no info line
   expect(await ui.find({ text: SMITH })).toBeUndefined()
   expect(await ui.find({ text: /niv\./ })).toBeUndefined()
 })
 
-test('the panel option keeps the whole panel at that width', { options: { panneau: 'complet' } }, async ($, on) => {
-  const ui = await bandAt($, on, 89)
-  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(25)
-  expect(await ui.find({ text: SMITH })).toBeDefined()
+test('the app paints the gauges on the ground: the world says so', async ($, on) => {
+  const { ui, clock } = await bandAt($, on, 89)
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(89)
+  await clock.advance(3000)
+  const world = renderPosts.flatMap(p => p.body.split('\n')).find(l => l.startsWith('monde '))
+  const json = JSON.parse((world ?? '').split(' ').slice(7).join(' '))
+  expect([json.gauges, json.ctx, json.fuel5h, json.fuel7d]).toEqual([true, 64, 27, 41])
+  // the terminal keeps its still band: no letters of its own under the app
+  expect(await groundOf(ui)).not.toMatch(/ctx/)
 })
 
-test('the discreet panel holds even where the whole one fits', { options: { panneau: 'discret' } }, async ($, on) => {
-  const ui = await bandAt($, on, 130)
-  // the yard takes all the rest: 130 - 72 - 11
-  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(119)
-  expect(await ui.find({ text: '  41%' })).toBeDefined()
+test('the panel option keeps the whole panel at that width', { options: { panneau: 'complet', rendu: 'non' } }, async ($, on) => {
+  const { ui } = await bandAt($, on, 89)
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(25)
+  expect(await ui.find({ text: SMITH })).toBeDefined()
+  expect(await groundOf(ui)).not.toMatch(/ctx/)
+})
+
+test('the discreet panel holds even where the whole one fits', { options: { panneau: 'discret', rendu: 'non' } }, async ($, on) => {
+  const { ui } = await bandAt($, on, 130)
+  // the yard takes all the rest: 130 - 72
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(130)
+  expect(await groundOf(ui)).toMatch(/7j.▄.41%.$/)
   expect(await ui.find({ text: SMITH })).toBeUndefined()
 })
 
-test('a session of its own sets its panel, over the option', { options: { panneau: 'complet' } }, async ($, on) => {
+test('a session of its own sets its panel, over the option', { options: { panneau: 'complet', rendu: 'non' } }, async ($, on) => {
   panelEnv = ' Discret '
-  const ui = await bandAt($, on, 149)
-  // an orchestrator beside its board: the whole scene and the yard, the gauges alone
-  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(138)
-  expect(await ui.find({ text: '  27%' })).toBeDefined()
+  const { ui } = await bandAt($, on, 149)
+  // an orchestrator beside its board: the whole scene and the yard at its widest (72 + 72)
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(144)
+  expect(await groundOf(ui)).toMatch(/5h.▃.27%/)
   expect(await ui.find({ text: SMITH })).toBeUndefined()
 })
 

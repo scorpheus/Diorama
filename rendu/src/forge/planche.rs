@@ -179,6 +179,11 @@ pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
         if let Some(cadre) = super::cadre_baie(monde, 0, cols, CW, CH, fh as usize) {
             baie.peindre(&mut scene, fw as usize, fh as usize, cadre, monde);
         }
+        // JAUGES=1 : le panneau discret, les jauges au sol de chaque scène
+        if std::env::var("JAUGES").is_ok_and(|v| v == "1") {
+            let m = Monde { gauges: Some(true), ctx: 64.0, fuel5h: Some(27.0), fuel7d: Some(91.0), ..monde.clone() };
+            super::jauges::peindre(&mut scene, fw as usize, fh as usize, CW, CH, &m);
+        }
         for acteur in &acteurs {
             super::pet::peindre(acteur, &mut scene, fw as usize, fh as usize, 0, CW, CH);
         }

@@ -28,6 +28,8 @@ export type World = {
   fuel5h?: number
   /** 7 day window used, percent. */
   fuel7d?: number
+  /** The discreet panel: the three gauges painted on the scene's ground. */
+  gauges?: true
   /** Subagents at work, and those just done walking out: one helper each. */
   apprentices: readonly Cub[]
   /** Commands running in the background. */

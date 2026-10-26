@@ -61,7 +61,7 @@
     "panneau": {
       "type": "string",
       "title": "Panneau à droite de la scène",
-      "description": "auto : le panneau complet quand toute la scène tient à côté, sinon les trois jauges seules (contexte, 5h, 7j) et la scène prend le reste ; complet : toujours le panneau (la scène rétrécit) ; discret : toujours les trois jauges seules",
+      "description": "auto : le panneau complet quand toute la scène tient à côté, sinon la scène seule sur toute la largeur, les trois jauges (contexte, 5h, 7j) peintes sur son sol ; complet : toujours le panneau (la scène rétrécit) ; discret : toujours les jauges au sol. DIORAMA_PANNEAU dans l'environnement d'une session l'emporte, pour elle seule",
       "default": "auto",
       "options": [
         "auto",

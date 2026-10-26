@@ -202,6 +202,8 @@ pub struct Monde {
     /// La trace du premier de chaque classe, pour la carte : (classe, latitude, longitude,
     /// latitude, longitude…), des plus anciens points au dernier pointage.
     pub rhum_traces: Option<Vec<Vec<f32>>>,
+    /// Le panneau discret : les jauges se peignent au sol de la scène (jauges.rs).
+    pub gauges: Option<bool>,
 }
 
 impl Default for Monde {
@@ -257,6 +259,7 @@ impl Default for Monde {
             rhum_tetes: None,
             rhum_fete: None,
             rhum_traces: None,
+            gauges: None,
         }
     }
 }
