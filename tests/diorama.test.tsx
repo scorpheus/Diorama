@@ -548,8 +548,8 @@ test('the discreet panel holds even where the whole one fits', { options: { pann
 test('a session of its own sets its panel, over the option', { options: { panneau: 'complet', rendu: 'non' } }, async ($, on) => {
   panelEnv = ' Discret '
   const { ui } = await bandAt($, on, 149)
-  // an orchestrator beside its board: the whole scene and the yard at its widest (72 + 72)
-  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(144)
+  // an orchestrator beside its board: the whole scene, the yard filling the band to its edge
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(149)
   expect(await groundOf(ui)).toMatch(/5h.▃.27%/)
   expect(await ui.find({ text: SMITH })).toBeUndefined()
 })
@@ -1317,7 +1317,7 @@ test('the yard widens with the window: the crops that end with it, as far as it 
   expect(width('full', 30)).toBe(102)
   expect(width('compact', 30)).toBe(88)
   expect(width('solo', 30)).toBe(25) // Scorpheus alone has no yard to widen
-  expect(width('full', 500)).toBe(72 + 72) // GROW at most
+  expect(width('full', 500)).toBe(72 + 128) // GROW at most
   // three guests stand side by side in a wide yard: the farthest one is drawn there, not cut at the old edge
   const guest = { x: 26, walking: false, facing: -1, cape: ['N', 'L'] as const, accessory: 'aucun', tick: 3, waving: false }
   const three = { ...CALM, guests: [guest, { ...guest, x: 12 }, { ...guest, x: 12 }] }

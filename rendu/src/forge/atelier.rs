@@ -14,7 +14,7 @@ use super::poses::{pose_of, Caisse, Droite, Gauche, Lame, Lingot, Pose, Yeux};
 
 pub const SW: i32 = 72; // la largeur de la scène : la forge, puis la cour des apprentis
 pub const YARD: i32 = 54; // où commence la cour, passé la bannière
-pub const GROW: i32 = 72; // ce que la cour s'élargit au plus quand la fenêtre a de la place
+pub const GROW: i32 = 128; // ce que la cour s'élargit au plus quand la fenêtre a de la place
 pub const SH: i32 = 32; // la hauteur de la scène, deux pixels par rangée
 pub const ROWS: i32 = SH / 2;
 

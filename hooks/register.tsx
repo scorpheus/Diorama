@@ -35,6 +35,7 @@ const KEY = 'diorama'
 const DECOR_OF: Record<string, Crop> = { complet: 'full', compact: 'compact', seul: 'solo' }
 const WORDS = 44 // columns kept for the words beside the scene: the gauges, the info line, the log
 const WORDS_ROOMY = 58 // the words with gauges of a fair length: past it, a scene that grows takes the rest
+const PANEL_GROW = 72 // beside the whole panel, the yard widens this much at most: past it, the panel takes the rest
 const LEVELS = '▁▂▃▄▅▆▇█' // a gauge in one cell, by eighths
 const GROUND_INK = 0xf2e8d0 // the names of the gauges on the ground
 const GROUND_ROOM = 32 // the columns the gauges take side by side on the ground: a narrower scene keeps the panel
@@ -156,7 +157,11 @@ const CAT_KEY = 'cat'
 // where the pet comes in and goes out, and how far behind him it follows: the theme's
 /** Out of the scene: past the yard's edge, however wide the window made it. */
 const offstageNow = () => theme.stage.offstage + anim.extra
-const petAt = () => theme.pet ?? { gate: 14, away: theme.width + 12, follow: 21 }
+// offstage is just past the yard as drawn, not past the widest it may grow: the cat walks in from there
+const petAt = () => {
+  const p = theme.pet ?? { gate: 14, away: theme.width + 12, follow: 21 }
+  return { ...p, away: p.away - (theme.grow ?? 0) + (anim.extra ?? 0) }
+}
 const HANDOFF_TICKS = 13 // every two seconds, the visits and the cat are looked at
 const SWEEP_LOOKS = 15 // and every fifteenth look (thirty seconds), the keys of every session, not only the live ones
 const PURGE_BEATS = 120 // once an hour (of thirty-second beats), the store is rid of the sessions gone
@@ -376,10 +381,10 @@ function fitCrop(allowed: Crop | undefined, columns: number, words = 2 + WORDS):
 }
 
 /** The columns a theme that grows takes past its crop, when the window spares them and the crop ends at its edge. */
-function growOf(crop: Crop, columns: number, words = 2 + WORDS_ROOMY): number {
+function growOf(crop: Crop, columns: number, words = 2 + WORDS_ROOMY, most = PANEL_GROW): number {
   const [, x1] = theme.crops[crop] ?? theme.crops.full
   if (!theme.grow || x1 !== theme.width) return 0
-  return clamp(columns - cropWidth(crop) - words, 0, theme.grow)
+  return clamp(columns - cropWidth(crop) - words, 0, Math.min(theme.grow, most))
 }
 
 const short = (path: unknown) => (typeof path === 'string' ? path.split(/[\\/]/).pop() ?? '' : '')
@@ -2300,10 +2305,11 @@ export const register: Register = (on, options) => {
     const drawn = e.surface === 'terminal' && e.props.maxRows >= ROWS
     const roomy = drawn ? fitCrop(allowed, columns) : undefined
     const slimCrop = drawn && panelMode !== 'complet' ? fitCrop(allowed, columns, 0) : undefined
-    const slim = slimCrop !== undefined && cropWidth(slimCrop) + growOf(slimCrop, columns, 0) >= GROUND_ROOM
+    const slim = slimCrop !== undefined && cropWidth(slimCrop) + growOf(slimCrop, columns, 0, Infinity) >= GROUND_ROOM
       && (panelMode === 'discret' || roomy !== cropsOf(allowed)[0])
     const crop = slim ? slimCrop : roomy
-    const extra = crop ? growOf(crop, columns, slim ? 0 : undefined) : 0
+    // the scene alone fills the band, the yard as wide as the theme lets it
+    const extra = crop ? (slim ? growOf(crop, columns, 0, Infinity) : growOf(crop, columns)) : 0
     anim.groundGauges = slim
     const sceneColumns = crop ? cropWidth(crop) + extra + 2 : 0
     const room = columns - sceneColumns

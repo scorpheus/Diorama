@@ -41,7 +41,7 @@ export const ACCESSORIES: readonly Accessory[] = ['aucun', 'lunettes', 'tablier'
 
 export const SW = 72 // scene width in pixels (= columns): the forge, then the apprentices' yard
 export const YARD = 54 // where the yard begins, past the banner
-export const GROW = 72 // the most the yard widens past the scene's edge, when the window has room
+export const GROW = 128 // the most the yard widens past the scene's edge, when the window has room
 export const SH = 32 // scene height in pixels (two per row)
 export const ROWS = SH / 2
 
