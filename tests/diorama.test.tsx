@@ -55,6 +55,8 @@ let compactSetting: number | undefined
 const RHUM_PATH = 'C:/fake/.claude/diorama-route-du-rhum.txt'
 const SESSIONS_DIR = 'C:/fake/.claude/sessions'
 let rhumEnv: string | undefined
+/** The next engine's DIORAMA_PANNEAU. */
+let panelEnv: string | undefined
 /** A path as the plugin asked for it: off Windows the engine takes C:/… for a relative path and puts the folder in front. */
 const fakePath = (path: string) => path.replace(/\\/g, '/').replace(/^.*(?=C:\/fake\/)/, '')
 const rhumFile = { text: undefined as string | undefined, mtime: 1 }
@@ -120,9 +122,10 @@ function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
   wholeReads = 0
   const themed = disk.active // a theme file set up for this test (fakeDisk), served beside the store
   disk.active = false
-  const envRhum = rhumEnv
+  const envRhum = rhumEnv, envPanel = panelEnv
   rhumEnv = undefined
-  on('env.get', (_$, e) => ({ value: e.name === 'CLAUDE_CONFIG_DIR' ? 'C:/fake/.claude' : e.name === 'DIORAMA_ROUTE_DU_RHUM' ? envRhum : undefined }))
+  panelEnv = undefined
+  on('env.get', (_$, e) => ({ value: e.name === 'CLAUDE_CONFIG_DIR' ? 'C:/fake/.claude' : e.name === 'DIORAMA_ROUTE_DU_RHUM' ? envRhum : e.name === 'DIORAMA_PANNEAU' ? envPanel : undefined }))
   // the engine hands paths over with backslashes on Windows
   on('fs.list', (_$, e) => {
     const path = e.path.replace(/\\/g, '/')
@@ -518,6 +521,15 @@ test('the discreet panel holds even where the whole one fits', { options: { pann
   // the yard takes all the rest: 130 - 72 - 11
   expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(119)
   expect(await ui.find({ text: '  41%' })).toBeDefined()
+  expect(await ui.find({ text: SMITH })).toBeUndefined()
+})
+
+test('a session of its own sets its panel, over the option', { options: { panneau: 'complet' } }, async ($, on) => {
+  panelEnv = ' Discret '
+  const ui = await bandAt($, on, 149)
+  // an orchestrator beside its board: the whole scene and the yard, the gauges alone
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(138)
+  expect(await ui.find({ text: '  27%' })).toBeDefined()
   expect(await ui.find({ text: SMITH })).toBeUndefined()
 })
 

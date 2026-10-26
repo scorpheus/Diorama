@@ -474,6 +474,7 @@ const anim = {
   masterpiece: false,
   rare: undefined as { kind: 'star' | 'dragon'; since: number } | undefined,
   rhumAsked: false, // DIORAMA_ROUTE_DU_RHUM in this session's environment: the Route du Rhum here
+  panel: undefined as string | undefined, // DIORAMA_PANNEAU in this session's environment: the panel option, for it alone
   rhumNamed: false, // the Route du Rhum's file names this session
   rhumStamp: undefined as number | undefined, // that file's last change, as last read
   rhumPhase: undefined as World['rhum'], // the phase last shown, to cheer the start
@@ -1855,7 +1856,7 @@ export const register: Register = (on, options) => {
   const statusMode = String(options.statut ?? 'haiku')
   const lit = String(options.lumiere ?? 'oui') !== 'non'
   const rendered = String(options.rendu ?? 'oui') === 'oui'
-  const panelMode = String(options.panneau ?? 'auto')
+  const panelOption = String(options.panneau ?? 'auto')
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1900,6 +1901,10 @@ export const register: Register = (on, options) => {
       anim.name = (known?.name && names.includes(known.name) ? known.name : undefined) ?? names[hashOf(anim.sessionId + '#') % names.length] ?? anim.name
     }
     anim.startedMs = anim.nowMs
+    {
+      const panel = ((await $.env.get('DIORAMA_PANNEAU')) ?? '').trim().toLowerCase()
+      anim.panel = ['auto', 'complet', 'discret'].includes(panel) ? panel : undefined
+    }
     {
       const asked = ((await $.env.get('DIORAMA_ROUTE_DU_RHUM')) ?? '').trim()
       anim.rhumAsked = asked !== '' && !/^(0|non|no|false|off)$/i.test(asked)
@@ -2261,6 +2266,7 @@ export const register: Register = (on, options) => {
     // The sprite needs the terminal's Raster and room beside the words; else the words alone.
     const ROWS = theme.rows
     // beside the whole panel, or, when the option wants it or the panel would cut the scene, beside the gauges alone
+    const panelMode = anim.panel ?? panelOption
     const drawn = e.surface === 'terminal' && e.props.maxRows >= ROWS
     const roomy = drawn ? fitCrop(allowed, columns) : undefined
     const slimCrop = drawn && panelMode !== 'complet' ? fitCrop(allowed, columns, SLIM) : undefined
