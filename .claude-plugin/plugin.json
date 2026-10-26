@@ -58,6 +58,17 @@
         "aucun"
       ]
     },
+    "panneau": {
+      "type": "string",
+      "title": "Panneau à droite de la scène",
+      "description": "auto : le panneau complet quand toute la scène tient à côté, sinon les trois jauges seules (contexte, 5h, 7j) et la scène prend le reste ; complet : toujours le panneau (la scène rétrécit) ; discret : toujours les trois jauges seules",
+      "default": "auto",
+      "options": [
+        "auto",
+        "complet",
+        "discret"
+      ]
+    },
     "lumiere": {
       "type": "string",
       "title": "Lumière",

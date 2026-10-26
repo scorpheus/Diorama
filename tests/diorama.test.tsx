@@ -441,7 +441,7 @@ test('a narrow band keeps the words and drops the sprite', async ($, on) => {
   await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({
     plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt',
-    props: { ...BAND, bodyColumns: 36 },
+    props: { ...BAND, bodyColumns: 30 },
   })
   expect(await ui.find({ type: 'Raster' })).toBeUndefined()
   expect(await ui.find({ text: SMITH })).toBeDefined()
@@ -462,7 +462,7 @@ test('the decor option narrows the scene', { options: { decor: 'seul' } }, async
   expect(raster?.props.rows).toBe(16)
 })
 
-test('a middling width drops the furnace first, then the anvil', async ($, on) => {
+test('a middling width drops the furnace first, then the anvil', { options: { panneau: 'complet' } }, async ($, on) => {
   mock.clock(on)
   engine(on)
   await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
@@ -475,6 +475,50 @@ test('a middling width drops the furnace first, then the anvil', async ($, on) =
     widths.push((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns as number | undefined)
   }
   expect(widths).toEqual([58, 25])
+})
+
+/** The band at a width, with the context at 64 %, the 5h window at 27 % and the week at 41 %. */
+async function bandAt($: Engine, on: On, bodyColumns: number) {
+  mock.clock(on, { now: Date.UTC(2026, 9, 2, 12, 0) })
+  engine(on)
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  await $.session.measure({
+    context: { percent: 64, tokens: 128_000, window: 200_000 },
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: 27, resetsAt: IN_TWO_HOURS },
+      { kind: 'seven_day', percentUsed: 41, resetsAt: IN_TWO_HOURS },
+    ],
+    changed: ['context', 'rateLimits'],
+  })
+  return $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns } })
+}
+
+test('a band too narrow for the whole scene and the panel keeps the scene and three gauges', async ($, on) => {
+  const ui = await bandAt($, on, 89)
+  // 89 columns: the whole forge, the yard widened by what the gauges spare (89 - 72 - 11)
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(78)
+  expect(await ui.find({ text: 'ctx ' })).toBeDefined()
+  expect(await ui.find({ text: '▆' })).toBeDefined() // 64 %: six eighths
+  expect(await ui.find({ text: '  64%' })).toBeDefined()
+  expect(await ui.find({ text: '  27%' })).toBeDefined()
+  expect(await ui.find({ text: '  41%' })).toBeDefined()
+  // nothing else: no name, no xp, no info line
+  expect(await ui.find({ text: SMITH })).toBeUndefined()
+  expect(await ui.find({ text: /niv\./ })).toBeUndefined()
+})
+
+test('the panel option keeps the whole panel at that width', { options: { panneau: 'complet' } }, async ($, on) => {
+  const ui = await bandAt($, on, 89)
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(25)
+  expect(await ui.find({ text: SMITH })).toBeDefined()
+})
+
+test('the discreet panel holds even where the whole one fits', { options: { panneau: 'discret' } }, async ($, on) => {
+  const ui = await bandAt($, on, 130)
+  // the yard takes all the rest: 130 - 72 - 11
+  expect((await ui.find({ type: 'Raster', key: 'diorama' }))?.props.columns).toBe(119)
+  expect(await ui.find({ text: '  41%' })).toBeDefined()
+  expect(await ui.find({ text: SMITH })).toBeUndefined()
 })
 
 test('a terminal too short for the forge keeps the words', async ($, on) => {

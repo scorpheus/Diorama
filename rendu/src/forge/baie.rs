@@ -1529,7 +1529,7 @@ fn premier_plan(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, e
         _ => {}
     }
     // la carte, par-dessus tout, tout le temps ; elle laisse la place au spectacle, le temps qu'il se joue
-    if room >= 40.0 && fete(w).is_none() {
+    if room >= 24.0 && fete(w).is_none() {
         carte(t, gardees, c, sky, w, t_);
     }
 }
@@ -1586,7 +1586,8 @@ fn sur_la_route(f: f32) -> (f32, f32) {
 fn carte(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, monde: &Monde, t_: f32) {
     let flotte: &[[f32; 4]] = monde.rhum_flotte.as_deref().unwrap_or(&[]);
     let room = c.room();
-    let w = (room * c.cw * 0.34).min(300.0);
+    // un tiers de la cour, mais assez grande pour se lire dans une cour étroite
+    let w = (room * c.cw * 0.34).max((room * c.cw * 0.55).min(140.0)).min(300.0);
     let h = w * 0.66;
     let (x0, y0) = (room * c.cw - w - 1.2 * c.cw, 1.0 * c.demi);
     let (gx, gy) = (w * 0.04, h * 0.06); // la marge du papier
@@ -1832,6 +1833,20 @@ mod tests {
         let f = flotte(90.0, Some(&[[0, 0x123456, 0x654321]]));
         let ultim = f.iter().rev().find(|b| b.sorte == Sorte::Ultim).unwrap();
         assert_eq!((ultim.coque, ultim.bande), (hex(0x123456), hex(0x654321)));
+    }
+
+    #[test]
+    fn dans_une_cour_etroite_la_carte_reste_lisible() {
+        // 24 colonnes : une session à côté d'un tableau, le panneau discret ; 30 : 144 colonnes, le panneau complet
+        for room in [24.0, 30.0] {
+            let c = cadre(room);
+            let w = monde(PhaseRhum::Course, 0.5, 12.0);
+            let mut px = vec![0u32; c.w * c.h];
+            Baie::default().peindre(&mut px, c.w, c.h, c, &w);
+            let xs: Vec<usize> = (0..c.h / 2).flat_map(|y| (0..c.w).map(move |x| (x, y))).filter(|&(x, y)| px[y * c.w + x] & 0xffffff == 0xe9dcb8).map(|(x, _)| x).collect();
+            let large = xs.iter().max().zip(xs.iter().min()).map_or(0, |(a, b)| a - b);
+            assert!(large >= 110, "à {room} colonnes, la carte fait {large} pixels de large");
+        }
     }
 
     #[test]

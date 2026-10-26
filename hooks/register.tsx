@@ -35,6 +35,8 @@ const KEY = 'diorama'
 const DECOR_OF: Record<string, Crop> = { complet: 'full', compact: 'compact', seul: 'solo' }
 const WORDS = 44 // columns kept for the words beside the scene: the gauges, the info line, the log
 const WORDS_ROOMY = 58 // the words with gauges of a fair length: past it, a scene that grows takes the rest
+const SLIM = 11 // the three gauges alone, a column apart: « ctx ▅  42% »; the scene takes the rest
+const LEVELS = '▁▂▃▄▅▆▇█' // a gauge in one cell, by eighths
 const TICK_MS = 150
 const SLEEP_TICKS = Math.round((10 * 60 * 1000) / TICK_MS) // ten idle minutes
 const RESEND_TICKS = Math.round(3000 / TICK_MS) // an unchanged picture is sent again after this long
@@ -338,17 +340,19 @@ const cropWidth = (c: Crop) => {
   return x1 - x0
 }
 
-/** The widest window of the scene the option allows (and the theme has) that leaves room for the words. */
-function fitCrop(allowed: Crop | undefined, columns: number): Crop | undefined {
-  const order = CROP_ORDER.slice(CROP_ORDER.indexOf(allowed ?? 'full')).filter(c => theme.crops[c] !== undefined)
-  return order.find(c => cropWidth(c) + 2 + WORDS <= columns)
+/** The windows of the scene the option allows and the theme has, widest first. */
+const cropsOf = (allowed: Crop | undefined) => CROP_ORDER.slice(CROP_ORDER.indexOf(allowed ?? 'full')).filter(c => theme.crops[c] !== undefined)
+
+/** The widest window of the scene the option allows (and the theme has) that leaves room for the words, gap included. */
+function fitCrop(allowed: Crop | undefined, columns: number, words = 2 + WORDS): Crop | undefined {
+  return cropsOf(allowed).find(c => cropWidth(c) + words <= columns)
 }
 
 /** The columns a theme that grows takes past its crop, when the window spares them and the crop ends at its edge. */
-function growOf(crop: Crop, columns: number): number {
+function growOf(crop: Crop, columns: number, words = 2 + WORDS_ROOMY): number {
   const [, x1] = theme.crops[crop] ?? theme.crops.full
   if (!theme.grow || x1 !== theme.width) return 0
-  return clamp(columns - cropWidth(crop) - 2 - WORDS_ROOMY, 0, theme.grow)
+  return clamp(columns - cropWidth(crop) - words, 0, theme.grow)
 }
 
 const short = (path: unknown) => (typeof path === 'string' ? path.split(/[\\/]/).pop() ?? '' : '')
@@ -1851,6 +1855,7 @@ export const register: Register = (on, options) => {
   const statusMode = String(options.statut ?? 'haiku')
   const lit = String(options.lumiere ?? 'oui') !== 'non'
   const rendered = String(options.rendu ?? 'oui') === 'oui'
+  const panelMode = String(options.panneau ?? 'auto')
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -2255,12 +2260,17 @@ export const register: Register = (on, options) => {
     const { Box, Text } = $.ui.resolve(e)
     // The sprite needs the terminal's Raster and room beside the words; else the words alone.
     const ROWS = theme.rows
-    const crop = e.surface === 'terminal' && e.props.maxRows >= ROWS ? fitCrop(allowed, columns) : undefined
-    const extra = crop ? growOf(crop, columns) : 0
+    // beside the whole panel, or, when the option wants it or the panel would cut the scene, beside the gauges alone
+    const drawn = e.surface === 'terminal' && e.props.maxRows >= ROWS
+    const roomy = drawn ? fitCrop(allowed, columns) : undefined
+    const slimCrop = drawn && panelMode !== 'complet' ? fitCrop(allowed, columns, SLIM) : undefined
+    const slim = slimCrop !== undefined && (panelMode === 'discret' || roomy !== cropsOf(allowed)[0])
+    const crop = slim ? slimCrop : roomy
+    const extra = crop ? growOf(crop, columns, slim ? SLIM : undefined) : 0
     const sceneColumns = crop ? cropWidth(crop) + extra + 2 : 0
     const room = columns - sceneColumns
     const barWidth = clamp(room - 34, 8, 40)
-    const roomy = room >= 40 // the info line under the gauges
+    const infoLine = room >= 40 // the info line under the gauges
 
     const gauge = (name: string, p: number | undefined, tail: string, key: string, colour?: string) => {
       if (p === undefined) return null
@@ -2333,13 +2343,13 @@ export const register: Register = (on, options) => {
         {gauge('5h', five?.percent, tailOf(five, false), '5h')}
         {gauge('7j', seven?.percent, tailOf(seven, true), '7j')}
         {gauge('xp', ((xp.xp - xpFor(xp.level)) / (xpFor(xp.level + 1) - xpFor(xp.level))) * 100, `  niv. ${xp.level} · ${xp.xp} xp`, 'xp', '#b07cff')}
-        {roomy ? <Text dimColor wrap="truncate">{`    ${[
+        {infoLine ? <Text dimColor wrap="truncate">{`    ${[
           anim.project,
           model,
           u?.startedAt !== undefined ? `session ${countdown(now - u.startedAt)}` : '',
           u?.usd !== undefined ? `$${u.usd.toFixed(2)}` : '',
         ].filter(Boolean).join(' · ')}`}</Text> : null}
-        {roomy ? <Text key="today" dimColor wrap="truncate">{`    ${todayLine}`}</Text> : null}
+        {infoLine ? <Text key="today" dimColor wrap="truncate">{`    ${todayLine}`}</Text> : null}
         {rhum ? <Text key="rhum" color="#7fd4ff" wrap="truncate">{rhum}</Text> : null}
         {leader ? <Text key="rhum-leader" color="#7fd4ff" dimColor wrap="truncate">{leader}</Text> : null}
         {team.apprentices.length > 0 ? <Text key="apprentices" color="#b07cff">{fill(words().helpers, { n: team.apprentices.length })}</Text> : null}
@@ -2390,10 +2400,24 @@ export const register: Register = (on, options) => {
     const cells = encode(rendered ? stillBand(cropWidth(crop) + extra, ROWS) : theme.frame(crop, anim.current, poseTick(), worldNow(), lit, extra))
     anim.shown = cells
     anim.shownAt = anim.clock
+    // the gauges alone: the context and the two windows, a cell of level each
+    const level = (name: string, p: number | undefined) => p === undefined ? null : (
+      <Text key={`slim-${name}`} wrap="truncate">
+        <Text dimColor>{name.padEnd(4)}</Text>
+        <Text color={tone(p)}>{LEVELS[clamp(Math.ceil((p / 100) * LEVELS.length) - 1, 0, LEVELS.length - 1)]}</Text>
+        <Text color={tone(p)} bold>{` ${String(Math.round(p)).padStart(3)}%`}</Text>
+      </Text>
+    )
     return (
-      <Box flexDirection="row" gap={2}>
+      <Box flexDirection="row" gap={slim ? 1 : 2}>
         <Raster key={KEY} columns={cropWidth(crop) + extra} rows={ROWS} cells={cells} />
-        {panel}
+        {slim ? (
+          <Box flexDirection="column" justifyContent="center">
+            {level('ctx', u?.ctx)}
+            {level('5h', five?.percent)}
+            {level('7j', seven?.percent)}
+          </Box>
+        ) : panel}
       </Box>
     )
   })
