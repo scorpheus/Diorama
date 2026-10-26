@@ -10,14 +10,17 @@ python tools/pet/chatgpt.py --tenue             → tools/pet/chatgpt/tenue-1.pn
 python tools/pet/chatgpt.py --tenue <accessoire> <n> <son image.png>
                                                 → rendu/pet/<accessoire>.webp complété des poses
                                                   de tenue-<n>, et apercu-<accessoire>-<n>.png
+python tools/pet/chatgpt.py --epurer            → les calques déjà faits repassés à l'épuration, et
+                                                  tools/pet/chatgpt/epure-<accessoire>.png
 
 Les gestes : ses poses sont prises dans l'ordre du guide (de gauche à droite, rangée par rangée),
 chacune à la taille et à la place de la mienne : même hauteur, les pattes au même endroit. Ce
 qu'il dessine autour (le fond, un damier « transparent ») est retiré d'après les couleurs du bord.
 
 Les accessoires : son image est ramenée à la taille de la planche envoyée, chaque pose recalée sur
-la mienne, et n'en est gardé que ce qui a changé (l'accessoire) : un calque que l'appli pose sur
-le pet. Le dessin d'origine reste intact.
+la mienne, et n'en est gardé que ce qui a changé : un calque que l'appli pose sur le pet. Le dessin
+d'origine reste intact. S'il a redessiné une pose (la tête ailleurs, une gourde ajoutée), ce qui a
+changé n'est pas que l'accessoire : le calque est épuré (epurer) jusqu'à ne garder que lui.
 """
 import os
 import sys
@@ -125,6 +128,91 @@ def calque(mien, sien):
 SEUIL = 90
 
 
+def taches(masque):
+    """Les taches d'un masque (4-voisins) : une liste de masques."""
+    vu = np.zeros_like(masque)
+    h, w = masque.shape
+    out = []
+    for y0, x0 in zip(*np.nonzero(masque)):
+        if vu[y0, x0]:
+            continue
+        t, pile = np.zeros_like(masque), [(y0, x0)]
+        vu[y0, x0] = True
+        while pile:
+            y, x = pile.pop()
+            t[y, x] = True
+            for j, i in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+                if 0 <= j < h and 0 <= i < w and masque[j, i] and not vu[j, i]:
+                    vu[j, i] = True
+                    pile.append((j, i))
+        out.append(t)
+    return out
+
+
+def fourrure(px):
+    """Les couleurs du pet qu'aucun accessoire ne porte : le blanc et le gris clair de la
+    fourrure, le bleu de la crête et de la queue."""
+    r, g, b = (px[..., k] / 255 for k in range(3))
+    mx, mn = np.maximum(np.maximum(r, g), b), np.minimum(np.minimum(r, g), b)
+    sat = (mx - mn) / np.maximum(mx, 1e-6)
+    return ((mx > 0.62) & (sat < 0.22)) | ((b > r + 0.15) & (b > g + 0.05) & (sat > 0.35))
+
+
+def saturation(px):
+    rgb = px[..., :3].astype(float)
+    return ((rgb.max(-1) - rgb.min(-1)) / np.maximum(rgb.max(-1), 1)).mean()
+
+
+# sa tête, jusqu'au menton : ces pixels sous le haut du personnage, couché comme debout. Sur toutes
+# les poses, les lunettes et le bandeau ont leur milieu à 73 pixels au plus, et le cuir du tablier
+# (sa bavette comprise) à 84 au moins
+TETE = 80
+
+
+def cuir(rgb):
+    """Le cuir brun moyen du tablier (cf. CHATGPT.md), à sa teinte : sur toutes les poses, le vert
+    à 0,6 du rouge et le bleu à 0,3 ; le bois sombre, le crème, le doré s'en écartent."""
+    r, g, b = (float(v) for v in rgb)
+    return 80 <= r <= 190 and 0.5 <= g / r <= 0.68 and b / r < 0.42
+
+
+def epurer(acc, mien, c):
+    """Le calque `c` réduit à l'accessoire. Quand l'IA redessine une pose au lieu de l'habiller
+    (une tête redressée, la queue ailleurs, une gourde ajoutée), tout ce qui diffère passe dans le
+    calque, et le pet se montre en double. On n'en garde que l'accessoire : ni fourrure, ni
+    miettes, et la seule pièce de la tête (lunettes, bandeau) ou celles du corps (tablier)."""
+    c = np.asarray(c).copy()
+    plein = (c[..., 3] > 0) & ~fourrure(c)
+    m = Image.fromarray((plein * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
+    plein &= np.asarray(m) > 0
+    for t in taches(plein):
+        if t.sum() < 40:
+            plein &= ~t
+    ys = np.nonzero(np.asarray(mien)[..., 3] > 128)[0]
+    if not len(ys):
+        return Image.fromarray(np.zeros_like(c), 'RGBA')
+    tete = ys.min() + TETE
+    rangee = np.arange(c.shape[0])[:, None].repeat(c.shape[1], 1)
+    # les morceaux voisins (une lanière coupée par la fourrure) font un même groupe
+    proche = np.asarray(Image.fromarray((plein * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
+    groupes = [g & plein for g in taches(proche) if (g & plein).any()]
+    garde = np.zeros_like(plein)
+    if acc == 'tablier':
+        for g in groupes:
+            # le cuir sur le corps ; pas un manche de balai redessiné, la rayure d'une queue, une gourde
+            if rangee[g].mean() >= tete and g.sum() >= 150 and cuir(np.median(c[g][:, :3], 0)):
+                garde |= g
+    else:
+        haut = [g for g in groupes if rangee[g].mean() < tete]
+        if haut:
+            # dans la pièce : ni morceau gris (une pointe d'oreille), ni morceau sous la tête
+            for t in taches(max(haut, key=lambda g: g.sum())):
+                if rangee[t].mean() < tete and saturation(c[t]) >= 0.15:
+                    garde |= t
+    c[~garde] = 0
+    return Image.fromarray(c, 'RGBA')
+
+
 def importer_tenue(acc, n, chemin):
     if acc not in ACCESSOIRES:
         sys.exit(f'accessoire inconnu : {acc} ({", ".join(ACCESSOIRES)})')
@@ -145,19 +233,20 @@ def importer_tenue(acc, n, chemin):
     if feuille is None or feuille.size != (8 * CASE[0], lignes * CASE[1]):
         feuille = Image.new('RGBA', (8 * CASE[0], lignes * CASE[1]), (0, 0, 0, 0))
     ap = Image.new('RGBA', (len(ps) * 3 * 100, 110), (40, 36, 40, 255))
-    vides = []
+    vides, redessinees = [], []
     for k, (p, r, i) in enumerate(ps):
         mien = franc(case_de(p, r, i))
         x0, y0 = coin(k)
         d, dx, dy = recaler(mien, sien, x0, y0)
         case = sien.crop((x0 + dx, y0 + dy, x0 + dx + CASE[0], y0 + dy + CASE[1]))
-        c = calque(mien, case)
+        brut_ = calque(mien, case)
+        c = epurer(acc, mien, brut_)
+        avant, apres = (int(np.count_nonzero(np.asarray(x)[..., 3])) for x in (brut_, c))
         if c.getbbox() is None:
             vides.append(k + 1)
-        rangee = r if p == 0 else len(RANGEES_PET) + r
-        # la case d'attente du pet est aussi la case 0 de la forge
-        places = [(i, rangee)] + ([(0, len(RANGEES_PET))] if (p, r, i) == (0, 6, 0) else [])
-        for cx, cy in places:
+        elif avant > 2 * apres:
+            redessinees.append(k + 1)
+        for cx, cy in places(p, r, i):
             feuille.paste((0, 0, 0, 0), (cx * CASE[0], cy * CASE[1], (cx + 1) * CASE[0], (cy + 1) * CASE[1]))
             feuille.paste(c, (cx * CASE[0], cy * CASE[1]))
         habille = mien.copy()
@@ -165,13 +254,57 @@ def importer_tenue(acc, n, chemin):
         for j, im in enumerate((mien, case, habille)):
             ap.alpha_composite(im.resize((96, 104)), ((k * 3 + j) * 100, 3))
         print(f'  pose {k + 1:2} (planche {p}, rangée {r}, case {i}) : recalée de ({dx:+}, {dy:+}), écart {d:.0f} ; '
-              f'calque de {int(np.count_nonzero(np.asarray(c)[..., 3]))} pixels')
+              f'calque de {avant} pixels, {apres} gardés')
     feuille.save(sortie, lossless=True, quality=100, method=6)
     os.makedirs(SORTIE, exist_ok=True)
     ap.save(os.path.join(SORTIE, f'apercu-{acc}-{n}.png'))
     print(f'rendu/pet/{acc}.webp complété ; apercu-{acc}-{n}.png : la mienne, la sienne, la mienne habillée')
     if vides:
         print(f'  sans accessoire trouvé : poses {vides}')
+    if redessinees:
+        print(f'  plus de la moitié du calque ôtée (il a redessiné la pose) : poses {redessinees}, à regarder dans l\'aperçu')
+
+
+def places(p, r, i):
+    """Où la pose va dans un calque : sa rangée, et la case d'attente du pet est aussi la case 0
+    de la forge."""
+    rangee = r if p == 0 else len(RANGEES_PET) + r
+    return [(i, rangee)] + ([(0, len(RANGEES_PET))] if (p, r, i) == (0, 6, 0) else [])
+
+
+def epurer_calques():
+    """Les calques déjà faits, épurés comme à l'import ; et tools/pet/chatgpt/epure-<accessoire>.png,
+    chaque pose habillée avant (à gauche) et après."""
+    os.makedirs(SORTIE, exist_ok=True)
+    ps = poses_tenue()
+    for acc in ACCESSOIRES:
+        sortie = os.path.join(PET, f'{acc}.webp')
+        feuille = Image.open(sortie).convert('RGBA')
+        if feuille.size != (8 * CASE[0], (len(RANGEES_PET) + len(gestes.RANGEES)) * CASE[1]):
+            print(f'{acc} : pas encore dessiné')
+            continue
+        ap = Image.new('RGBA', (10 * 200, (len(ps) + 9) // 10 * 110), (40, 36, 40, 255))
+        ote = []
+        for k, (p, r, i) in enumerate(ps):
+            mien = franc(case_de(p, r, i))
+            for n, (cx, cy) in enumerate(places(p, r, i)):
+                boite = (cx * CASE[0], cy * CASE[1], (cx + 1) * CASE[0], (cy + 1) * CASE[1])
+                c = feuille.crop(boite)
+                e = epurer(acc, mien, c)
+                avant, apres = (int(np.count_nonzero(np.asarray(x)[..., 3])) for x in (c, e))
+                if avant > 2 * apres:
+                    ote.append(k + 1)
+                feuille.paste((0, 0, 0, 0), boite)
+                feuille.paste(e, boite)
+                if n == 0:
+                    for j, x in enumerate((c, e)):
+                        habille = mien.copy()
+                        habille.alpha_composite(x)
+                        ap.alpha_composite(habille.resize((96, 104)), ((k % 10) * 200 + j * 100, (k // 10) * 110 + 3))
+        feuille.save(sortie, lossless=True, quality=100, method=6)
+        ap.save(os.path.join(SORTIE, f'epure-{acc}.png'))
+        print(f'rendu/pet/{acc}.webp épuré ; epure-{acc}.png : avant, après'
+              + (f' ; plus de la moitié ôtée : poses {sorted(set(ote))}' if ote else ''))
 
 
 def franc(im):
@@ -368,7 +501,9 @@ def importer(chemin):
 
 
 if __name__ == '__main__':
-    if '--tenue' in sys.argv:
+    if '--epurer' in sys.argv:
+        epurer_calques()
+    elif '--tenue' in sys.argv:
         args = [a for a in sys.argv[1:] if a != '--tenue']
         guide_tenue() if not args else importer_tenue(args[0], int(args[1]), args[2])
     elif '--guide' in sys.argv:

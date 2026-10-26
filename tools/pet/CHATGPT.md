@@ -169,11 +169,26 @@ Le script :
   la mise en page ;
 - la ramène à la taille de la planche, recale chaque pose sur la mienne (à 12 pixels près), et ne
   garde que ce qui a changé, en taches de plus de deux pixels ;
+- épure ce calque jusqu'à l'accessoire seul. Quand l'IA redessine une pose au lieu de l'habiller
+  (la tête redressée, la queue ailleurs, une gourde ou un manche de balai ajoutés), tout ce qui
+  diffère passe dans le calque, et l'appli montrerait le pet en double. Sont ôtés : la fourrure
+  (blanc, gris clair, bleu de la crête et de la queue), les miettes, et tout ce qui n'est pas la
+  pièce de la tête (lunettes, bandeau, au-dessus du menton) ou le cuir brun du corps (tablier) ;
 - complète `rendu/pet/<accessoire>.webp`, planche par planche (les cases des autres planches sont
   gardées), et écrit `tools/pet/chatgpt/apercu-<accessoire>-<n>.png`. Chaque pose y apparaît
   trois fois : la mienne, la sienne, puis la mienne avec le calque ;
-- dit, pour chaque pose, de combien il l'a recalée et combien de pixels compte son calque, et
-  liste les poses où il n'a rien trouvé.
+- dit, pour chaque pose, de combien il l'a recalée, combien de pixels compte son calque et
+  combien en sont gardés ; liste les poses où il n'a rien trouvé, et celles dont plus de la moitié
+  a été ôtée (il les a redessinées : les regarder dans l'aperçu).
+
+Les calques déjà faits se repassent à l'épuration, sans rien redemander à l'IA :
+
+```
+python tools/pet/chatgpt.py --epurer
+```
+
+Elle ne fait qu'ôter, et la repasser ne change plus rien. `tools/pet/chatgpt/epure-<accessoire>.png`
+montre chaque pose habillée avant (à gauche) et après.
 
 Une planche ratée se refait seule : relancer la commande avec une meilleure image remplace ses
 poses. Pour retirer un accessoire : `git checkout rendu/pet/<accessoire>.webp`, qui remet le
@@ -209,9 +224,12 @@ changé, puis remplace l'appli qui tourne.
   vitrine.
 - **Gestes : la taille des poses varie.** Le script prend une seule échelle, la médiane : une pose
   dessinée plus grande ou plus petite le restera.
-- **Accessoires : il a retouché autre chose** (les yeux, une couleur, un contour). Ça passe dans le
-  calque et se voit dans l'aperçu, en troisième image. Refaire la planche en insistant sur
-  « change nothing else ».
+- **Accessoires : il a retouché autre chose** (les yeux, une couleur, un contour). L'épuration ôte
+  la fourrure et ce qui n'est pas l'accessoire ; ce qui resterait se voit dans l'aperçu, en
+  troisième image. Refaire la planche en insistant sur « change nothing else ».
+- **Accessoires : l'accessoire est ôté avec le reste.** Un tablier d'une autre couleur que le cuir
+  brun moyen du prompt, ou un accessoire de tête plus bas que le menton, ne passe pas l'épuration
+  (`cuir` et `TETE` dans `chatgpt.py`) : les ajuster, puis relancer `--epurer`.
 - **Accessoires : il a déplacé ou redimensionné les poses.** Le recalage rattrape 12 pixels.
   Au-delà, le calque prend des morceaux de corps décalés : refaire la planche.
 - **Accessoires : un calque vide** (« sans accessoire trouvé ») : l'accessoire est caché dans

@@ -262,14 +262,16 @@ mod film {
     /// Des images qui se suivent, comme l'appli les peint (le pet, la gerbe), côte à côte :
     /// FILM=<sortie.png> cargo test --release film -- --ignored
     /// MOMENT : frappe (par défaut), soufflet, trempe, envoi, balai, sommeil ; DEBUT : le tic de
-    /// la première image (16 par défaut) ; IMAGES : combien (12)
+    /// la première image (16 par défaut) ; IMAGES : combien (12) ; ACCESSOIRE : lunettes, tablier,
+    /// bandeau (aucun par défaut)
     #[test]
     #[ignore]
     fn film() {
         let (cw, ch, cols) = (9i32, 19i32, 144i32);
         let (w, h) = (cols * cw, 16 * ch);
         let var = |n: &str, d: i32| std::env::var(n).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
-        let mut monde = Monde { clock: 1, ..Monde::default() };
+        let accessory = std::env::var("ACCESSOIRE").ok().and_then(|s| Accessoire::de(&s)).unwrap_or(Accessoire::Aucun);
+        let mut monde = Monde { clock: 1, accessory, ..Monde::default() };
         let activite = match std::env::var("MOMENT").unwrap_or_default().as_str() {
             "soufflet" => {
                 monde.flavor = Saveur::Build;
