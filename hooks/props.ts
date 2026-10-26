@@ -225,6 +225,7 @@ export const GIFTS: Record<NonNullable<World['gift']>['kind'], readonly string[]
   coin: ['.y.', 'yYy', '.y.'],
   cookie: ['rVr', 'VrV', 'rVr'],
   ore: ['.A.', 'AbA', 'aAa'],
+  note: ['WEW', 'VVW', 'WVV'], // a note, pinned
 }
 
 /** Sparks flying from (ox, oy), `age` ticks after the blow. */

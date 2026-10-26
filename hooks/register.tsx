@@ -108,6 +108,7 @@ type Presence = {
   personality?: Personality
   idleSince?: number // since when this forge has had nothing to do: three at once make a banquet
   scene?: Scene // where its scene stands in its window, for the passeur
+  visiting?: string // whose forge he is off to, from the moment he sets out until he turns home
 }
 
 /** The scene as the band draws it, for the passeur (passeur/passeur.ps1): its columns from the left, its rows. */
@@ -479,6 +480,9 @@ const anim = {
     leavingSince?: number; idleAfter?: boolean
   } | undefined,
   hostAcks: [] as string[], // guests walked out of this forge, to tell their sessions
+  missed: [] as string[], // who came by while he was out and left a note: he finds it home
+  cameHome: false, // he just walked in from a trip: who is waiting, what was left
+  arriving: false, // at the door, looking where the host is: once
   lastTrip: -1,
   tripUntil: 0, // a banquet sets how long he stays
   // a guest from another session: who, in what look, since when, leaving since when
@@ -492,7 +496,7 @@ const anim = {
   newsSeen: new Map<string, number>(), // each sender's last news already shown
   startedMs: 0,
   messenger: undefined as { kind: 'done' | 'waiting'; since: number } | undefined,
-  gift: undefined as { kind: 'coin' | 'cookie' | 'ore'; since: number } | undefined,
+  gift: undefined as { kind: 'coin' | 'cookie' | 'ore' | 'note'; since: number } | undefined,
   // the machine's one cat, when it is in this forge
   cat: { mode: 'gone' as 'gone' | 'arrive' | 'roof' | 'follow' | 'flee' | 'home' | 'depart', x: 0, since: 0, steps: 0, movedAt: -1, dir: -1 as 1 | -1 },
   catNext: undefined as { id: string; label: string } | undefined, // where it goes next
@@ -733,6 +737,7 @@ async function heartbeat($: EngineInterface) {
   const now = anim.nowMs
   all[anim.sessionId] = {
     project: anim.project, cape: anim.cape, accessory: anim.accessory, seen: now, away: anim.trip?.phase === 'away',
+    ...(anim.trip && anim.trip.phase !== 'back' ? { visiting: anim.trip.host } : {}),
     personality: anim.personality, idleSince: anim.idleSince, name: anim.name, ...(anim.title || anim.goal ? { title: anim.title || anim.goal } : {}),
     ...sceneField(),
   }
@@ -863,6 +868,7 @@ function steer() {
   if (trip?.phase === 'back' && anim.x === 0) {
     anim.trip = undefined // home
     anim.lastTrip = anim.clock
+    anim.cameHome = true
   }
 }
 
@@ -1012,14 +1018,75 @@ async function startTrip($: EngineInterface, host: Presence & { id: string }, vo
   anim.trip = { phase: 'out', host: host.id, project: host.project, name: host.name ?? host.project, until: 0 }
   await note($, fill(words().notes.tripOut, { who: forgeLabel(host) }))
   if (voice !== 'aucune') await say($, pick('leave', forgeLabel(host, false)), true)
+  await heartbeat($) // the others know at once where he is off to: nobody heads for an empty forge
+}
+
+const DOOR_MS = 45_000 // at a forge with nobody home, he waits on the doorstep that long
+
+/**
+ * At the host's door, a look at where the host is: on his way here too (they crossed: the one
+ * already there, or the first by id, turns back and hosts the other); off at a third forge (he
+ * goes and joins them, or waits a while on the doorstep); else home.
+ */
+async function atTheDoor($: EngineInterface, trip: NonNullable<typeof anim.trip>, voice: string): Promise<'in' | 'back'> {
+  const raw = await $.store.get(PRESENCE_KEY)
+  const all = typeof raw === 'object' && raw !== null ? (raw as Record<string, Presence>) : {}
+  const host = all[trip.host]
+  if (!host?.visiting || anim.nowMs - host.seen > NEIGHBOUR_MS) return 'in'
+  const who = forgeLabel(host, false)
+  if (host.visiting === anim.sessionId) {
+    if (host.away || anim.sessionId < trip.host) {
+      trip.phase = 'back'
+      await note($, fill(words().notes.crossBack, { who }))
+      if (voice !== 'aucune') await say($, pick('crossBack', who), true)
+      await heartbeat($)
+      return 'back'
+    }
+    await note($, fill(words().notes.crossOn, { who }))
+    return 'in'
+  }
+  const there = all[host.visiting]
+  if (there && anim.nowMs - there.seen < NEIGHBOUR_MS && hashOf(anim.sessionId + trip.host) % 2 === 0) {
+    const where = forgeLabel(there, false)
+    Object.assign(trip, { host: host.visiting, project: there.project, name: there.name ?? there.project })
+    await note($, fill(words().notes.joinThere, { who, where }))
+    if (voice !== 'aucune') await say($, pick('join', where), true)
+    return 'in'
+  }
+  trip.until = Math.min(trip.until, anim.nowMs + DOOR_MS)
+  await note($, fill(words().notes.doorShut, { who }))
+  if (voice !== 'aucune') await say($, pick('knock', who), true)
+  return 'in'
+}
+
+/** Home from a trip: the guest who waited is welcomed, the notes left are read. */
+async function homecoming($: EngineInterface, voice: string) {
+  const waiting = [...anim.guests.values()].filter(g => g.leaving === undefined)
+  for (const g of waiting) await note($, fill(words().notes.homeGreet, { who: forgeLabel(g, false) }))
+  const notes = anim.missed.splice(0)
+  for (const who of notes) await note($, fill(words().notes.noteFound, { who }))
+  const first = waiting[0]
+  if (first) {
+    await setAct($, 'waving', '', 2000)
+    if (voice !== 'aucune') await say($, pick('welcome', forgeLabel(first, false)), true)
+  } else if (notes.length > 0 && voice !== 'aucune') {
+    await say($, pick('noteFound', notes[0]), true)
+  }
 }
 
 /** Out of sight: he is at the host's now, which its session learns from the store. */
-async function arriveAway($: EngineInterface) {
+async function arriveAway($: EngineInterface, voice: string) {
   const trip = anim.trip
-  if (!trip || trip.phase !== 'out') return
+  if (!trip || trip.phase !== 'out' || anim.arriving) return
+  anim.arriving = true
+  try {
+    trip.until = anim.tripUntil > anim.nowMs ? anim.tripUntil : anim.nowMs + TRIP_MS
+    if ((await atTheDoor($, trip, voice)) === 'back') return
+  } finally {
+    anim.arriving = false
+  }
+  if (anim.trip !== trip || trip.phase !== 'out') return // called home meanwhile
   trip.phase = 'away'
-  trip.until = anim.tripUntil > anim.nowMs ? anim.tripUntil : anim.nowMs + TRIP_MS
   anim.tripUntil = 0
   const title = anim.title || anim.goal
   const visit: Visit = {
@@ -1152,6 +1219,26 @@ async function pollVisits($: EngineInterface, voice: string) {
   for (const [id, v] of here) {
     if (anim.guests.has(id) || anim.hostAcks.includes(id)) continue
     anim.guests.set(id, { project: v.project, name: v.name, title: v.title, cape: v.cape, accessory: v.accessory, arrived: anim.clock })
+    const trip = anim.trip
+    if (trip && trip.phase !== 'back') {
+      // he is out: on his way to this very guest (they crossed), or elsewhere; then he hurries
+      // home, or the guest waits and leaves a note
+      const who = forgeLabel(v, false)
+      if (trip.host === id) {
+        await note($, fill(words().notes.crossBack, { who }))
+        if (voice !== 'aucune') await say($, pick('crossBack', who), true)
+        await endTrip($, true)
+      } else {
+        await note($, fill(words().notes.knock, { who }))
+        if (hashOf(id + anim.sessionId) % 2 === 0) {
+          await note($, fill(words().notes.rushHome, { who }))
+          if (voice !== 'aucune') await say($, pick('rush'), true)
+          await endTrip($, true)
+        }
+      }
+      await heartbeat($)
+      continue
+    }
     await note($, fill(words().notes.guestIn, { who: forgeLabel(v) }))
     if (anim.current === 'idle' && !anim.trip) {
       await setAct($, 'waving', '', 2000)
@@ -1161,6 +1248,13 @@ async function pollVisits($: EngineInterface, voice: string) {
   for (const [id, g] of anim.guests) {
     if (here.has(id) || g.leaving !== undefined) continue
     g.leaving = anim.clock
+    // nobody home: a note under the door, read when he is back
+    if (anim.trip && anim.trip.phase !== 'back') {
+      anim.gift = { kind: 'note', since: anim.clock }
+      anim.missed.push(forgeLabel(g, false))
+      await note($, fill(words().notes.noteLeft, { who: forgeLabel(g, false) }))
+      continue
+    }
     // a guest leaves something behind
     const kinds = ['coin', 'cookie', 'ore'] as const
     const kind = kinds[hashOf(id + g.arrived) % kinds.length] ?? 'coin'
@@ -1396,7 +1490,7 @@ async function maybeTrip($: EngineInterface, voice: string) {
   if (anim.trip || anim.guests.size > 0 || anim.isWorking || anim.current !== 'idle') return
   if (anim.apprentices > 0 || anim.jobs > 0 || theme.anchorOf('idle', worldNow()) !== undefined) return
   if (anim.clock < (anim.lastTrip < 0 ? TRIP_FIRST_TICKS : anim.lastTrip + TRIP_AGAIN_TICKS)) return
-  const hosts = anim.neighbours.filter(n => !n.away)
+  const hosts = anim.neighbours.filter(n => !n.away && !n.visiting)
   if (hosts.length === 0 || chance((anim.clock + anim.phase) * 3) >= 0.08) return
   const host = hosts[Math.floor(chance(anim.clock + anim.phase * 5) * hosts.length)]
   if (host) await startTrip($, host, voice)
@@ -1983,7 +2077,11 @@ export const register: Register = (on, options) => {
         // he walks toward where the moment wants him, or where he fancies
         steer()
         if (anim.rhumShow) void rhumShowTick($, voice).catch(() => undefined)
-        if (anim.trip?.phase === 'out' && anim.x >= offstageNow()) void arriveAway($).catch(() => undefined)
+        if (anim.trip?.phase === 'out' && anim.x >= offstageNow()) void arriveAway($, voice).catch(() => undefined)
+        if (anim.cameHome) {
+          anim.cameHome = false
+          void homecoming($, voice).catch(() => undefined)
+        }
         if (anim.trip?.phase === 'away' && anim.nowMs >= anim.trip.until) void endTrip($, true).catch(() => undefined)
         if ((anim.clock + anim.phase) % HANDOFF_TICKS === 0) {
           void awaitHandoff($).catch(() => undefined)

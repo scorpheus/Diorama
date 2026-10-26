@@ -7,7 +7,11 @@ Un personnage suit le travail de Claude, sans qu'on ait rien à faire :
 - il éprouve les tests, scelle les commits, attend la personne quand Claude a une question ;
 - il fait la sieste après dix minutes de calme.
 
-Chaque sous-agent arrive en petite créature, puis repart sa mission faite. Les sessions ouvertes sur la même machine se rendent visite et s'envoient des nouvelles, et un animal unique passe de l'une à l'autre. Sous Windows, le visiteur traverse l'écran en vol, d'une fenêtre de terminal à l'autre (voir [Le passeur](#le-passeur-windows)).
+Chaque sous-agent arrive en petite créature, puis repart sa mission faite. Les sessions ouvertes sur la même machine se rendent visite et s'envoient des nouvelles, et un animal unique passe de l'une à l'autre. Les visites ne se passent pas toujours comme prévu :
+- **Porte close** : un invité trouve la forge vide. L'hôte rentre en courant, juste à temps pour l'accueillir, ou bien l'invité attend, puis glisse un mot sous la porte, que l'hôte trouve en rentrant.
+- **Chassé-croisé** : deux personnages partent l'un chez l'autre. Ils se croisent en chemin, et l'un fait demi-tour pour recevoir l'autre.
+- **Chez un troisième** : l'hôte est parti chez un autre. Le visiteur va les rejoindre là-bas, ou il attend un peu devant la porte.
+- Chaque session dit aux autres chez qui son personnage est parti, dès qu'il sort. Personne ne part donc chez quelqu'un qui est déjà dehors. Sous Windows, le visiteur traverse l'écran en vol, d'une fenêtre de terminal à l'autre (voir [Le passeur](#le-passeur-windows)).
 
 À côté de la scène s'affichent les jauges de contexte, de la fenêtre de 5 h et de celle de 7 jours, avec l'heure de leur remise à zéro. Le contexte se mesure à la fenêtre de compaction quand les réglages en fixent une (`autoCompactWindow`, ou `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), sinon à celle du modèle. Il y a aussi l'expérience gagnée, ce que fait Claude en ce moment et un journal court.
 

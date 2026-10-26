@@ -89,7 +89,7 @@ export type World = {
   /** The machine's one pet, when it is here. `step`: pixels walked; undefined while it stands still. */
   cat?: { mode: 'roof' | 'walk' | 'flee'; x: number; age: number; dir?: 1 | -1; step?: number }
   /** What a guest left behind. */
-  gift?: { kind: 'coin' | 'cookie' | 'ore'; age: number }
+  gift?: { kind: 'coin' | 'cookie' | 'ore' | 'note'; age: number }
   /** A messenger from another session: its task is done, or it waits for the person. */
   messenger?: { kind: 'done' | 'waiting'; age: number }
   /** The day's habits: coffee in the morning, a bite at noon, the lantern at dusk. */
@@ -190,6 +190,7 @@ export const CALM: World = {
 export type LineKind =
   | 'morning' | 'afternoon' | 'evening' | 'answer' | 'failed' | 'pass' | 'crack' | 'commit' | 'push' | 'level'
   | 'night' | 'wake' | 'tea' | 'duck' | 'cold' | 'leave' | 'welcome' | 'dragon' | 'star'
+  | 'rush' | 'noteFound' | 'crossBack' | 'knock' | 'join'
 
 /**
  * The words that carry a theme's picture. Plain French that fits any theme
@@ -229,7 +230,16 @@ export type Lexicon = {
     newsWaiting: string // {who}
     guestIn: string // {who}
     guestOut: string // {who} {gift}
-    gifts: { coin: string; cookie: string; ore: string }
+    gifts: { coin: string; cookie: string; ore: string; note: string }
+    knock: string // {who}: a guest at the forge while he is out
+    rushHome: string // {who}: and he hurries home
+    noteLeft: string // {who}: or the guest leaves a note
+    noteFound: string // {who}: found when he is home
+    homeGreet: string // {who}: home in time for the guest
+    crossBack: string // {who}: two smiths on their way to each other; he turns back
+    crossOn: string // {who}: and the other one does
+    doorShut: string // {who}: nobody at the host's
+    joinThere: string // {who} {where}: the host is at a third forge, he goes there
     feast: string
     feastOut: string // {who}
     coffee: string

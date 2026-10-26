@@ -40,7 +40,7 @@ sorte!(Accessoire { Aucun = "aucun", Lunettes = "lunettes", Tablier = "tablier",
 sorte!(Routine { Coffee = "coffee", Lunch = "lunch", Lantern = "lantern" });
 sorte!(Humeur { Calme = "calme", Jovial = "jovial", Grognon = "grognon", Reveur = "reveur", Applique = "applique" });
 sorte!(ModeChat { Roof = "roof", Walk = "walk", Flee = "flee" });
-sorte!(Cadeau { Coin = "coin", Cookie = "cookie", Ore = "ore" });
+sorte!(Cadeau { Coin = "coin", Cookie = "cookie", Ore = "ore", Note = "note" });
 sorte!(Nouvelle { Done = "done", Waiting = "waiting" });
 sorte!(Rarete { Star = "star", Dragon = "dragon" });
 sorte!(

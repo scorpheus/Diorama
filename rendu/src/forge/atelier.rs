@@ -737,6 +737,7 @@ fn draw_gift(g: &mut Grille, gift: &Don) {
         Cadeau::Coin => [".y.", "yYy", ".y."],
         Cadeau::Cookie => ["rVr", "VrV", "rVr"],
         Cadeau::Ore => [".A.", "AbA", "aAa"],
+        Cadeau::Note => ["WEW", "VVW", "WVV"], // un mot, punaisé
     };
     g.stamp(SW - 6, SH - 3, &dessin);
     if gift.age % 16 < 3 {

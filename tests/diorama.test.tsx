@@ -912,6 +912,113 @@ test('called home, he comes back even if the host never answers', { timeoutMs: 1
   expect(await ui.find({ text: /de retour de chez Dev/ })).toBeDefined()
 })
 
+// --- visits that do not go as planned: nobody home, two smiths crossing, a third forge ---------
+
+/** Every line the log showed so far, gathered at each step (the band shows its last two). */
+async function gather(ui: { findAll: (q: { text: RegExp }) => Promise<Array<{ text?: string }>> }, heard: Set<string>) {
+  for (const el of await ui.findAll({ text: /^ {2}\d\dh\d\d {2}/ })) if (el.text) heard.add(el.text)
+}
+const saw = (heard: Set<string>, line: RegExp) => [...heard].some(t => line.test(t))
+
+/** The first id `base0`, `base1`… whose hash, as the plugin keys it, has the parity asked. */
+function idWith(base: string, parity: number, key: (id: string) => string): string {
+  for (let i = 0; ; i++) if (fnv(key(`${base}${i}`)) % 2 === parity) return `${base}${i}`
+}
+
+/** A second at a time, the neighbours kept alive as `others()` has them, until `done` or `steps` seconds. */
+async function live(clock: { advance: (ms: number) => Promise<void>; now: () => number }, ui: Parameters<typeof gather>[0], heard: Set<string>,
+  others: () => Record<string, object>, done: () => boolean, steps = 600) {
+  for (let s = 0; s < steps && !done(); s++) {
+    await clock.advance(1000)
+    const now = clock.now()
+    shelf.set('presence', { ...(shelf.get('presence') as object), ...Object.fromEntries(Object.entries(others()).map(([id, p]) => [id, { ...p, seen: now }])) })
+    await gather(ui, heard)
+  }
+}
+const visitingOf = (id: string) => (shelf.get('presence') as Record<string, { visiting?: string }> | undefined)?.[id]?.visiting
+
+test('nobody heads for a forge whose smith is out', { timeoutMs: 120_000 }, async ($, on) => {
+  const out = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START, visiting: 'sess-far' }
+  const { ui, clock } = await start($, on, answerTools, { presence: { 'sess-dev': out } })
+  const heard = new Set<string>()
+  // trips start three minutes in; until 280 s, Dev's smith is out
+  await live(clock, ui, heard, () => ({ 'sess-dev': out }), () => false, 280)
+  expect(visitingOf('sess-1')).toBeUndefined()
+  expect(shelf.has('visit:sess-1')).toBe(false)
+  // the witness: home again, he is visited, before the nap (ten minutes in)
+  const home = { ...out, visiting: undefined }
+  await live(clock, ui, heard, () => ({ 'sess-dev': home }), () => visitingOf('sess-1') !== undefined, 290)
+  expect(visitingOf('sess-1')).toBe('sess-dev')
+})
+
+test('two smiths on their way to each other: the first by id turns back and hosts the other', { timeoutMs: 120_000 }, async ($, on) => {
+  const dev = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
+  const { ui, clock } = await start($, on, answerTools, { presence: { 'sess-dev': dev } })
+  const heard = new Set<string>()
+  await live(clock, ui, heard, () => ({ 'sess-dev': dev }), () => visitingOf('sess-1') === 'sess-dev')
+  expect(visitingOf('sess-1')).toBe('sess-dev') // he set off, and said so at once
+  // meanwhile the other set off for him: at the door, he learns it
+  await live(clock, ui, heard, () => ({ 'sess-dev': { ...dev, visiting: 'sess-1' } }), () => saw(heard, /croise/), 30)
+  expect(saw(heard, /croise la forge Dev en chemin, qui venait le voir : demi-tour/)).toBe(true)
+  expect(shelf.has('visit:sess-1')).toBe(false) // never went in
+  await live(clock, ui, heard, () => ({ 'sess-dev': { ...dev, visiting: 'sess-1' } }), () => visitingOf('sess-1') === undefined, 30)
+  expect(visitingOf('sess-1')).toBeUndefined() // home, to host him
+})
+
+for (const join of [true, false]) {
+  test(join ? 'the host is at a third forge: he goes and joins them' : 'nobody at the host\'s: he waits a while on the doorstep', { timeoutMs: 120_000 }, async ($, on) => {
+    const b = idWith('sess-b', join ? 0 : 1, id => `sess-1${id}`)
+    const host = { project: 'Bdev', cape: 'nuit', accessory: 'lunettes', seen: START }
+    const third = { project: 'Cdev', cape: 'ocre', accessory: 'aucun', seen: START, visiting: 'sess-far' } // out too: never chosen
+    const { ui, clock } = await start($, on, answerTools, { presence: { [b]: host, 'sess-c': third } })
+    const heard = new Set<string>()
+    await live(clock, ui, heard, () => ({ [b]: host, 'sess-c': third }), () => visitingOf('sess-1') === b)
+    expect(visitingOf('sess-1')).toBe(b)
+    // the host went off to the third forge before he got there
+    await live(clock, ui, heard, () => ({ [b]: { ...host, away: true, visiting: 'sess-c' }, 'sess-c': third }), () => shelf.has('visit:sess-1'), 30)
+    const visit = shelf.get('visit:sess-1') as { host: string; until: number }
+    if (join) {
+      expect(saw(heard, /personne chez la forge Bdev : on lui dit qu'il est chez la forge Cdev, il va les rejoindre/)).toBe(true)
+      expect(visit.host).toBe('sess-c')
+    } else {
+      expect(saw(heard, /personne chez la forge Bdev : il attend un peu devant la porte/)).toBe(true)
+      expect(visit.host).toBe(b)
+      expect(visit.until - clock.now()).toBeLessThanOrEqual(45_000) // not the minute and a half of a visit
+    }
+  })
+}
+
+for (const rush of [true, false]) {
+  test(rush ? 'a guest while he is out: he hurries home, in time to welcome him' : 'a guest while he is out: the guest leaves a note, read when he is home', { timeoutMs: 120_000 }, async ($, on) => {
+    const dev = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
+    const { ui, clock } = await start($, on, answerTools, { presence: { 'sess-dev': dev } })
+    const heard = new Set<string>()
+    await live(clock, ui, heard, () => ({ 'sess-dev': dev }), () => shelf.has('visit:sess-1'))
+    expect(shelf.get('visit:sess-1')).toMatchObject({ host: 'sess-dev', phase: 'there' })
+    // a guest comes to his forge while he is at Dev's
+    const g = idWith('sess-g', rush ? 0 : 1, id => `${id}sess-1`)
+    shelf.set(`visit:${g}`, { host: 'sess-1', until: clock.now() + 60_000, project: 'Guest', cape: 'ocre', accessory: 'aucun', phase: 'there' })
+    await live(clock, ui, heard, () => ({ 'sess-dev': dev }), () => saw(heard, /frappe à la forge/), 10)
+    expect(saw(heard, /la forge Guest frappe à la forge… personne/)).toBe(true)
+    if (rush) {
+      expect(saw(heard, /apprend que la forge Guest l'attend chez lui : il rentre en courant/)).toBe(true)
+      expect(shelf.get('visit:sess-1')).toMatchObject({ phase: 'leaving' })
+    } else {
+      expect(shelf.get('visit:sess-1')).toMatchObject({ phase: 'there' }) // he stays at Dev's
+      // the guest gives up, and leaves a note
+      shelf.set(`visit:${g}`, { ...(shelf.get(`visit:${g}`) as object), phase: 'leaving' })
+      await live(clock, ui, heard, () => ({ 'sess-dev': dev }), () => saw(heard, /glissé un mot/), 15)
+      expect(saw(heard, /la forge Guest a attendu, puis glissé un mot sous la porte/)).toBe(true)
+      await $.prompt.submit(typed('reviens'))
+      await $.turn.complete(ended('answer'))
+    }
+    // Dev walks him out; he comes home
+    shelf.set('visit:sess-1', { ...(shelf.get('visit:sess-1') as object), phase: 'gone' })
+    await live(clock, ui, heard, () => ({ 'sess-dev': dev }), () => saw(heard, rush ? /accueillir/ : /trouve un mot/), 40)
+    expect(saw(heard, rush ? /rentre juste à temps pour accueillir la forge Guest/ : /trouve un mot de la forge Guest en rentrant/)).toBe(true)
+  })
+}
+
 const haikuSays = (answer: (prompt: string, system: string) => string) => (_$: unknown, e: { prompt: string; system?: string }) =>
   ({ value: { isAnswered: true, text: answer(e.prompt, e.system ?? ''), usage: { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } }) as never
 const localAt = (h: number, m = 0) => new Date(2026, 9, 2, h, m).getTime()
