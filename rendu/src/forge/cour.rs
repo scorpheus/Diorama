@@ -205,7 +205,7 @@ struct Immobile {
     moving: Vec<u32>,
 }
 
-type Cle = (i32, i32, u8, bool, bool, bool, bool, u8);
+type Cle = (i32, i32, u8, bool, bool, bool, bool, u8, bool);
 const STILLS: usize = 12; // les derniers ciels et largeurs gardés ; l'heure et la fenêtre changent lentement
 
 /// Ce que la cour garde d'une image à l'autre : ce qui ne bouge pas n'est jamais peint deux fois.
@@ -269,6 +269,7 @@ impl Cour {
             sky,
             se,
             rhum: w.rhum,
+            galadriel: w.galadriel(),
             winter: se == Saison::Hiver,
             clock: w.clock,
             working,
@@ -281,7 +282,7 @@ impl Cour {
             pouring: RefCell::new(None),
         };
         // peinte entière une fois par ciel, saison et largeur ; puis, image après image, ce qui bouge
-        let key: Cle = (from, to, se as u8, sky.night, sky.dusk, sky.storm, sky.flash, w.rhum.map_or(0, |r| r as u8 + 1));
+        let key: Cle = (from, to, se as u8, sky.night, sky.dusk, sky.storm, sky.flash, w.rhum.map_or(0, |r| r as u8 + 1), w.galadriel());
         let mut colours = vec![0u32; (width * HEIGHT) as usize];
         match self.stills.get(&key) {
             None => {
@@ -321,6 +322,8 @@ struct Peintre {
     sky: Ciel,
     se: Saison,
     rhum: Option<PhaseRhum>,
+    /// le belvédère de Galadriel borde la cour : ni porte de chêne ni lueur de forge
+    galadriel: bool,
     winter: bool,
     clock: i64,
     working: bool,
@@ -860,6 +863,9 @@ impl Peintre {
     /// La porte : deux montants de chêne, l'avant-toit sur la cour, le seuil de pierre. Sous
     /// l'orage la pluie ruisselle et goutte du bout de l'avant-toit ; l'hiver, des glaçons dessous.
     fn door(&self, x: i32, y: i32) -> Option<Rgb> {
+        if self.galadriel {
+            return None;
+        }
         let from = self.from;
         let eave_end = from + 12;
         let eave = (x - from).div_euclid(3);
@@ -915,6 +921,9 @@ impl Peintre {
                 self.mill_at(x, y, self.well_at(x, y, c))
             }
         };
+        if self.galadriel {
+            return pack(c);
+        }
         pack(spill(&self.sky, self.from, x, y, c))
     }
 }

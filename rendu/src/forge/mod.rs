@@ -5,6 +5,7 @@
 pub mod accessoires;
 pub mod atelier;
 pub mod baie;
+pub mod belvedere;
 pub mod cellules;
 pub mod cour;
 pub mod gerbe;
@@ -19,7 +20,11 @@ pub mod trace;
 
 
 use atelier::{compose, Contexte, C, GROW, IMPACT, ROWS, SH, SW, YARD};
-use monde::{Accessoire, Activite, Monde, Recadrage};
+use monde::{Accessoire, Activite, Monde, Perso, Recadrage};
+
+/// D'elle au plus proche de ses invités, en pixels de forge : sa demi-largeur, robes comprises,
+/// et celle d'un loup.
+const A_COTE: f32 = 21.0;
 
 /// Les fenêtres sur la scène, de la plus large : le bandeau montre la plus large qui tient.
 pub const fn crop(c: Recadrage) -> (i32, i32) {
@@ -64,17 +69,35 @@ impl Forge {
         // invités ensuite, par-dessus lui, comme la scène les dessinait
         let acteur = |a: Activite, t: i64, w: &Monde, x: i32| {
             let (rangee, image) = pet::moment(a, t, w);
-            pet::Acteur { rangee, image, x: (x + 8) as f32 + pet::decalage(a, w), y: SH as f32, eclairage: None, cape: w.cape[1].0, accessoire: w.accessory }
+            pet::Acteur { rangee, image, x: (x + 8) as f32 + pet::decalage(a, w), y: SH as f32, eclairage: None, cape: w.cape[1].0, accessoire: w.accessory, perso: Perso::Scorpheus }
         };
+        let gala = world.galadriel();
         let mut acteurs: Vec<pet::Acteur> = Vec::new();
         if pet {
-            if !world.absent {
+            if !world.absent && gala {
+                // elle flotte : un pixel d'écran de haut en bas, lentement
+                let (rangee, image) = pet::moment_galadriel(activity, tick, world);
+                let houle = 0.5 + 0.5 * (world.clock as f32 * 0.35).sin();
+                acteurs.push(pet::Acteur { rangee, image, x: (C.0 + world.x + 8) as f32, y: SH as f32 - 0.7 - 0.45 * houle, eclairage: None, cape: b'O', accessoire: Accessoire::Aucun, perso: Perso::Galadriel });
+            } else if !world.absent {
                 acteurs.push(acteur(activity, tick, world, C.0 + world.x));
             }
-            acteurs.extend(self.ctx.invites.iter().map(|v| acteur(v.activite, v.tick, &v.monde, v.x)));
+            let mut invites: Vec<_> = self.ctx.invites.iter().map(|v| acteur(v.activite, v.tick, &v.monde, v.x)).collect();
+            // ses robes sont larges : un invité dont la place tomberait sur elle se tient à côté,
+            // et les autres d'autant, pour garder leur rang
+            if let Some(elle) = acteurs.first().filter(|a| a.perso == Perso::Galadriel).map(|a| a.x) {
+                let d = invites.iter().map(|a| elle + A_COTE - a.x).fold(0.0, f32::max);
+                for a in &mut invites {
+                    a.x += d;
+                }
+            }
+            acteurs.extend(invites);
         }
+        // chez Galadriel, le belvédère se peint au vrai pixel sur les colonnes de la forge : ses
+        // cellules restent vides, ni dessinées ni éclairées
+        let debut = if gala && pet { x0.max(belvedere::FIN).min(fin) } else { x0 };
         if !lit {
-            return (pixels::to_cells(&scene, &accessoires::PALETTE, x0, fin, None), acteurs, coup);
+            return (vides_avant(pixels::to_cells(&scene, &accessoires::PALETTE, debut, fin, None), debut - x0, fin - debut), acteurs, coup);
         }
         let actor = if pet { pixels::Grille::new(SW, SH) } else { compose(&mut self.ctx, &mut self.cour, &p, world, tick, true, SW) };
         let dehors = self.cour.outdoors(world, activity == Activite::Running, YARD, width);
@@ -82,8 +105,25 @@ impl Forge {
         for a in &mut acteurs {
             a.eclairage = Some(lumiere.eclairage(a.x as i32 - 15, 0, 30, SH));
         }
-        (pixels::to_cells(&scene, &accessoires::PALETTE, x0, fin, Some(&mut lumiere)), acteurs, coup)
+        (vides_avant(pixels::to_cells(&scene, &accessoires::PALETTE, debut, fin, Some(&mut lumiere)), debut - x0, fin - debut), acteurs, coup)
     }
+}
+
+/// Des cellules vides (transparentes) devant chaque rangée : `n` colonnes, puis les `large` données.
+fn vides_avant(cells: Vec<u32>, n: i32, large: i32) -> Vec<u32> {
+    if n <= 0 {
+        return cells;
+    }
+    let (n, large) = (n as usize, large.max(0) as usize);
+    let rows = if large == 0 { ROWS as usize } else { cells.len() / 3 / large };
+    let mut out = Vec::with_capacity((n + large) * rows * 3);
+    for r in 0..rows {
+        for _ in 0..n {
+            out.extend_from_slice(&[0x20, pixels::DEFAUT, pixels::DEFAUT]);
+        }
+        out.extend_from_slice(&cells[r * large * 3..(r + 1) * large * 3]);
+    }
+    out
 }
 
 /// Où se peint la baie de la Route du Rhum dans le bandeau : la cour, de la porte au bord ;
@@ -181,6 +221,7 @@ pub struct SceneForge {
     avant: Vec<u32>,
     gerbe: gerbe::Gerbe,
     baie: baie::Baie,
+    belvedere: belvedere::Belvedere,
     /// le tic du dernier coup de marteau : un message du plugin qui le redonne ne frappe pas deux fois
     frappe: i64,
     pub images: u64,
@@ -188,7 +229,7 @@ pub struct SceneForge {
 
 impl SceneForge {
     pub fn new() -> Self {
-        SceneForge { forge: Forge::default(), etat: None, depuis: 0, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), baie: baie::Baie::default(), frappe: i64::MIN, images: 0 }
+        SceneForge { forge: Forge::default(), etat: None, depuis: 0, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), baie: baie::Baie::default(), belvedere: belvedere::Belvedere::default(), frappe: i64::MIN, images: 0 }
     }
 
     pub fn recevoir(&mut self, etat: Etat) {
@@ -205,9 +246,23 @@ impl crate::scene::Scene for SceneForge {
         let monde = etat.monde.plus_tard(e);
         let (cw, ch) = (image.cellule.0 as i32, image.cellule.1 as i32);
         let tick = etat.tick + e;
+        let gala = monde.galadriel();
         // les cases du pet, faites une fois par hauteur de cellule et par cape
-        let pet = pet::cases(image.cellule.1, b'O', Accessoire::Aucun).is_some();
-        let (cells, acteurs, coup) = self.forge.image(etat.recadrage, etat.activite, tick, &monde, etat.lit, etat.extra, pet);
+        let pet = pet::cases(if gala { Perso::Galadriel } else { Perso::Scorpheus }, image.cellule.1, b'O', Accessoire::Aucun).is_some();
+        // chez Galadriel, le chat, la messagère et les aides se peignent dans son belvédère : la
+        // scène en lettres ne les dessine pas
+        let cellulaire = if gala && pet {
+            let mut m = monde.clone();
+            m.cat = None;
+            m.messenger = None;
+            m.apprentices.clear();
+            m
+        } else {
+            monde.clone()
+        };
+        let (cells, mut acteurs, coup) = self.forge.image(etat.recadrage, etat.activite, tick, &cellulaire, etat.lit, etat.extra, pet);
+        let gala = gala && pet;
+        let coup = coup.filter(|_| !gala);
         let (x0, x1) = crop(etat.recadrage);
         // le coup tombe sur l'enclume : la gerbe part de là, et retombe au sol de la forge
         let hb = (ROWS * ch) as f32;
@@ -229,10 +284,38 @@ impl crate::scene::Scene for SceneForge {
             if let Some(z) = self.baie.peindre(image.pixels, w, h, cadre, &monde) {
                 zone = Some(zone.map_or(z, |a| (a.0.min(z.0), a.1.min(z.1), a.2.max(z.2), a.3.max(z.3))));
             }
-            let debut = (YARD - x0).max(0) as usize;
+            let debut = ((if gala { belvedere::FIN } else { YARD }) - x0).max(0) as usize;
             for rangee in cells.chunks_mut(cols * 3) {
                 for cell in rangee.chunks_mut(3).skip(debut) {
                     cell[0] = u32::MAX;
+                }
+            }
+        }
+        // le belvédère de Galadriel, sur les cellules vides de la forge
+        let fin_belvedere = (belvedere::FIN - x0).clamp(0, cols as i32);
+        if gala {
+            let elle = acteurs.first().filter(|a| a.perso == Perso::Galadriel).map(|a| a.x);
+            let vue = belvedere::Vue { monde: &monde, activite: etat.activite, tick, x0, cols: cols as i32, cw, ch, elle };
+            let (z, dehors) = self.belvedere.peindre(image.pixels, w, h, &vue, neuve);
+            if let Some(z) = z {
+                zone = Some(zone.map_or(z, |a| (a.0.min(z.0), a.1.min(z.1), a.2.max(z.2), a.3.max(z.3))));
+            }
+            // ce qui a débordé sur la cour : ses cellules se repeignent à l'image suivante
+            if let Some((l, t, r, b)) = dehors {
+                zone = Some(zone.map_or((l, t, r, b), |a| (a.0.min(l), a.1.min(t), a.2.max(r), a.3.max(b))));
+                let rows = (cells.len() / 3 / cols.max(1)) as i32;
+                for cy in (t / ch).max(0)..((b + ch - 1) / ch).min(rows) {
+                    for cx in (l / cw).max(fin_belvedere)..((r + cw - 1) / cw).min(cols as i32) {
+                        cells[(cy as usize * cols + cx as usize) * 3] = u32::MAX;
+                    }
+                }
+            }
+            // la lumière du belvédère sur qui s'y tient
+            for a in &mut acteurs {
+                if (a.x as i32) < belvedere::FIN {
+                    if let Some(e) = self.belvedere.eclairage(a.x as i32 - 15, 30) {
+                        a.eclairage = Some(e);
+                    }
                 }
             }
         }
@@ -240,13 +323,33 @@ impl crate::scene::Scene for SceneForge {
         let mut peints: Vec<_> = jauges::peindre(image.pixels, w, h, cw, ch, &monde).into_iter().collect();
         peints.extend(acteurs.iter().filter_map(|a| pet::peindre(a, image.pixels, w, h, x0, cw, ch)));
         peints.extend(self.gerbe.peindre(image.pixels, w, h));
+        // chez Galadriel, ce qui passe devant elle
+        if gala {
+            let elle = acteurs.first().filter(|a| a.perso == Perso::Galadriel).map(|a| a.x);
+            let vue = belvedere::Vue { monde: &monde, activite: etat.activite, tick, x0, cols: cols as i32, cw, ch, elle };
+            let (z, dehors) = self.belvedere.devant(image.pixels, &vue);
+            if let Some(z) = z {
+                zone = Some(zone.map_or(z, |a| (a.0.min(z.0), a.1.min(z.1), a.2.max(z.2), a.3.max(z.3))));
+            }
+            peints.extend(dehors);
+        }
         for (l, t, r, b) in peints {
             zone = Some(zone.map_or((l, t, r, b), |z| (z.0.min(l), z.1.min(t), z.2.max(r), z.3.max(b))));
             // sous lui et sous la gerbe, les cellules ne sont plus ce que `cells` en dit : à
             // l'image suivante elles se repeignent, qu'il soit resté ou parti
             let rows = (cells.len() / 3 / cols.max(1)) as i32;
+            // chez Galadriel, sous elle le belvédère se reprend de son fond ; ses cellules vides
+            // n'ont pas à se repeindre
+            let premiere = if gala {
+                if l < fin_belvedere * cw {
+                    self.belvedere.salir((l, t, r, b));
+                }
+                fin_belvedere
+            } else {
+                0
+            };
             for cy in (t / ch).max(0)..((b + ch - 1) / ch).min(rows) {
-                for cx in (l / cw).max(0)..((r + cw - 1) / cw).min(cols as i32) {
+                for cx in (l / cw).max(premiere)..((r + cw - 1) / cw).min(cols as i32) {
                     cells[(cy as usize * cols + cx as usize) * 3] = u32::MAX;
                 }
             }

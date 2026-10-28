@@ -169,7 +169,7 @@ pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
     let lignes = scenes.len().div_ceil(par_ligne) as i32;
     let (w, h) = (ECART + (fw + ECART) * par_ligne as i32, ECART + (fh + ECART) * lignes);
     let mut pixels = vec![0xFF16_1616u32; (w * h) as usize];
-    let pet = super::pet::cases(CH as u32, b'O', Accessoire::Aucun).is_some();
+    let pet = super::pet::cases(Perso::Scorpheus, CH as u32, b'O', Accessoire::Aucun).is_some();
     let mut scene = vec![0u32; (fw * fh) as usize];
     for (n, (a, t, monde)) in scenes.iter().enumerate() {
         // chaque scène peinte à part, Scorpheus par-dessus comme dans l'appli, puis posée
@@ -200,6 +200,75 @@ pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
         }
     }
     std::fs::write(sortie, png(&pixels, w as u32, h as u32))
+}
+
+/// Les moments de Galadriel dans son belvédère, peints par le vrai chemin de l'appli
+/// (SceneForge), image après image : `planche.png` (une image par moment, l'une sous l'autre)
+/// et, par moment, ses images d'affilée `film-<n>-<k>.png`, pour en faire une animation.
+///
+///   rendu.exe --galadriel <dossier> [--large <colonnes>]
+pub fn galadriel(dossier: &str, extra: i32) -> std::io::Result<()> {
+    use super::{Etat, SceneForge};
+    use crate::scene::{Image, Scene};
+    let gala = |f: &dyn Fn(&mut Monde)| {
+        let mut w = Monde { perso: Some(Perso::Galadriel), hour: 23.0, month: 10, day: 28, clock: 400, ..Monde::default() };
+        w.rhum = Some(PhaseRhum::Course);
+        w.rhum_progress = Some(0.3);
+        f(&mut w);
+        w
+    };
+    let aides = vec![petit(3, 20, b'P'), petit(7, 33, b'b')];
+    let chat_marche = Chat { mode: ModeChat::Walk, x: 20, age: 30, dir: Some(1), step: Some(0) };
+    let scenes: Vec<(&str, Activite, i64, Monde)> = vec![
+        ("repos", Activite::Idle, 0, gala(&|_| {})),
+        ("reflexion", Activite::Thinking, 0, gala(&|_| {})),
+        ("travail", Activite::Running, 0, gala(&|w| { w.flavor = Saveur::Build; w.apprentices = aides.clone() })),
+        ("relecture", Activite::Review, 0, gala(&|w| w.flavor = Saveur::Web)),
+        ("attente", Activite::Waiting, 0, gala(&|_| {})),
+        ("echec", Activite::Failed, 0, gala(&|_| {})),
+        ("tests-reussis", Activite::Quench, 0, gala(&|w| { w.outcome = Some(Issue::Pass); w.apprentices = aides.clone() })),
+        ("tests-rates", Activite::Quench, 0, gala(&|w| { w.outcome = Some(Issue::Fail); w.apprentices = aides.clone() })),
+        ("commit", Activite::Ship, 0, gala(&|w| w.ship = Some(Envoi::Commit))),
+        ("push", Activite::Ship, 0, gala(&|w| w.ship = Some(Envoi::Push))),
+        ("joie", Activite::Jumping, 0, gala(&|_| {})),
+        ("salut", Activite::Waving, 0, gala(&|_| {})),
+        ("balai", Activite::Sweep, 0, gala(&|w| w.ctx = 90.0)),
+        ("sommeil", Activite::Sleep, 0, gala(&|w| w.cat = Some(Chat { mode: ModeChat::Roof, x: 0, age: 4, dir: None, step: None }))),
+        ("jour", Activite::Idle, 0, gala(&|w| { w.hour = 11.0; w.rhum = None; w.cat = Some(chat_marche.clone()) })),
+        ("crepuscule", Activite::Idle, 0, gala(&|w| { w.hour = 19.6; w.messenger = Some(Messager { kind: Nouvelle::Waiting, age: 10 }) })),
+        ("orage", Activite::Idle, 0, gala(&|w| w.weather = Some(Temps::Storm))),
+        ("hiver", Activite::Idle, 0, gala(&|w| { w.hour = 14.0; w.month = 1; w.day = 12; w.rhum = None })),
+        ("visite", Activite::Idle, 0, gala(&|w| {
+            // deux invités à leurs places, comme le plugin les y mène : le second tomberait sur elle
+            let invite = Invite { x: GUEST_SPOT, walking: false, facing: -1, cape: [Lettre(b'N'), Lettre(b'L')], accessory: Accessoire::Lunettes, tick: 3, waving: true };
+            w.guests = vec![invite.clone(), Invite { x: GUEST_SPOT - 14, cape: [Lettre(b'C'), Lettre(b'D')], accessory: Accessoire::Bandeau, tick: 40, waving: false, ..invite }];
+            w.x = 4;
+        })),
+    ];
+    let cols = (super::atelier::SW + extra.clamp(0, super::atelier::GROW)) as usize;
+    let (fw, fh) = (cols as i32 * CW, ROWS * CH);
+    let mut planche = vec![0xFF16_1616u32; ((ECART + (fh + ECART) * scenes.len() as i32) * (fw + 2 * ECART)) as usize];
+    let pw = fw + 2 * ECART;
+    let images = 16;
+    for (n, (nom, a, t, monde)) in scenes.iter().enumerate() {
+        let mut sf = SceneForge::new();
+        sf.recevoir(Etat { recadrage: Recadrage::Full, extra, lit: true, activite: *a, tick: *t, monde: monde.clone() });
+        let mut px = vec![0u32; (fw * fh) as usize];
+        for k in 0..images {
+            sf.peindre(&mut Image { pixels: &mut px, w: fw as u32, h: fh as u32, cellule: (CW as u32, CH as u32) }, 0.15, k == 0);
+            let vu: Vec<u32> = px.iter().map(|&p| if p >> 24 == 0 { 0xFF0C_0C0C } else { p }).collect();
+            std::fs::write(format!("{dossier}/film-{n:02}-{nom}-{k:02}.png"), png(&vu, fw as u32, fh as u32))?;
+            if k == 6 {
+                let oy = ECART + n as i32 * (fh + ECART);
+                for y in 0..fh {
+                    let d = ((oy + y) * pw + ECART) as usize;
+                    planche[d..d + fw as usize].copy_from_slice(&vu[(y * fw) as usize..((y + 1) * fw) as usize]);
+                }
+            }
+        }
+    }
+    let ph = ECART + (fh + ECART) * scenes.len() as i32;
+    std::fs::write(format!("{dossier}/planche.png"), png(&planche, pw as u32, ph as u32))
 }
 
 /// Un PNG sans compression : des blocs « stockés » de deflate, assez pour regarder une planche.

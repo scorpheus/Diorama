@@ -286,7 +286,7 @@ fn ligne_d_arrivee(c: &Cadre) -> f32 {
 /// Ce que la baie garde d'une image à l'autre : le fond immobile, et la table des sinus.
 #[derive(Default)]
 pub struct Baie {
-    cle: Option<(usize, usize, i32, i32, i32, i32, Etape, i32, bool, bool)>,
+    cle: Option<(usize, usize, i32, i32, i32, i32, Etape, i32, bool, bool, bool)>,
     fond: Vec<u32>,
     /// le fond et ses nuages, repeints quand ils ont glissé d'un pixel
     ciel: Vec<u32>,
@@ -319,10 +319,10 @@ impl Baie {
         let orage = w.weather == Some(Temps::Storm);
         let eclair = orage && w.clock % 23 < 2;
         let sky = ciel(w.hour as f32, orage, eclair);
-        let cle = (c.w, c.h, (c.cw * 100.0) as i32, (c.demi * 100.0) as i32, c.from as i32, c.to as i32, et, (w.hour * 10.0) as i32, orage, eclair);
+        let cle = (c.w, c.h, (c.cw * 100.0) as i32, (c.demi * 100.0) as i32, c.from as i32, c.to as i32, et, (w.hour * 10.0) as i32, orage, eclair, w.galadriel());
         if self.cle != Some(cle) {
             self.fond = vec![0; c.w * c.h];
-            fond(&mut Toile { px: &mut self.fond, w: c.w, h: c.h }, &c, &sky, et);
+            fond(&mut Toile { px: &mut self.fond, w: c.w, h: c.h }, &c, &sky, et, w.galadriel());
             self.cle = Some(cle);
             self.ciel_pas = None;
             self.gardees.clear();
@@ -545,8 +545,9 @@ impl Monde {
 }
 
 /// Le fond immobile : le ciel, le soleil ou la lune, les étoiles, les terres à l'horizon, la mer
-/// à plat, le sol (quai, pont ou plage), la lueur de la forge à la porte le soir.
-fn fond(t: &mut Toile, c: &Cadre, sky: &Ciel, et: Etape) {
+/// à plat, le sol (quai, pont ou plage), la lueur de la forge à la porte le soir (celle, bleutée,
+/// du belvédère chez Galadriel).
+fn fond(t: &mut Toile, c: &Cadre, sky: &Ciel, et: Etape, galadriel: bool) {
     let room = c.room();
     let (mer_loin, mer_pres) = match et {
         _ if sky.orage => (hex(0x3a4a56), hex(0x46565f)),
@@ -722,8 +723,9 @@ fn fond(t: &mut Toile, c: &Cadre, sky: &Ciel, et: Etape) {
         }
         t.ligne(&fil, 1.1, mul(hex(0x3a3a44), sky.amb), 1.0);
     }
-    // la lueur de la forge par la porte, le soir : une flaque chaude au sol
-    let lueur = sky.nuit.min(1.0) * 0.55;
+    // la lueur de la forge par la porte, le soir : une flaque chaude au sol ; chez Galadriel, la
+    // lumière froide du bassin, plus douce
+    let (lueur, teinte) = if galadriel { (sky.nuit.min(1.0) * 0.4, [90.0, 170.0, 230.0]) } else { (sky.nuit.min(1.0) * 0.55, [230.0, 135.0, 63.0]) };
     if lueur > 0.0 {
         for y in c.y(22.0) as usize..t.h {
             for x in 0..t.w.min((15.0 * c.cw) as usize) {
@@ -733,7 +735,7 @@ fn fond(t: &mut Toile, c: &Cadre, sky: &Ciel, et: Etape) {
                 if f > 0.0 {
                     let i = y * t.w + x;
                     let p = unpack(t.px[i]);
-                    t.px[i] = pack([p[0] + 230.0 * f, p[1] + 135.0 * f, p[2] + 63.0 * f]);
+                    t.px[i] = pack([p[0] + teinte[0] * f, p[1] + teinte[1] * f, p[2] + teinte[2] * f]);
                 }
             }
         }

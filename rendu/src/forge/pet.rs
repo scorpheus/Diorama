@@ -6,9 +6,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use super::monde::{Accessoire, Activite, Monde};
+use super::monde::{Accessoire, Activite, Monde, Perso};
 
 const PLANCHES: [&[u8]; 2] = [include_bytes!("../../pet/scorpheus.webp"), include_bytes!("../../pet/forge.webp")];
+/// Galadriel d'après son pet de Codex : neuf rangées pleines de huit cases, détourée sur du vert.
+const GALADRIEL: &[u8] = include_bytes!("../../pet/galadriel.webp");
 /// Les accessoires, chacun un calque posé sur les cases (tools/pet/chatgpt.py --tenue) : les
 /// rangées 0 à 8 de la première planche, puis les six de la seconde. Une image d'un pixel :
 /// pas encore dessiné, le pet sans.
@@ -73,6 +75,22 @@ const RANGEES: [Rangee; 15] = [
 ];
 
 impl Rangee {
+    /// Sa planche, sa rangée dans la planche, et combien d'images elle tient, chez `perso` ;
+    /// Galadriel n'a que les neuf rangées de son pet, de huit images chacune.
+    const fn ou_chez(self, perso: Perso) -> Option<(usize, usize, usize)> {
+        match perso {
+            Perso::Scorpheus => Some(self.ou()),
+            Perso::Galadriel => {
+                let (p, r, _) = self.ou();
+                if p == 0 {
+                    Some((0, r, 8))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     /// Sa planche, sa rangée dans la planche, et combien d'images elle tient.
     const fn ou(self) -> (usize, usize, usize) {
         match self {
@@ -144,6 +162,31 @@ pub fn moment(a: Activite, tick: i64, w: &Monde) -> (Rangee, usize) {
     }
 }
 
+/// L'image du moment pour Galadriel : son pet seul, sans outil ; ce qu'elle fait se voit dans
+/// le belvédère (belvedere.rs). Elle glisse plus qu'elle ne marche : une image tous les deux pixels.
+pub fn moment_galadriel(a: Activite, tick: i64, w: &Monde) -> (Rangee, usize) {
+    use Rangee::*;
+    let boucle = |r: Rangee, tics: i64, n: usize| (r, (tick.div_euclid(tics) as usize) % n);
+    if w.walking {
+        let r = if w.facing < 0 { Gauche } else { Droite };
+        return (r, (w.x * w.facing.signum()).rem_euclid(8) as usize);
+    }
+    match a {
+        // au travail : ses mains sur le flot du bassin (les deux dernières cases filent, gardées pour la marche)
+        Activite::Running => boucle(Travail, 3, 6),
+        Activite::Thinking => boucle(Relecture, 3, 8),
+        Activite::Review | Activite::Quench => boucle(Relecture, 2, 8),
+        Activite::Waiting => boucle(Attente, 3, 8),
+        Activite::Failed => boucle(Echec, 3, 8),
+        Activite::Jumping | Activite::Waking => boucle(Saut, 2, 8),
+        Activite::Waving | Activite::Ship => boucle(Salut, 2, 8),
+        Activite::Sweep => boucle(Saut, 3, 8),
+        // assoupie : les yeux clos de sa rangée d'attente
+        Activite::Sleep => (Attente, 3),
+        Activite::Idle | Activite::Away => boucle(Repos, 3, 8),
+    }
+}
+
 /// Une case mise à l'échelle de l'écran, rognée à ce qu'elle montre.
 pub struct Case {
     /// son coin haut gauche, depuis le point qui se pose au sol, en pixels d'écran
@@ -161,8 +204,12 @@ const RELIEF: f32 = 1.3;
 
 /// Le relief d'un pixel (sa part `t` de la rangée, de gauche à droite ; `haut` : rien au-dessus) :
 /// le côté vers le foyer (à gauche) chaud, l'autre froid, un liseré de lumière en haut.
-fn relief(t: f32, haut: bool) -> [f32; 3] {
+fn relief(perso: Perso, t: f32, haut: bool) -> [f32; 3] {
     let m = 0.16 - 0.32 * t.clamp(0.0, 1.0) + if haut { 0.08 } else { 0.0 };
+    if perso == Perso::Galadriel {
+        // le bassin à sa gauche : un côté cyan ; la lune en haut, l'autre côté bleu nuit
+        return if m > 0.0 { [1.0 + m * 0.45, 1.0 + m * 1.1, 1.0 + m * 1.25] } else { [1.0 + m * 1.1, 1.0 + m, 1.0 + m * 0.6] };
+    }
     if m > 0.0 {
         [1.0 + m * 1.25, 1.0 + m, 1.0 + m * 0.55]
     } else {
@@ -182,15 +229,33 @@ impl Cases {
 /// Les cases, à la hauteur de cellule `ch`, à la cape `cape` (sa lettre claire, 'O' : la verte
 /// du pet), avec l'accessoire `acc` : faites une fois pour toutes les bandes de cette taille et
 /// de cette tenue, la planche décodée seulement le temps de les faire.
-pub fn cases(ch: u32, cape: u8, acc: Accessoire) -> Option<Arc<Cases>> {
-    static FAITES: OnceLock<Mutex<HashMap<(u32, u8, u8), Arc<Cases>>>> = OnceLock::new();
+pub fn cases(perso: Perso, ch: u32, cape: u8, acc: Accessoire) -> Option<Arc<Cases>> {
+    static FAITES: OnceLock<Mutex<HashMap<(u8, u32, u8, u8), Arc<Cases>>>> = OnceLock::new();
+    // Galadriel n'a ni cape de session ni accessoire : une seule tenue
+    let (cape, acc) = if perso == Perso::Galadriel { (b'O', Accessoire::Aucun) } else { (cape, acc) };
+    let cle = (perso as u8, ch, cape, acc as u8);
     let mut faites = FAITES.get_or_init(Default::default).lock().ok()?;
-    if let Some(c) = faites.get(&(ch, cape, acc as u8)) {
+    if let Some(c) = faites.get(&cle) {
         return Some(c.clone());
+    }
+    let echelle = HAUTEUR * ch as f32 / 2.0 / HAUTEUR_CASE;
+    if perso == Perso::Galadriel {
+        let (w, mut rgba) = decoder(GALADRIEL)?;
+        reparer(w, &mut rgba, Fond::Vert);
+        let mut toutes = HashMap::new();
+        for rangee in RANGEES {
+            let Some((_, r, n)) = rangee.ou_chez(perso) else { continue };
+            for i in 0..n.min(COLONNES) {
+                toutes.insert((rangee, i), case(&rgba, w, i * CASE.0, r * CASE.1, echelle, perso));
+            }
+        }
+        let c = Arc::new(Cases(toutes));
+        faites.insert(cle, c.clone());
+        return Some(c);
     }
     let mut planches = PLANCHES.iter().map(|p| decoder(p)).collect::<Option<Vec<_>>>()?;
     for (w, rgba) in &mut planches {
-        reparer(*w, rgba);
+        reparer(*w, rgba, Fond::Magenta);
     }
     // l'accessoire avant la cape : le bandeau, de son vert, en prend la teinte
     if let Some((_, calque)) = CALQUES.iter().find(|(a, _)| *a == acc) {
@@ -201,17 +266,16 @@ pub fn cases(ch: u32, cape: u8, acc: Accessoire) -> Option<Arc<Cases>> {
     for (_, rgba) in &mut planches {
         teindre(rgba, cape);
     }
-    let echelle = HAUTEUR * ch as f32 / 2.0 / HAUTEUR_CASE;
     let mut toutes = HashMap::new();
     for rangee in RANGEES {
         let (p, r, n) = rangee.ou();
         let (w, rgba) = &planches[p];
         for i in 0..n.min(COLONNES) {
-            toutes.insert((rangee, i), case(rgba, *w, i * CASE.0, r * CASE.1, echelle));
+            toutes.insert((rangee, i), case(rgba, *w, i * CASE.0, r * CASE.1, echelle, perso));
         }
     }
     let c = Arc::new(Cases(toutes));
-    faites.insert((ch, cape, acc as u8), c.clone());
+    faites.insert(cle, c.clone());
     Some(c)
 }
 
@@ -321,12 +385,30 @@ fn decoder(planche: &[u8]) -> Option<(usize, Vec<[f32; 4]>)> {
     (rgba.len() == (w * h) as usize).then_some((w as usize, rgba))
 }
 
-/// Ce que le détourage du fond magenta a laissé sur une planche. Au bord du personnage et en
-/// points perdus, le magenta mêlé aux couleurs (plus de rouge et de bleu que de vert, ce que ni la fourrure, ni la
-/// cape, ni la crête n'ont) en est ôté. Et ce qu'il a pris pour du fond au-dedans (l'intérieur
-/// des oreilles, des traînées dans la fourrure), un trou que le fond du dehors n'atteint pas, est
+/// Le fond sur lequel un pet a été détouré.
+#[derive(Clone, Copy, PartialEq)]
+enum Fond {
+    Magenta,
+    Vert,
+}
+
+/// La somme des couleurs de pixels pleins, et leur moyenne opaque.
+fn moyenne(rgba: &[[f32; 4]], pixels: &[usize]) -> [f32; 4] {
+    let n = pixels.len().max(1) as f32;
+    let s = pixels.iter().fold([0.0f32; 3], |s, &v| [s[0] + rgba[v][0], s[1] + rgba[v][1], s[2] + rgba[v][2]]);
+    [s[0] / n, s[1] / n, s[2] / n, 255.0]
+}
+
+/// Ce que le détourage a laissé sur une planche. Le fond mêlé aux couleurs en est ôté : le
+/// magenta (plus de rouge et de bleu que de vert, ce que ni la fourrure, ni la cape, ni la crête
+/// n'ont), ou le vert (plus de vert que de rouge et de bleu : ni la robe ni les runes cyan de
+/// Galadriel). Le bord devient net, plein ou vide : ni voile ni liseré à demi transparent. Les
+/// points perdus autour s'en vont, les piqûres du bord se comblent, les éclats sombres d'un bord
+/// clair prennent la couleur de leurs voisins, et un bord clair que le détourage a mis à nu
+/// reprend un trait sombre de sa teinte. Ce qu'il a pris pour du fond au-dedans (l'intérieur des
+/// oreilles, des traînées dans la fourrure), un trou que le fond du dehors n'atteint pas, est
 /// rempli des couleurs autour, du bord vers le centre.
-fn reparer(w: usize, rgba: &mut [[f32; 4]]) {
+fn reparer(w: usize, rgba: &mut [[f32; 4]], fond: Fond) {
     let h = rgba.len() / w;
     let vide = |p: &[f32; 4]| p[3] <= 40.0;
     let voisins = |i: usize| {
@@ -336,12 +418,84 @@ fn reparer(w: usize, rgba: &mut [[f32; 4]]) {
             ((0..w as i32).contains(&nx) && (0..h as i32).contains(&ny)).then(|| ny as usize * w + nx as usize)
         })
     };
+    let huit = |i: usize| {
+        let (x, y) = (i % w, i / w);
+        [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)].into_iter().filter_map(move |(dx, dy): (i32, i32)| {
+            let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+            ((0..w as i32).contains(&nx) && (0..h as i32).contains(&ny)).then(|| ny as usize * w + nx as usize)
+        })
+    };
     for p in rgba.iter_mut() {
-        let m = p[0].min(p[2]) - p[1];
-        if m > 0.0 {
-            p[0] -= m;
-            p[2] -= m;
+        match fond {
+            Fond::Magenta => {
+                let m = p[0].min(p[2]) - p[1];
+                if m > 0.0 {
+                    p[0] -= m;
+                    p[2] -= m;
+                }
+            }
+            Fond::Vert => {
+                let m = p[1] - p[0].max(p[2]);
+                if m > 0.0 {
+                    p[1] -= m;
+                }
+            }
         }
+        // plein ou vide
+        if p[3] < 128.0 {
+            *p = [0.0; 4];
+        } else {
+            let k = 255.0 / p[3];
+            *p = [p[0] * k, p[1] * k, p[2] * k, 255.0];
+        }
+    }
+    let lum = |p: &[f32; 4]| (p[0] + p[1] + p[2]) / 3.0;
+    // les points perdus : un pixel plein qui n'a qu'un voisin plein au plus
+    for _ in 0..2 {
+        let seuls: Vec<usize> = (0..rgba.len()).filter(|&i| !vide(&rgba[i]) && huit(i).filter(|&v| !vide(&rgba[v])).count() < 2).collect();
+        for i in seuls {
+            rgba[i] = [0.0; 4];
+        }
+    }
+    // les piqûres du bord : un vide pris sur trois côtés au moins, comblé de ses voisins
+    for _ in 0..2 {
+        let comble: Vec<(usize, [f32; 4])> = (0..rgba.len())
+            .filter(|&i| vide(&rgba[i]))
+            .filter_map(|i| {
+                let pleins: Vec<usize> = voisins(i).filter(|&v| !vide(&rgba[v])).collect();
+                (pleins.len() >= 3).then(|| (i, moyenne(rgba, &pleins)))
+            })
+            .collect();
+        for (i, p) in comble {
+            rgba[i] = p;
+        }
+    }
+    // les éclats sombres restés sur un bord clair : la couleur des voisins clairs
+    let bord = |rgba: &[[f32; 4]], i: usize| !vide(&rgba[i]) && voisins(i).any(|v| vide(&rgba[v]));
+    let eclats: Vec<(usize, [f32; 4])> = (0..rgba.len())
+        .filter(|&i| bord(rgba, i) && lum(&rgba[i]) < 70.0)
+        .filter_map(|i| {
+            let pleins: Vec<usize> = huit(i).filter(|&v| !vide(&rgba[v])).collect();
+            let clairs: Vec<usize> = pleins.iter().copied().filter(|&v| lum(&rgba[v]) >= 70.0).collect();
+            (!pleins.is_empty() && lum(&moyenne(rgba, &pleins)) > 150.0 && !clairs.is_empty()).then(|| (i, moyenne(rgba, &clairs)))
+        })
+        .collect();
+    for (i, p) in eclats {
+        rgba[i] = p;
+    }
+    // le contour : autour d'un bord clair, un trait sombre de sa teinte
+    let traits: Vec<(usize, [f32; 4])> = (0..rgba.len())
+        .filter(|&i| vide(&rgba[i]))
+        .filter_map(|i| {
+            let clairs: Vec<usize> = voisins(i).filter(|&v| bord(rgba, v) && lum(&rgba[v]) > 110.0).collect();
+            (!clairs.is_empty()).then(|| {
+                let m = moyenne(rgba, &clairs);
+                (i, [m[0] * 0.28 + 14.0 * 0.72, m[1] * 0.28 + 14.0 * 0.72, m[2] * 0.28 + 30.0 * 0.72, 255.0])
+            })
+        })
+        .collect();
+    for (i, p) in traits {
+        rgba[i] = p;
     }
     // le fond du dehors : le vide qui touche le bord de la planche
     let mut dehors = vec![false; rgba.len()];
@@ -411,7 +565,7 @@ fn poids(n: usize, sortie: usize, echelle: f32) -> Vec<(usize, Vec<f32>)> {
         .collect()
 }
 
-fn case(rgba: &[[f32; 4]], largeur: usize, x0: usize, y0: usize, echelle: f32) -> Case {
+fn case(rgba: &[[f32; 4]], largeur: usize, x0: usize, y0: usize, echelle: f32, perso: Perso) -> Case {
     let (sw, sh) = ((CASE.0 as f32 * echelle).round() as usize, (CASE.1 as f32 * echelle).round() as usize);
     let (px_, py_) = (poids(CASE.0, sw, echelle), poids(CASE.1, sh, echelle));
     // en largeur d'abord, puis en hauteur
@@ -440,12 +594,12 @@ fn case(rgba: &[[f32; 4]], largeur: usize, x0: usize, y0: usize, echelle: f32) -
                 }
             }
             let al = s[3].clamp(0.0, 255.0);
-            // presque rien : rien, que le contour reste net sur le décor
-            if al < 8.0 {
+            // net : plein passé la moitié, rien en deçà ; ni voile ni liseré sur le décor
+            if al < 128.0 {
                 continue;
             }
-            let c = |v: f32| v.clamp(0.0, al).round() as u32;
-            out[o * sw + x] = ((al.round() as u32) << 24) | (c(s[0]) << 16) | (c(s[1]) << 8) | c(s[2]);
+            let c = |v: f32| (v / al * 255.0).clamp(0.0, 255.0).round() as u32;
+            out[o * sw + x] = 0xFF00_0000 | (c(s[0]) << 16) | (c(s[1]) << 8) | c(s[2]);
         }
     }
     // rognée à ce qui se voit
@@ -468,7 +622,7 @@ fn case(rgba: &[[f32; 4]], largeur: usize, x0: usize, y0: usize, echelle: f32) -
         let (a, b) = (ligne.iter().position(|&p| plein(p)).unwrap_or(0), ligne.iter().rposition(|&p| plein(p)).unwrap_or(0));
         for (i, &p) in ligne.iter().enumerate() {
             let haut = y == 0 || !plein(out[(y - 1) * sw + gx + i]);
-            let k = relief(if b > a { (i as f32 - a as f32) / (b - a) as f32 } else { 0.5 }, haut);
+            let k = relief(perso, if b > a { (i as f32 - a as f32) / (b - a) as f32 } else { 0.5 }, haut);
             let canal = |s: u32, k: f32| ((((p >> s) & 255) as f32 * k / RELIEF).round() as u32).min(p >> 24) << s;
             px.push((p & 0xFF00_0000) | canal(16, k[0]) | canal(8, k[1]) | canal(0, k[2]));
         }
@@ -511,12 +665,13 @@ pub struct Acteur {
     /// la lettre claire de sa cape (Monde.cape[1]), son accessoire
     pub cape: u8,
     pub accessoire: Accessoire,
+    pub perso: Perso,
 }
 
 /// Peint `a` dans `pixels` (0xAARRGGBB prémultiplié, `w` × `h`) ; `x0` : la première colonne
 /// de forge montrée ; (cw, ch) : la cellule. Rend le rectangle peint.
 pub fn peindre(a: &Acteur, pixels: &mut [u32], w: usize, h: usize, x0: i32, cw: i32, ch: i32) -> Option<(i32, i32, i32, i32)> {
-    let cases = cases(ch as u32, a.cape, a.accessoire)?;
+    let cases = cases(a.perso, ch as u32, a.cape, a.accessoire)?;
     let c = cases.case(a.rangee, a.image)?;
     if c.w == 0 {
         return None;
@@ -585,7 +740,7 @@ mod tests {
 
     #[test]
     fn la_planche_se_decoupe_en_cases_a_la_taille_du_personnage() {
-        let c = cases(19, b'O', Accessoire::Aucun).expect("la planche se décode");
+        let c = cases(Perso::Scorpheus, 19, b'O', Accessoire::Aucun).expect("la planche se décode");
         let repos = c.case(Rangee::Repos, 0).unwrap();
         // 26 pixels de forge de 9,5 px : ~247 px de haut, posés au sol
         assert!((235..=260).contains(&repos.h), "hauteur {}", repos.h);
@@ -602,7 +757,7 @@ mod tests {
     fn le_fond_ne_reste_ni_dedans_ni_autour() {
         for planche in PLANCHES {
             let (w, mut rgba) = decoder(planche).unwrap();
-            reparer(w, &mut rgba);
+            reparer(w, &mut rgba, Fond::Magenta);
             let rose = rgba.iter().filter(|p| p[3] > 0.0 && p[0].min(p[2]) - p[1] > 40.0 * p[3] / 255.0).count();
             assert_eq!(rose, 0, "pixels rosés");
             // le vide que le fond du dehors n'atteint pas
@@ -632,7 +787,7 @@ mod tests {
         let sortie = std::env::var("PLANCHE_SORTIE").unwrap();
         for (k, planche) in PLANCHES.iter().enumerate() {
             let (w, mut rgba) = decoder(planche).unwrap();
-            reparer(w, &mut rgba);
+            reparer(w, &mut rgba, Fond::Magenta);
             let brut: Vec<u8> = rgba
                 .iter()
                 .flat_map(|p| {
@@ -646,10 +801,10 @@ mod tests {
 
     #[test]
     fn un_accessoire_dessine_se_pose_sur_le_pet() {
-        let nu = cases(19, b'O', Accessoire::Aucun).unwrap();
+        let nu = cases(Perso::Scorpheus, 19, b'O', Accessoire::Aucun).unwrap();
         for (acc, calque) in CALQUES {
             let dessine = decoder(calque).is_some_and(|(w, px)| w == COLONNES * CASE.0 && px.iter().any(|p| p[3] > 0.0));
-            let habille = cases(19, b'O', acc).unwrap();
+            let habille = cases(Perso::Scorpheus, 19, b'O', acc).unwrap();
             let pareil = |r: Rangee, i: usize| nu.case(r, i).map(|c| &c.px) == habille.case(r, i).map(|c| &c.px);
             let change = RANGEES.iter().flat_map(|&r| (0..r.ou().2).map(move |i| (r, i))).filter(|&(r, i)| !pareil(r, i)).count();
             assert_eq!(change > 0, dessine, "{acc:?} : {change} cases changées");

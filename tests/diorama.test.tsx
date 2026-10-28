@@ -57,6 +57,8 @@ const SESSIONS_DIR = 'C:/fake/.claude/sessions'
 let rhumEnv: string | undefined
 /** The next engine's DIORAMA_PANNEAU. */
 let panelEnv: string | undefined
+/** The next engine's DIORAMA_PERSO. */
+let persoEnv: string | undefined
 /** A path as the plugin asked for it: off Windows the engine takes C:/… for a relative path and puts the folder in front. */
 const fakePath = (path: string) => path.replace(/\\/g, '/').replace(/^.*(?=C:\/fake\/)/, '')
 const rhumFile = { text: undefined as string | undefined, mtime: 1 }
@@ -122,10 +124,11 @@ function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
   wholeReads = 0
   const themed = disk.active // a theme file set up for this test (fakeDisk), served beside the store
   disk.active = false
-  const envRhum = rhumEnv, envPanel = panelEnv
+  const envRhum = rhumEnv, envPanel = panelEnv, envPerso = persoEnv
   rhumEnv = undefined
   panelEnv = undefined
-  on('env.get', (_$, e) => ({ value: e.name === 'CLAUDE_CONFIG_DIR' ? 'C:/fake/.claude' : e.name === 'DIORAMA_ROUTE_DU_RHUM' ? envRhum : e.name === 'DIORAMA_PANNEAU' ? envPanel : undefined }))
+  persoEnv = undefined
+  on('env.get', (_$, e) => ({ value: e.name === 'CLAUDE_CONFIG_DIR' ? 'C:/fake/.claude' : e.name === 'DIORAMA_ROUTE_DU_RHUM' ? envRhum : e.name === 'DIORAMA_PANNEAU' ? envPanel : e.name === 'DIORAMA_PERSO' ? envPerso : undefined }))
   // the engine hands paths over with backslashes on Windows
   on('fs.list', (_$, e) => {
     const path = e.path.replace(/\\/g, '/')
@@ -1129,6 +1132,22 @@ test('with the native render, the app is launched and told of the band, and the 
   expect(posts.filter(p => p.body.startsWith('bande ')).length).toBe(2)
   expect(posts.length).toBeLessThan(20_000 / 150 / 2)
   expect(blits.length).toBe(0)
+})
+
+test('a session of its own is drawn as Galadriel: her name, her words, and the app told to draw her', { options: { rendu: 'oui' } }, async ($, on) => {
+  persoEnv = ' Galadriel '
+  const { ui, clock } = await start($, on)
+  expect(await ui.find({ text: 'Galadriel' })).toBeDefined()
+  await clock.advance(3000)
+  const world = renderPosts[0]?.body.split('\n')[1] ?? ''
+  expect(JSON.parse(world.split(' ').slice(7).join(' ')).perso).toBe('galadriel')
+})
+
+test('without DIORAMA_PERSO the app draws the smith', { options: { rendu: 'oui' } }, async ($, on) => {
+  const { clock } = await start($, on)
+  await clock.advance(3000)
+  const world = renderPosts[0]?.body.split('\n')[1] ?? ''
+  expect(JSON.parse(world.split(' ').slice(7).join(' ')).perso).toBeUndefined()
 })
 
 test('the two halves of a mark cell differ, else the app never finds the band', { options: { rendu: 'oui' } }, async ($, on) => {

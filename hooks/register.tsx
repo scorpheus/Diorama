@@ -14,6 +14,7 @@ import { spriteOf } from './flight.ts'
 import type { Sprite } from './flight.ts'
 import { DREAM_HINTS, DREAMS } from './props.ts'
 import { forge } from './themes/forge.ts'
+import { GALADRIEL_WORDS } from './themes/galadriel-words.ts'
 import { themeFile, themeFrom } from './themes/load.ts'
 import { CROP_ORDER, PERSONALITIES, fill, pace, wander } from './world.ts'
 import type { Crop, Cub, Dream, Guest, Lexicon, Personality, Theme, Weapon, World } from './world.ts'
@@ -56,7 +57,8 @@ const EDITS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
  * the session's start, and again whenever its JSON file changes on disk.
  */
 let theme: Theme = forge
-const words = (): Lexicon => theme.words
+// Galadriel speaks her own words, whatever the theme draws
+const words = (): Lexicon => (anim.perso === 'galadriel' ? GALADRIEL_WORDS : theme.words)
 type Accessory = string
 
 // Banner cloths and emblem colours, picked by the project's name.
@@ -511,6 +513,7 @@ const anim = {
   rare: undefined as { kind: 'star' | 'dragon'; since: number } | undefined,
   rhumAsked: false, // DIORAMA_ROUTE_DU_RHUM in this session's environment: the Route du Rhum here
   panel: undefined as string | undefined, // DIORAMA_PANNEAU in this session's environment: the panel option, for it alone
+  perso: undefined as 'galadriel' | undefined, // DIORAMA_PERSO in this session's environment: Galadriel in her belvedere instead of the smith
   groundGauges: false, // the discreet panel: the gauges on the scene's ground, the scene alone in the band
   rhumNamed: false, // the Route du Rhum's file names this session
   rhumStamp: undefined as number | undefined, // that file's last change, as last read
@@ -591,6 +594,7 @@ function worldNow(): World {
     masterpiece: anim.masterpiece,
     rare: anim.rare && anim.clock - anim.rare.since < theme.rareFor ? { kind: anim.rare.kind, age: anim.clock - anim.rare.since } : undefined,
     rhum: rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined,
+    ...(anim.perso ? { perso: anim.perso } : {}),
     rhumProgress: rhumHere() && anim.nowMs >= RHUM_START ? rhumProgressAt(anim.nowMs) : undefined,
     ...rhumWorld(),
     rhumFete: rhumShowNow(),
@@ -756,8 +760,9 @@ async function heartbeat($: EngineInterface) {
     all[anim.sessionId] = { ...all[anim.sessionId], cape: anim.cape, accessory: anim.accessory } as Presence
     await $.store.set(PRESENCE_KEY, all)
   }
-  // two smiths of one name: the later one takes the first free one after his
-  if (anim.neighbours.some(n => n.name === anim.name && n.id < anim.sessionId)) {
+  // two smiths of one name: the later one takes the first free one after his; Galadriel keeps
+  // hers, and a smith of her name gives it up
+  if (!anim.perso && anim.neighbours.some(n => n.name === anim.name && (n.id < anim.sessionId || n.name === 'Galadriel'))) {
     const worn = new Set(anim.neighbours.map(n => n.name))
     const names = theme.names
     const start = hashOf(anim.sessionId) % names.length
@@ -813,7 +818,7 @@ async function sayAnswer($: EngineInterface, answer: string, voice: string) {
     const r = await $.model.complete({
       model: 'claude-haiku-4-5',
       maxTokens: 40,
-      system: `Tu es ${anim.name}, ${words().persona}, compagnon d'un développeur.` + " Tu réponds par UNE réplique en français, 8 mots au plus, chaleureuse ou malicieuse, sur le travail qui vient d'être fait. Sans guillemets.",
+      system: `Tu es ${anim.name}, ${words().persona}, compagnon d'un développeur.` + ` Tu réponds par UNE réplique en français, 8 mots au plus, ${anim.perso === 'galadriel' ? 'calme et sobre, sans exclamation ni théâtre' : 'chaleureuse ou malicieuse'}, sur le travail qui vient d'être fait. Sans guillemets.`,
       prompt: answer.slice(0, 1200),
     })
     line = r.isAnswered ? r.text.trim().split('\n')[0]?.replace(/^[«"'\s]+|[»"'\s]+$/g, '').slice(0, 60) : undefined
@@ -2032,6 +2037,9 @@ export const register: Register = (on, options) => {
     {
       const panel = ((await $.env.get('DIORAMA_PANNEAU')) ?? '').trim().toLowerCase()
       anim.panel = ['auto', 'complet', 'discret'].includes(panel) ? panel : undefined
+      const perso = ((await $.env.get('DIORAMA_PERSO')) ?? '').trim().toLowerCase()
+      anim.perso = perso === 'galadriel' ? 'galadriel' : undefined
+      if (anim.perso === 'galadriel') anim.name = 'Galadriel'
     }
     {
       const asked = ((await $.env.get('DIORAMA_ROUTE_DU_RHUM')) ?? '').trim()

@@ -104,6 +104,8 @@ export type World = {
   masterpiece: boolean
   /** A rare sight in the sky: a shooting star by night, a dragon by day. */
   rare?: { kind: 'star' | 'dragon'; age: number }
+  /** Who the session is drawn as, DIORAMA_PERSO in its environment: Galadriel in her belvedere (the native render only); the smith when unset. */
+  perso?: 'galadriel'
   /** The session named for the Route du Rhum: the sea in the yard, the fleet before its start or racing. */
   rhum?: 'before' | 'race'
   /** Where the race stands, 0 at the start to 1 at the first arrivals: the native render's scenery travels (Saint-Malo, the open sea, the Azores, the tropics, Guadeloupe). */

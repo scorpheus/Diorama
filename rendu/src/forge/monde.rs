@@ -47,6 +47,11 @@ sorte!(
     /// Le spectacle de la Route du Rhum au lancement d'une session : le départ rejoué, ou une arrivée.
     FeteRhum { Depart = "start", Arrivee = "finish" }
 );
+sorte!(
+    /// Qui tient la scène : Scorpheus dans sa forge, ou Galadriel dans son belvédère (la session
+    /// que son lanceur nomme, DIORAMA_PERSO).
+    Perso { Scorpheus = "scorpheus", Galadriel = "galadriel" }
+);
 sorte!(Recadrage { Full = "full", Compact = "compact", Solo = "solo" });
 sorte!(
     /// La Route du Rhum, dans la session qui la montre : la flotte avant le départ, ou en course.
@@ -204,6 +209,8 @@ pub struct Monde {
     pub rhum_traces: Option<Vec<Vec<f32>>>,
     /// Le panneau discret : les jauges se peignent au sol de la scène (jauges.rs).
     pub gauges: Option<bool>,
+    /// Qui tient la scène ; rien : Scorpheus.
+    pub perso: Option<Perso>,
 }
 
 impl Default for Monde {
@@ -260,6 +267,7 @@ impl Default for Monde {
             rhum_fete: None,
             rhum_traces: None,
             gauges: None,
+            perso: None,
         }
     }
 }
@@ -303,6 +311,11 @@ impl Monde {
         } else {
             None
         }
+    }
+
+    /// Galadriel tient la scène : son belvédère à la place de la forge.
+    pub fn galadriel(&self) -> bool {
+        self.perso == Some(Perso::Galadriel)
     }
 
     pub fn nuit(&self) -> bool {

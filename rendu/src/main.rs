@@ -6,6 +6,7 @@
 //!   rendu.exe [--cadence <ms>]     une image toutes les <ms> (150 par défaut, la cadence du plugin)
 //!   rendu.exe --banc [<secondes>]  ce qu'elle coûte, poste par poste (banc.rs)
 //!   rendu.exe --planche <png> [--large <colonnes>]  la forge dans chaque moment (forge/planche.rs)
+//!   rendu.exe --galadriel <dossier> [--large <colonnes>]  Galadriel dans chaque moment (forge/planche.rs)
 //!   rendu.exe --vitrine            ces moments joués dans une fenêtre, à la cadence (vitrine.rs)
 //!
 //! Elle note ce qu'elle fait dans %TEMP%\diorama-rendu.log.
@@ -381,6 +382,14 @@ fn main() {
         let large = apres("--large").flatten().unwrap_or(0) as i32;
         if let Err(e) = forge::planche::planche(sortie, large) {
             eprintln!("planche : {e}");
+        }
+        return;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--galadriel") {
+        let dossier = args.get(i + 1).map_or(".", |s| s.as_str());
+        let large = apres("--large").flatten().unwrap_or(0) as i32;
+        if let Err(e) = forge::planche::galadriel(dossier, large) {
+            eprintln!("galadriel : {e}");
         }
         return;
     }
