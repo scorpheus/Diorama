@@ -2,6 +2,7 @@
 
     python tools/habitants/apercu.py habitants/marin.json planche.png [--anime anim.gif] [--teinte #e05050]
     python tools/habitants/apercu.py --revue revue.png habitants/*.json [--teinte #e05050]
+    python tools/habitants/apercu.py --dossier habitants/revue     # tout : planche et GIF de chacun, ensemble.png
 
 Vérifie le fichier (taille des images, lettres de la palette, états obligatoires) et dessine une
 planche : une rangée par état, ses images agrandies, puis l'habitant à sa vraie taille et deux
@@ -9,6 +10,7 @@ fois plus grand, sur une barre d'onglets claire et une sombre. --anime écrit un
 les états côte à côte, à leur vrai rythme (un tic = 150 ms). --teinte change la couleur du profil.
 """
 import json
+import os
 import sys
 
 from PIL import Image, ImageDraw
@@ -148,25 +150,89 @@ def charger_accessoires(chemin, teinte=None):
     return d, pal
 
 
-def planche_accessoires(d, pal, loupe=6):
-    """Une rangée par niveau de chaque accessoire, ses images à la suite."""
-    rangs = [(nom, n, niv, a) for nom, a in d['accessoires'].items() for n, niv in enumerate(a['niveaux'])]
-    hmax = lambda a: a['taille'][1] * loupe + 6
-    W = 170 + max(len(niv) * (a['taille'][0] * loupe + 6) for _, _, niv, a in rangs) + 20
-    H = 10 + sum(hmax(a) + 4 for _, _, _, a in rangs) + 10
+def planche_accessoires(d, pal, loupe=5):
+    """Une rangée par accessoire : ses niveaux à la suite (numérotés), chacun ses images."""
+    accs = list(d['accessoires'].items())
+    larg = lambda a: sum(len(n) * (a['taille'][0] * loupe + 4) + 14 for n in a['niveaux'])
+    W = 170 + max(larg(a) for _, a in accs) + 20
+    H = 10 + sum(a['taille'][1] * loupe + 24 for _, a in accs) + 10
     out = Image.new('RGBA', (W, H), (40, 42, 50, 255))
     d_ = ImageDraw.Draw(out)
     y = 10
-    for nom, n, niv, a in rangs:
+    for nom, a in accs:
         w, h = a['taille']
-        titre = nom if len(a['niveaux']) == 1 else f'{nom} niveau {n}'
-        d_.text((10, y + hmax(a) // 2 - 6), f"{titre} x{a['every']}", fill=(220, 220, 220))
+        d_.text((10, y + 12 + h * loupe // 2 - 6), f"{nom} x{a['every']}", fill=(220, 220, 220))
         x = 170
-        for img in niv:
-            d_.rectangle([x, y, x + w * loupe + 3, y + h * loupe + 3], fill=(62, 66, 78))
-            out.alpha_composite(image(img, pal, loupe), (x + 2, y + 2))
-            x += w * loupe + 6
-        y += hmax(a) + 4
+        for n, niv in enumerate(a['niveaux']):
+            if len(a['niveaux']) > 1:
+                d_.text((x, y), f'niveau {n}', fill=(190, 190, 200))
+            for img in niv:
+                d_.rectangle([x, y + 12, x + w * loupe + 1, y + 13 + h * loupe], fill=(62, 66, 78))
+                out.alpha_composite(image(img, pal, loupe), (x + 1, y + 13))
+                x += w * loupe + 4
+            x += 14
+        y += h * loupe + 24
+    return out
+
+
+def anime_accessoires(d, pal, chemin, loupe=5):
+    """Chaque accessoire et chacun de ses niveaux qui jouent, à leur vrai rythme."""
+    accs = list(d['accessoires'].items())
+    W = 170 + max(len(a['niveaux']) * (a['taille'][0] * loupe + 10) for _, a in accs) + 10
+    H = 10 + sum(a['taille'][1] * loupe + 10 for _, a in accs)
+    tics = max(2 * a['every'] * max(len(n) for n in a['niveaux']) for _, a in accs)
+    images = []
+    for t in range(tics):
+        im = Image.new('RGBA', (W, H), (232, 228, 220, 255))
+        d_ = ImageDraw.Draw(im)
+        y = 10
+        for nom, a in accs:
+            w, h = a['taille']
+            d_.text((10, y + h * loupe // 2 - 6), nom, fill=(40, 40, 40))
+            x = 170
+            for niv in a['niveaux']:
+                im.alpha_composite(image(niv[(t // a['every']) % len(niv)], pal, loupe), (x, y))
+                x += w * loupe + 10
+            y += h * loupe + 10
+        images.append(im.convert('RGB'))
+    images[0].save(chemin, save_all=True, append_images=images[1:], duration=TIC_MS, loop=0)
+
+
+def dossier_de_revue(dossier, teinte=None):
+    """Tout habitants/ dans un dossier : la planche et le GIF de chacun, et la planche d'ensemble."""
+    import glob
+    racine = os.path.join(os.path.dirname(__file__), '..', '..', 'habitants')
+    os.makedirs(dossier, exist_ok=True)
+    tous = sorted(glob.glob(os.path.join(racine, '*.json')))
+    # le marin d'abord (le validé), le voyageur ensuite, les accessoires à la fin
+    ordre = lambda f: (os.path.basename(f) != 'marin.json', os.path.basename(f) != 'voyageur.json', f.endswith('accessoires.json'), f)
+    tous.sort(key=ordre)
+    for f in tous:
+        nom = os.path.splitext(os.path.basename(f))[0]
+        png, gif = os.path.join(dossier, f'{nom}.png'), os.path.join(dossier, f'{nom}.gif')
+        if nom == 'accessoires':
+            d, pal = charger_accessoires(f, teinte)
+            planche_accessoires(d, pal).save(png)
+            anime_accessoires(d, pal, gif)
+        else:
+            h, pal = charger(f, teinte)
+            planche(h, pal).save(png)
+            anime(h, pal, gif)
+        print(nom)
+    ensemble(tous, teinte).save(os.path.join(dossier, 'ensemble.png'))
+    print('ensemble')
+
+
+def ensemble(fichiers, teinte=None):
+    """Les habitants, puis les accessoires dessous, dans une seule planche."""
+    out = revue([f for f in fichiers if not f.endswith('accessoires.json')], teinte)
+    acc = [f for f in fichiers if f.endswith('accessoires.json')]
+    if acc:
+        pa = planche_accessoires(*charger_accessoires(acc[0], teinte))
+        tout = Image.new('RGBA', (max(out.width, pa.width), out.height + pa.height), (40, 42, 50, 255))
+        tout.alpha_composite(out, (0, 0))
+        tout.alpha_composite(pa, (0, out.height))
+        out = tout
     return out
 
 
@@ -203,22 +269,18 @@ if __name__ == '__main__':
     a = sys.argv[1:]
     if a[0] == '--revue':
         teinte = a[a.index('--teinte') + 1] if '--teinte' in a else None
-        fichiers = [f for f in a[2:] if f.endswith('.json') and not f.endswith('accessoires.json')]
-        out = revue(fichiers, teinte)
-        acc = [f for f in a[2:] if f.endswith('accessoires.json')]
-        if acc:
-            # les accessoires sous les habitants, dans la même planche
-            pa = planche_accessoires(*charger_accessoires(acc[0], teinte))
-            tout = Image.new('RGBA', (max(out.width, pa.width), out.height + pa.height), (40, 42, 50, 255))
-            tout.alpha_composite(out, (0, 0))
-            tout.alpha_composite(pa, (0, out.height))
-            out = tout
-        out.save(a[1])
+        ensemble([f for f in a[2:] if f.endswith('.json')], teinte).save(a[1])
         print('ok')
+        sys.exit(0)
+    if a[0] == '--dossier':
+        dossier_de_revue(a[1], a[a.index('--teinte') + 1] if '--teinte' in a else None)
         sys.exit(0)
     teinte = a[a.index('--teinte') + 1] if '--teinte' in a else None
     if a[0].endswith('accessoires.json'):
-        planche_accessoires(*charger_accessoires(a[0], teinte)).save(a[1])
+        d, pal = charger_accessoires(a[0], teinte)
+        planche_accessoires(d, pal).save(a[1])
+        if '--anime' in a:
+            anime_accessoires(d, pal, a[a.index('--anime') + 1])
         print('ok')
         sys.exit(0)
     h, pal = charger(a[0], teinte)

@@ -71,7 +71,7 @@ def pigeon():
          ".kdddkk.",
          "..kdwk.."],
     ]
-    return {'taille': [8, 6], 'every': 1, 'usage': "vole d'un onglet à l'autre quand une session écrit à une autre, la lettre dans les pattes",
+    return {'taille': [8, 6], 'every': 1, 'usage': "vole d'un onglet à l'autre quand une session écrit à une autre, la lettre dans les pattes, sur l'arc du passeur (LISEZMOI.md)",
             'niveaux': [images + [images[1]]]}
 
 
