@@ -50,7 +50,12 @@ function Build {
   New-Item -ItemType Directory -Force $cache | Out-Null
   Note 'la source a changé : cargo build'
   $target = Join-Path $cache 'rendu-cible'
+  # cargo écrit ses avertissements sur stderr : sous « Stop », PowerShell 5.1 en ferait une erreur
+  # fatale, et l'appli ne se referait plus au premier avertissement ; seul son code de sortie compte
+  $avant = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
   $out = & cargo build --release --quiet --manifest-path (Join-Path $PSScriptRoot 'Cargo.toml') --target-dir $target 2>&1
+  $ErrorActionPreference = $avant
   if ($LASTEXITCODE -ne 0) { Note "cargo a échoué : $(($out | Select-Object -Last 5) -join ' / ')"; return $false }
   # une appli d'avant tient encore son exécutable : elle laisse sa place
   if (Running) {

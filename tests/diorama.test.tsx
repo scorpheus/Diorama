@@ -47,6 +47,8 @@ let wholeReads = 0
 const renderPosts: Array<{ url: string; body: string }> = []
 const launched: Array<readonly string[]> = []
 let renderAnswers = false
+/** What the app answers of the band: '' (nothing, as an older app), 'vu' or 'absent'. */
+let renderSays = ''
 let listed: Array<{ id: string; description: string; type: string; status: AgentStatus }> = []
 let sessionId = 'sess-1'
 // the compaction window the next engine's settings set (autoCompactWindow), taken by that engine alone
@@ -155,10 +157,11 @@ function engine(on: On, stored: Readonly<Record<string, unknown>> = {}) {
   renderPosts.length = 0
   launched.length = 0
   renderAnswers = false
+  renderSays = ''
   on('http.fetch', (_$, e) => {
     renderPosts.push({ url: e.url, body: e.init?.body ?? '' })
     if (!renderAnswers) throw new Error('ECONNREFUSED')
-    return { value: { status: 204, ok: true, headers: {}, text: '' } }
+    return { value: { status: renderSays ? 200 : 204, ok: true, headers: {}, text: renderSays } }
   })
   on('process.spawn', async function* (_$, e) {
     launched.push(e.argv)
@@ -1701,6 +1704,43 @@ test('DIORAMA_ROUTE_DU_RHUM=1 shows it in its own session, and the gun is cheere
   expect(await ui.find({ text: "⛵ Route du Rhum · c'est parti ! Cap sur Pointe-à-Pitre" })).toBeDefined()
   expect(await ui.find({ text: /Route du Rhum : le départ est donné/ })).toBeDefined()
   expect(worldsPosted().at(-1)?.rhum).toBe('race')
+})
+
+test('the start given while nobody watches waits for someone at the screen, then is cheered', { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 1, 12, 1, 40) })
+  engine(on)
+  on('tool.call', (_$, e) => answerTools(e))
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  renderAnswers = true
+  renderSays = 'absent'
+  await clock.advance(60_000)
+  // the gun is noted, but nothing is played nor cheered to an empty room
+  expect(await ui.find({ text: /Route du Rhum : le départ est donné/ })).toBeDefined()
+  expect(showsPosted().filter(Boolean)).toEqual([])
+  expect(await ui.find({ text: /partie de Saint-Malo/ })).toBeUndefined()
+  // someone comes back: the start is played, and cheered as the real one
+  renderSays = 'vu'
+  await clock.advance(15_000)
+  expect(showsPosted().filter(Boolean)[0]).toEqual({ kind: 'start', age: 0 })
+  expect(await ui.find({ text: /Route du Rhum : la Route du Rhum est partie de Saint-Malo$/ })).toBeDefined()
+})
+
+test('a session opened hours after the start plays the real start, not a replay', { options: { rendu: 'oui' } }, async ($, on) => {
+  fakeRhumFile(on, undefined)
+  rhumEnv = '1'
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 1, 18, 0) })
+  engine(on)
+  on('tool.call', (_$, e) => answerTools(e))
+  renderAnswers = true
+  renderSays = 'vu'
+  await $.session.start({ cwd: 'C:/tmp', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'diorama', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  await clock.advance(15_000)
+  expect(await ui.find({ text: /Route du Rhum : la Route du Rhum est partie de Saint-Malo il y a 5h58/ })).toBeDefined()
+  expect(await ui.find({ text: /rejoué/ })).toBeUndefined()
 })
 
 test('at sea, the days of the race are counted', { options: { rendu: 'oui' } }, async ($, on) => {

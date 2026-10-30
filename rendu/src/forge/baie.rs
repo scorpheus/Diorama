@@ -364,6 +364,10 @@ impl Baie {
             if self.gardees.len() > 400 {
                 self.gardees.clear();
             }
+            // les bateaux et les bêtes s'arrêtent au bord de l'eau : leurs reflets, leurs foils et
+            // leurs sillages ne passent pas sur le quai, le pont ou la plage
+            let bord = (c.y(GROUND).ceil() as usize).min(c.h);
+            let mut toile = Toile { px: &mut toile.px[..bord * c.w], w: c.w, h: bord };
             for (_, b, f) in &tous {
                 if let Some(b) = b {
                     let ordinaire = || cap(b, t, phase, c.from, c.to, taille);
@@ -390,7 +394,8 @@ impl Baie {
                     f(&mut toile);
                 }
             }
-            premier_plan(&mut toile, &mut self.gardees, &c, &sky, et, w, t);
+            drop(toile);
+            premier_plan(&mut Toile { px: &mut buf, w: c.w, h: c.h }, &mut self.gardees, &c, &sky, et, w, t);
         }
         // sous les cellules transparentes seulement : ce qui se tient dans la cour reste devant
         let (x0, y1) = (c.left.max(0) as usize, c.h.min(ph));

@@ -238,6 +238,10 @@ pub fn galadriel(dossier: &str, extra: i32) -> std::io::Result<()> {
         ("crepuscule", Activite::Idle, 0, gala(&|w| { w.hour = 19.6; w.messenger = Some(Messager { kind: Nouvelle::Waiting, age: 10 }) })),
         ("orage", Activite::Idle, 0, gala(&|w| w.weather = Some(Temps::Storm))),
         ("hiver", Activite::Idle, 0, gala(&|w| { w.hour = 14.0; w.month = 1; w.day = 12; w.rhum = None })),
+        // dehors, dans la cour : la lumière du ciel, plus celle de la pièce
+        ("dehors-jour", Activite::Idle, 0, gala(&|w| { w.hour = 11.0; w.rhum = None; w.x = 27 })),
+        ("dehors-crepuscule", Activite::Idle, 0, gala(&|w| { w.hour = 19.6; w.rhum = None; w.x = 27 })),
+        ("dehors-nuit", Activite::Idle, 0, gala(&|w| { w.rhum = None; w.x = 27 })),
         ("visite", Activite::Idle, 0, gala(&|w| {
             // deux invités à leurs places, comme le plugin les y mène : le second tomberait sur elle
             let invite = Invite { x: GUEST_SPOT, walking: false, facing: -1, cape: [Lettre(b'N'), Lettre(b'L')], accessory: Accessoire::Lunettes, tick: 3, waving: true };

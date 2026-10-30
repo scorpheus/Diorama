@@ -91,6 +91,13 @@ struct Ciel {
     flash: bool,
 }
 
+/// La lumière du ciel sur qui se tient dans la cour : l'ambiance de l'heure et du temps qu'il
+/// fait, et la part de la lumière de la pièce qui passe la porte.
+pub fn lumiere_dehors(w: &Monde) -> ([f32; 3], f32) {
+    let c = sky_of(w);
+    ([c.amb[0] as f32, c.amb[1] as f32, c.amb[2] as f32], c.spill as f32)
+}
+
 fn sky_of(w: &Monde) -> Ciel {
     let night = w.nuit();
     let dusk = !night && (w.hour < 8.0 || w.hour >= 18.0);

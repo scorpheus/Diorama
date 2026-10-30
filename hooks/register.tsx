@@ -276,6 +276,12 @@ const render = {
   told: '', at: 0, busy: false, failedAt: -RENDER_RETRY_TICKS,
   /** The last world the app was told: it draws it on, a tick a frame, until told another. */
   world: undefined as { head: string; tick: number; w: World; at: number } | undefined,
+  /**
+   * Whether someone watches the band, as the app last answered: « vu » (the band shows, and the
+   * keyboard or the mouse moved lately) or « absent ». An app that answers nothing (an older one,
+   * ClaudeTerminal) is taken as watched.
+   */
+  watched: true,
 }
 
 /**
@@ -332,7 +338,9 @@ function tellRender($: EngineInterface, crop: Crop, w: World, tick: number, lit:
   const band = `${anim.sessionId} ${cropWidth(crop) + anim.extra} ${theme.rows}${live}`
   const head = `${anim.sessionId} ${crop} ${anim.extra} ${lit ? 1 : 0} ${anim.current}`
   const lines: string[] = []
-  const bandDue = band !== render.told || anim.clock - render.at >= RENDER_REFRESH_TICKS
+  // a show waiting for someone to watch asks the app more often
+  const waiting = anim.rhumShow !== undefined && anim.rhumShow.since === undefined
+  const bandDue = band !== render.told || anim.clock - render.at >= (waiting ? RENDER_RETRY_TICKS : RENDER_REFRESH_TICKS)
   if (bandDue) lines.push(`bande ${band}`)
   const sent = render.world, now = JSON.stringify(w)
   const since = sent ? anim.clock - sent.at : 0
@@ -344,6 +352,7 @@ function tellRender($: EngineInterface, crop: Crop, w: World, tick: number, lit:
   void $.http.fetch(`http://127.0.0.1:${RENDER_PORT}/`, { method: 'POST', body: lines.join('\n') })
     .then(r => {
       if (!r.ok) { render.failedAt = anim.clock; return }
+      render.watched = r.status !== 200 || r.text === '' || r.text === 'vu'
       if (bandDue) { render.told = band; render.at = at }
       render.world = { head, tick, w, at }
     }, () => { render.failedAt = anim.clock; render.told = ''; render.world = undefined })
@@ -521,7 +530,8 @@ const anim = {
   rhumDataStamp: undefined as number | undefined, // the report's last change, as last read
   rhumFleet: undefined as RhumFleet | undefined, // the fleet at its last report
   // the show played when the session takes the sea: its start once the app answers, what it plays
-  rhumShow: undefined as { since?: number; kind?: 'start' | 'finish'; quiet?: boolean } | undefined,
+  // real: the start itself, not yet cheered on this machine (rather than played again)
+  rhumShow: undefined as { since?: number; kind?: 'start' | 'finish'; real?: boolean } | undefined,
   rhumFetchedAt: undefined as number | undefined, // when this session last fetched the report
   themeWanted: 'forge', // the `theme` option
   themeStamp: undefined as number | undefined, // the theme file's last change, when it is one
@@ -1820,6 +1830,7 @@ const RHUM_GUN = 24
 const RHUM_SHOW_TICKS = 170
 const RHUM_SHOW_WAIT = 20
 const RHUM_CHEERED = 'rhum:arrivees' // the boats whose arrival a show has cheered, on this machine
+const RHUM_START_SEEN = 'rhum:depart-vu' // the real start, cheered once on this machine
 
 /** The show as the app plays it: what, and how many ticks in; nothing before it starts or after it ends. */
 function rhumShowNow(): World['rhumFete'] {
@@ -1839,8 +1850,9 @@ async function rhumFreshArrivals($: EngineInterface): Promise<RhumBoat[]> {
 }
 
 /**
- * The show, tick by tick: it starts once the app answers, and plays the start again, or the
- * arrival once boats have finished (or a report brings fresh ones); its gun is cheered.
+ * The show, tick by tick: it starts once the app answers and someone watches the band (the start
+ * at 13h02 while nobody is at the screen waits for them), and plays the start, or the arrival
+ * once boats have finished (or a report brings fresh ones); its gun is cheered.
  */
 async function rhumShowTick($: EngineInterface, voice: string) {
   const s = anim.rhumShow
@@ -1850,19 +1862,23 @@ async function rhumShowTick($: EngineInterface, voice: string) {
     return
   }
   if (s.since === undefined) {
-    if (render.world === undefined) return
+    if (render.world === undefined || !render.watched) return
     s.since = anim.clock + RHUM_SHOW_WAIT
     const late = rhumPhaseAt(anim.nowMs) === 'race' && rhumProgressAt(anim.nowMs) >= 0.9
     s.kind ??= late || (await rhumFreshArrivals($)).length > 0 ? 'finish' : 'start'
+    // the start not yet seen here: this one is the real start, however late
+    if (s.kind === 'start' && s.real === undefined) {
+      s.real = rhumPhaseAt(anim.nowMs) === 'race' && (await $.store.get(RHUM_START_SEEN).catch(() => undefined)) === undefined
+    }
     return
   }
   const age = anim.clock - s.since
-  if (age === RHUM_GUN && s.kind && !s.quiet) await rhumCheer($, s.kind, voice)
+  if (age === RHUM_GUN && s.kind) await rhumCheer($, s.kind, voice, s.real === true)
   if (age >= RHUM_SHOW_TICKS) anim.rhumShow = undefined
 }
 
-/** The show's gun: the start played again, or the boats arrived since the last one, named. */
-async function rhumCheer($: EngineInterface, kind: 'start' | 'finish', voice: string) {
+/** The show's gun: the start (the real one, or played again), or the boats arrived since the last one, named. */
+async function rhumCheer($: EngineInterface, kind: 'start' | 'finish', voice: string, real = false) {
   let line: string
   if (kind === 'finish') {
     const fresh = await rhumFreshArrivals($)
@@ -1874,6 +1890,10 @@ async function rhumCheer($: EngineInterface, kind: 'start' | 'finish', voice: st
       const raw = await $.store.get(RHUM_CHEERED).catch(() => undefined)
       await $.store.set(RHUM_CHEERED, [...(Array.isArray(raw) ? raw.map(String) : []), ...fresh.map(b => b.name)])
     }
+  } else if (real) {
+    const ago = anim.nowMs - RHUM_START
+    line = `la Route du Rhum est partie de Saint-Malo${ago > 10 * 60 * 1000 ? ` il y a ${countdown(ago)}` : ''}`
+    await $.store.set(RHUM_START_SEEN, anim.nowMs)
   } else {
     const left = RHUM_START - anim.nowMs
     line = left > 0 ? `le départ, rejoué : le vrai dans ${countdown(left)}` : 'le départ, rejoué'
@@ -1959,18 +1979,17 @@ async function watchRhum($: EngineInterface) {
   $.ui.invalidate('ui.render')
 }
 
-/** The gun: the session that shows the race cheers its start, once. */
-async function rhumStart($: EngineInterface, voice: string) {
+/**
+ * The gun: the session that shows the race notes its start at once, and plays it, cheered, as
+ * soon as someone watches (rhumShowTick): at 13h02 if they are there, when they come back if not.
+ */
+async function rhumStart($: EngineInterface, _voice: string) {
   const phase = rhumHere() ? rhumPhaseAt(anim.nowMs) : undefined
   const was = anim.rhumPhase
   anim.rhumPhase = phase
   if (was !== 'before' || phase !== 'race') return
-  // the real gun: the fleet let go off Saint-Malo, cheered here rather than by the show
-  anim.rhumShow = { kind: 'start', quiet: true }
-  $.ui.toast(`${anim.name} : la Route du Rhum est partie de Saint-Malo !`)
+  anim.rhumShow = { kind: 'start', real: true }
   await note($, 'Route du Rhum : le départ est donné')
-  if (voice !== 'aucune') await say($, 'Bon vent, les marins !', true)
-  if (anim.current === 'idle' && !anim.trip) await setAct($, 'jumping', 'le départ !', 2400)
 }
 
 /** A theme file changed on disk: drawn again at once, so its author sees it. */

@@ -102,10 +102,32 @@ impl Forge {
         let actor = if pet { pixels::Grille::new(SW, SH) } else { compose(&mut self.ctx, &mut self.cour, &p, world, tick, true, SW) };
         let dehors = self.cour.outdoors(world, activity == Activite::Running, YARD, width);
         let mut lumiere = lumiere::LumiereForge::new(&mut self.chutes, &p, world, tick, &actor, &dehors);
+        let (ciel, porte) = cour::lumiere_dehors(world);
         for a in &mut acteurs {
-            a.eclairage = Some(lumiere.eclairage(a.x as i32 - 15, 0, 30, SH));
+            let mut e = lumiere.eclairage(a.x as i32 - 15, 0, 30, SH);
+            dehors_au_ciel(&mut e, ciel, porte, a.perso);
+            a.eclairage = Some(e);
         }
         (vides_avant(pixels::to_cells(&scene, &accessoires::PALETTE, debut, fin, Some(&mut lumiere)), debut - x0, fin - debut), acteurs, coup)
+    }
+}
+
+/// Dehors, la lumière du ciel : passé la porte, celle de la pièce (bornée à son dernier pixel)
+/// s'efface en quatre pixels de forge, et seule en reste la part qui passe la porte. Galadriel a
+/// sa lueur à elle : la nuit ne l'éteint pas.
+fn dehors_au_ciel(e: &mut pet::Eclairage, ciel: [f32; 3], porte: f32, perso: Perso) {
+    let lueur = if perso == Perso::Galadriel { [0.66, 0.7, 0.86] } else { [0.0; 3] };
+    for (i, k) in e.k.iter_mut().enumerate() {
+        let x = e.x0 + (i as i32 % e.w);
+        if x < YARD {
+            continue;
+        }
+        let t = ((x - YARD + 1) as f32 / 4.0).min(1.0);
+        let t = t * t * (3.0 - 2.0 * t);
+        for c in 0..3 {
+            let dehors = ciel[c] + (k[c] - ciel[c]).max(0.0) * porte * 0.5;
+            k[c] = (k[c] + (dehors - k[c]) * t).max(lueur[c] * t);
+        }
     }
 }
 
@@ -211,13 +233,29 @@ impl Etat {
     }
 }
 
-/// La forge d'un bandeau : le dernier état reçu, avancé d'un tic par image, et les cellules
+/// Un tic du monde, en secondes : celui du plugin (register.tsx : TICK_MS).
+const TIC: f32 = 0.15;
+/// Au-delà de cet écart (en tics) entre l'horloge montrée et celle du plugin, on la recale.
+const ECART_MAX: f64 = 100.0;
+
+/// La forge d'un bandeau : le dernier état reçu, avancé d'un tic toutes les 150 ms, et les cellules
 /// déjà peintes (seules celles qui changent sont repeintes, et celles sous Scorpheus).
 pub struct SceneForge {
     forge: Forge,
     etat: Option<Etat>,
-    /// tics passés depuis le dernier état reçu
-    depuis: i64,
+    /// les secondes passées depuis le dernier état reçu : le monde avance d'un tic toutes les
+    /// TIC secondes, au temps réel et non à l'image peinte. Une appli qui peint un peu moins vite
+    /// que le plugin ne compte pas (WM_TIMER à 150 ms en donne moins de 6,67 par seconde) : sinon
+    /// chaque état reçu la ramenait de quelques tics en avant, et la baie sautait.
+    temps: f32,
+    /// l'horloge montrée, en tics : elle suit celle du plugin sans jamais sauter. Le plugin compte
+    /// ses tics au minuteur de Claude, qui prend du retard ; l'appli compte au temps réel. Recalée
+    /// d'un coup à chaque état reçu, la baie sautait de quelques tics, en avant ou en arrière :
+    /// elle rattrape l'écart en douceur, et ne recule jamais.
+    lisse: Option<f64>,
+    /// la dernière horloge montrée, et quand l'appli a dit un saut au journal
+    montree: Option<i64>,
+    pub saute: Option<(i64, i64)>,
     avant: Vec<u32>,
     gerbe: gerbe::Gerbe,
     baie: baie::Baie,
@@ -229,21 +267,58 @@ pub struct SceneForge {
 
 impl SceneForge {
     pub fn new() -> Self {
-        SceneForge { forge: Forge::default(), etat: None, depuis: 0, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), baie: baie::Baie::default(), belvedere: belvedere::Belvedere::default(), frappe: i64::MIN, images: 0 }
+        SceneForge { forge: Forge::default(), etat: None, temps: 0.0, lisse: None, montree: None, saute: None, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), baie: baie::Baie::default(), belvedere: belvedere::Belvedere::default(), frappe: i64::MIN, images: 0 }
     }
 
     pub fn recevoir(&mut self, etat: Etat) {
+        // un écart de plus de 15 s (une session reprise, un plugin rechargé) : on la recale
+        if self.lisse.is_some_and(|l| (etat.monde.clock as f64 - l).abs() > ECART_MAX) {
+            self.lisse = None;
+            self.montree = None;
+        }
         self.etat = Some(etat);
-        self.depuis = 0;
+        self.temps = 0.0;
+    }
+
+    /// L'horloge montrée à cette image : celle du plugin avancée au temps réel, rejointe en
+    /// douceur (l'écart comblé en 1,5 s, de 4 fois moins vite à 3 fois plus vite que le temps).
+    fn horloge_lisse(&mut self, cible: f64, dt: f32) -> i64 {
+        let pas = (dt / TIC) as f64;
+        let l = match self.lisse {
+            None => cible,
+            Some(l) => l + (pas + (cible - l) * (dt as f64 / 1.5).min(1.0)).clamp(pas * 0.25, pas * 3.0),
+        };
+        self.lisse = Some(l);
+        (l + 1e-3).floor() as i64
+    }
+
+    /// Les tics passés depuis le dernier état reçu (le millième rattrape la somme des dt en f32).
+    fn depuis(&self) -> i64 {
+        (self.temps / TIC + 1e-3).floor() as i64
+    }
+
+    /// L'horloge du monde à la prochaine image, telle que l'appli l'a avancée depuis le dernier
+    /// état ; rien pour un bandeau qu'elle n'a pas peint depuis (caché, il n'avance pas).
+    #[cfg(test)]
+    pub fn horloge(&self) -> Option<i64> {
+        self.etat.as_ref().filter(|_| self.temps > 0.0).map(|e| e.monde.clock + self.depuis())
     }
 }
 
 impl crate::scene::Scene for SceneForge {
     fn peindre(&mut self, image: &mut crate::scene::Image, dt: f32, neuve: bool) -> Option<windows::Win32::Foundation::RECT> {
         let etat = self.etat.as_ref()?;
-        let e = self.depuis;
-        self.depuis += 1;
-        let monde = etat.monde.plus_tard(e);
+        let e = self.depuis();
+        let cible = etat.monde.clock as f64 + (self.temps / TIC) as f64;
+        self.temps += dt;
+        let mut monde = etat.monde.plus_tard(e);
+        let horloge = self.horloge_lisse(cible, dt);
+        if let Some(avant) = self.montree.filter(|&a| horloge < a || horloge > a + 10) {
+            self.saute = Some((avant, horloge));
+        }
+        self.montree = Some(horloge);
+        monde.clock = horloge;
+        let etat = self.etat.as_ref()?;
         let (cw, ch) = (image.cellule.0 as i32, image.cellule.1 as i32);
         let tick = etat.tick + e;
         let gala = monde.galadriel();
@@ -363,6 +438,52 @@ impl crate::scene::Scene for SceneForge {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Une appli qui peint moins d'images que de tics ne prend pas de retard sur le plugin : le
+    /// monde avance au temps réel (deux tics pour une image de 0,3 s), pas à l'image.
+    #[test]
+    fn le_monde_avance_au_temps_reel_et_non_a_l_image() {
+        use crate::scene::{Image, Scene};
+        let mut s = SceneForge::new();
+        s.recevoir(Etat { recadrage: Recadrage::Full, extra: 0, lit: false, activite: Activite::Idle, tick: 0, monde: Monde { clock: 100, ..Monde::default() } });
+        let (w, h) = (SW as usize * 9, ROWS as usize * 19);
+        let mut px = vec![0u32; w * h];
+        for k in 0..3 {
+            s.peindre(&mut Image { pixels: &mut px, w: w as u32, h: h as u32, cellule: (9, 19) }, 0.3, k == 0);
+        }
+        assert_eq!(s.horloge(), Some(106));
+    }
+
+    /// Un plugin en retard ou en avance sur le temps réel : l'horloge montrée ne recule jamais et
+    /// n'avance jamais de plus de 3 tics d'une image à l'autre, puis rejoint la sienne.
+    #[test]
+    fn l_horloge_montree_rejoint_celle_du_plugin_sans_sauter() {
+        use crate::scene::{Image, Scene};
+        let mut s = SceneForge::new();
+        let etat = |clock| Etat { recadrage: Recadrage::Full, extra: 0, lit: false, activite: Activite::Idle, tick: 0, monde: Monde { clock, ..Monde::default() } };
+        let (w, h) = (SW as usize * 9, ROWS as usize * 19);
+        let mut px = vec![0u32; w * h];
+        let mut montree = Vec::new();
+        s.recevoir(etat(1000));
+        for k in 0..40 {
+            // le plugin, ses tics en retard : 1 tic tous les 0,2 s, redit toutes les 4 images
+            if k > 0 && k % 4 == 0 {
+                s.recevoir(etat(1000 + k * 3 / 4));
+            }
+            s.peindre(&mut Image { pixels: &mut px, w: w as u32, h: h as u32, cellule: (9, 19) }, 0.15, k == 0);
+            montree.push(s.montree.unwrap());
+        }
+        s.recevoir(etat(1060)); // puis en avance
+        for _ in 0..40 {
+            s.peindre(&mut Image { pixels: &mut px, w: w as u32, h: h as u32, cellule: (9, 19) }, 0.15, false);
+            montree.push(s.montree.unwrap());
+        }
+        for p in montree.windows(2) {
+            assert!(p[1] >= p[0] && p[1] <= p[0] + 3, "saut de {} à {}", p[0], p[1]);
+        }
+        assert!((montree.last().unwrap() - (1060 + 40)).abs() <= 2, "{:?}", montree.last());
+        assert_eq!(s.saute, None);
+    }
 
     /// Une ligne telle que le plugin l'envoie (tests/diorama.test.tsx, rendu natif).
     const LIGNE: &str = r#"full 0 1 idle 993 {"hour":14,"month":10,"day":2,"hammer":"sledge","effort":0,"x":-12,"walking":false,"facing":1,"apprentices":[],"cape":["Z","v"],"accessory":"aucun","absent":false,"guests":[],"banquet":false,"cat":{"mode":"roof","x":14,"age":84},"lanternLit":false,"personality":"reveur","masterpiece":false,"rack":[],"forging":false,"banner":{"cloth":"E","emblem":"s","bits":259},"speaking":false,"duck":false,"exhausted":false,"tea":false,"flavor":"forge","pressure":0,"ctx":0,"hourglasses":0,"turnTicks":0,"clock":1012}"#;

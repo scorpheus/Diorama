@@ -292,6 +292,13 @@ impl App {
     /// Une image pour chaque bandeau visible : la scène peint ce qui a changé, la toile n'en
     /// remet que cette zone au compositeur.
     fn peindre(&mut self) {
+        // les sessions dont le bandeau se voit : l'écoute le dit au plugin (ecoute::VUES)
+        let vues: Vec<String> = self.bandes.iter().filter(|b| b.toile.as_ref().is_some_and(|t| t.visible)).map(|b| b.session.clone()).collect();
+        if let Ok(mut v) = ecoute::VUES.lock() {
+            if *v != vues {
+                *v = vues;
+            }
+        }
         for b in self.bandes.iter_mut() {
             let (Some(toile), Some(p)) = (b.toile.as_mut(), b.place) else { continue };
             if !toile.visible && !b.neuve {
@@ -303,7 +310,12 @@ impl App {
             let (w, h) = (toile.w, toile.h);
             let mut image = Image { pixels: toile.pixels(), w, h, cellule: (p.cw as u32, p.ch as u32) };
             let neuve = std::mem::take(&mut b.neuve);
-            let Some(mut zone) = b.scene.peindre(&mut image, dt, neuve) else { continue };
+            let peinte = b.scene.peindre(&mut image, dt, neuve);
+            // l'horloge montrée ne saute que sur un grand écart avec le plugin (forge::SceneForge::lisse)
+            if let Some((de, a)) = b.scene.saute.take() {
+                note(&format!("{} : l'horloge montrée saute de {de} à {a}", b.session));
+            }
+            let Some(mut zone) = peinte else { continue };
             // les repères du terminal restent visibles à travers : leurs cellules transparentes
             for trou in trous(w, h, p.cw, p.ch) {
                 if neuve || croise(zone, trou) {

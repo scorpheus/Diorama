@@ -8,8 +8,11 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::sync::mpsc::Sender;
+use std::sync::Mutex;
 
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::System::SystemInformation::GetTickCount;
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
 /// Le port de l'appli, le même que celui du plugin (register.tsx : RENDER_PORT).
@@ -17,7 +20,32 @@ pub const PORT: u16 = 41917;
 /// Le message qui réveille le fil principal : une ligne attend dans le canal.
 pub const WM_LIGNE: u32 = WM_APP + 1;
 
-const REPONSE: &[u8] = b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+/// La réponse à une requête : « vu » si le bandeau de sa session se voit et que quelqu'un est
+/// devant l'écran (le clavier ou la souris ont servi depuis moins de PRESENCE_MS), « absent »
+/// sinon. Le plugin attend « vu » pour jouer un spectacle.
+fn reponse(vu: bool) -> &'static [u8] {
+    if vu {
+        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nvu"
+    } else {
+        b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nabsent"
+    }
+}
+
+/// Les sessions dont le bandeau se voit, tenues à jour par le fil principal à chaque image.
+pub static VUES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+const PRESENCE_MS: u32 = 120_000;
+
+/// Quelqu'un est-il devant l'écran : le clavier ou la souris ont servi il y a peu.
+fn present() -> bool {
+    let mut l = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    unsafe { GetLastInputInfo(&mut l).as_bool() && GetTickCount().wrapping_sub(l.dwTime) < PRESENCE_MS }
+}
+
+/// La session dont parle une requête : le deuxième mot de sa première ligne (« bande <session> … »).
+fn session_de(corps: &[u8]) -> Option<String> {
+    let texte = std::str::from_utf8(corps).ok()?;
+    texte.lines().next()?.split_whitespace().nth(1).map(str::to_string)
+}
 const TAILLE_MAX: usize = 64 * 1024;
 
 /// Écoute dans un fil à part ; `Err` si le port est déjà pris (une autre appli tourne).
@@ -61,7 +89,11 @@ fn servir(client: TcpStream, lignes: Sender<String>, fenetre: isize) {
             return;
         }
         let mut corps = vec![0u8; longueur];
-        if entree.read_exact(&mut corps).is_err() || sortie.write_all(REPONSE).is_err() {
+        if entree.read_exact(&mut corps).is_err() {
+            return;
+        }
+        let vu = session_de(&corps).is_some_and(|s| VUES.lock().is_ok_and(|v| v.contains(&s))) && present();
+        if sortie.write_all(reponse(vu)).is_err() {
             return;
         }
         if corps.is_empty() {
