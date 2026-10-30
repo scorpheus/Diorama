@@ -1,7 +1,7 @@
 {
   "nom": "europa",
   "description": "la voiture de rallye d'Europa : de face, carrosserie à la couleur du profil, phares pour yeux, rampe de phares sur le toit",
-  "valide": false,
+  "valide": true,
   "taille": [16, 16],
   "palette": {
     "k": "#1b1a24",

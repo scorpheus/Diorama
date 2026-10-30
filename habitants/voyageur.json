@@ -1,7 +1,7 @@
 {
   "nom": "voyageur",
   "description": "le voyageur : un escargot qui porte sa maison, la coquille à la couleur du profil, un baluchon",
-  "valide": false,
+  "valide": true,
   "taille": [16, 16],
   "palette": {
     "k": "#1b1a24",

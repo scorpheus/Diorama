@@ -1,7 +1,7 @@
 {
   "nom": "mecano",
   "description": "le mécano de vehigraph : casquette à la couleur du profil, moustache, bleu de travail, clé et roue",
-  "valide": false,
+  "valide": true,
   "taille": [16, 16],
   "palette": {
     "k": "#1b1a24",

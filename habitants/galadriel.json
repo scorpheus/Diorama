@@ -1,7 +1,7 @@
 {
   "nom": "galadriel",
   "description": "Galadriel, l'orchestratrice, comme son pet du Diorama : capuche et cape bleu nuit étoilées, diadème d'or, visage dans l'ombre, yeux cyan",
-  "valide": false,
+  "valide": true,
   "taille": [16, 16],
   "palette": {
     "k": "#1b1a24",

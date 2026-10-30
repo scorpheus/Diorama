@@ -1,6 +1,6 @@
 {
   "nom": "accessoires",
-  "valide": false,
+  "valide": true,
   "palette": {
     "k": "#1b1a24",
     "w": "#f4f1ea",

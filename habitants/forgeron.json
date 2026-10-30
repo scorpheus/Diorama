@@ -1,7 +1,7 @@
 {
   "nom": "forgeron",
   "description": "le nain forgeron des tickets d'Endurance : casque de fer, barbe rousse, tablier de cuir, marteau et enclume",
-  "valide": false,
+  "valide": true,
   "taille": [16, 16],
   "palette": {
     "k": "#1b1a24",

@@ -1,7 +1,7 @@
 {
   "nom": "tailleur",
   "description": "le golem de pierre de LaPierreDesMots : bloc taillé, yeux et rune qui luisent à la couleur du profil, une tablette où il grave",
-  "valide": false,
+  "valide": true,
   "taille": [16, 16],
   "palette": {
     "k": "#1b1a24",

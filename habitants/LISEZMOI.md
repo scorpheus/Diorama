@@ -39,7 +39,7 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   Les habitants, de face, trapus, à la manière des créatures de Dwarf Fortress, et pas forcément humains :
   `galadriel` (Orchestratrice, comme son pet du Diorama), `forgeron` (Endurance, un nain), `marin` (Diorama, Route du
   Rhum), `mecano` (vehigraph), `tailleur` (LaPierreDesMots, un golem de pierre), `europa` (Europa, une voiture de
-  rallye), `claudeterminal` (ClaudeTerminal, un petit ordinateur), `voyageur` (tous les autres, dont « Claude » : un
+  rallye), `claudeterminal` (ClaudeTerminal, une pieuvre qui tape de tous ses bras), `voyageur` (tous les autres, dont « Claude » : un
   escargot qui porte sa maison). Tous dans `tools/habitants/gabarits.py` (le dessin debout, puis ce qui change d'un
   état à l'autre) : un nouvel habitant y est une entrée.
 - **Accessoires** : `habitants/accessoires.json`, une palette pour tous (complète, `"#rrggbb"`, `O`/`o` à la couleur
@@ -75,6 +75,6 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   que l'habitant. Exemple : `habitants/demandes/vehigraph.json` →
   `{ "nom": "vehigraph", "profil": "vehigraph", "couleur": "#4a9e5c", "sujet": "outil de diagnostic véhicule", "le": "2026-11-03" }`.
   La file n'est pas suivie par git (`.gitignore`) : elle vit sur le disque de la machine, pas dans l'historique.
-- **Fait** : `marin.json` validé (30-10) ; `voyageur`, `galadriel`, `forgeron`, `mecano`, `tailleur`, `europa`,
-  `claudeterminal` et `accessoires.json` dessinés, `valide: false`, pour une seule revue
+- **Fait** (30-10) : validés `marin` (redessiné de face), `voyageur`, `galadriel`, `forgeron`, `mecano`, `tailleur`,
+  `europa` et `accessoires.json` ; `claudeterminal` redessiné en pieuvre, `valide: false`, à revoir ; revue d'ensemble
   (`python tools/habitants/apercu.py --revue revue.png habitants/*.json`).
