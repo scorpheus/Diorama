@@ -75,6 +75,6 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   que l'habitant. Exemple : `habitants/demandes/vehigraph.json` →
   `{ "nom": "vehigraph", "profil": "vehigraph", "couleur": "#4a9e5c", "sujet": "outil de diagnostic véhicule", "le": "2026-11-03" }`.
   La file n'est pas suivie par git (`.gitignore`) : elle vit sur le disque de la machine, pas dans l'historique.
-- **Fait** (30-10) : validés `marin` (redessiné de face), `voyageur`, `galadriel`, `forgeron`, `mecano`, `tailleur`,
-  `europa` et `accessoires.json` ; `claudeterminal` redessiné en pieuvre, `valide: false`, à revoir ; revue d'ensemble
+- **Fait** (30-10) : tous validés — `marin` (redessiné de face), `voyageur`, `galadriel`, `forgeron`, `mecano`,
+  `tailleur`, `europa`, `claudeterminal` (la pieuvre) et `accessoires.json` ; revue d'ensemble
   (`python tools/habitants/apercu.py --revue revue.png habitants/*.json`).

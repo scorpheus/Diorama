@@ -1,7 +1,7 @@
 {
   "nom": "claudeterminal",
   "description": "la pieuvre de ClaudeTerminal, qui jongle avec les sessions : corps à la couleur du profil, yeux noirs brillants, elle tape de tous ses bras",
-  "valide": false,
+  "valide": true,
   "taille": [16, 16],
   "palette": {
     "k": "#1b1a24",
