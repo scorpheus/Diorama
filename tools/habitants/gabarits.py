@@ -1,16 +1,20 @@
-"""Les habitants faits d'un même gabarit : le corps et les poses du marin (habitants/marin.json),
-la tête, les couleurs et l'ouvrage propres à chacun. Écrit habitants/<nom>.json (valide: false).
+"""Les habitants faits d'un même gabarit : un corps élancé (2,5 têtes, tête de 5 px, torse de 4,
+bras d'un pixel, jambes séparées), la tête, les couleurs et l'ouvrage propres à chacun. Écrit
+habitants/<nom>.json (valide: false). Galadriel et le robot, qui ne sont pas faits comme les
+autres, donnent leurs corps entiers.
 
     python tools/habitants/gabarits.py            # tous
     python tools/habitants/gabarits.py forgeron   # un seul
 
-Un nouvel habitant (une demande de habitants/demandes/) : une entrée de plus dans HABITANTS, avec
-ses trois têtes (profil, dort, face et sa bouche ouverte), sa palette et son ouvrage, puis
+Un nouvel habitant (une demande de habitants/demandes/) : une entrée de plus dans HABITANTS, puis
 tools/habitants/apercu.py pour la planche.
 
-Lettres du gabarit : k contour, C c le vêtement et son ombre, b le détail (bouton, ceinture),
-S le foulard (remplacé par la lettre que l'habitant choisit, O par défaut : la couleur du profil),
-p la peau des mains, n les jambes, a les chaussures, u les Z, x X la fumée, O o la couleur du profil.
+Repères (petits personnages lisibles, cf. pixnote.net/en/learn/character) : silhouette qui se
+reconnaît remplie de noir (chapeau, outil, barbe), bras d'un pixel, yeux de 1 × 2, visage qui
+montre la peau, 6 à 12 couleurs.
+
+Lettres du corps : k contour, C c le vêtement et son ombre (le bras), w le col, b un détail,
+p la main, n les jambes, a les chaussures ; chacun les remplace par les siennes (`corps`).
 """
 import json
 import os
@@ -22,363 +26,304 @@ from ranger import ranger  # noqa: E402
 RACINE = os.path.join(os.path.dirname(__file__), '..', '..', 'habitants')
 VIDE = '.' * 16
 
-# -- le corps, pose par pose (rangées du bas ; la tête se pose au-dessus) ---------------------------
+# -- le corps commun, tourné vers la droite -----------------------------------------------------------
 
-# au travail, debout, tourné vers la droite : le bras haut, puis bas (rangées 9 à 15)
-TRAVAIL_HAUT = [
-    "..kcSSSSSck.....",
-    ".kcCCCCbCCpk....",
-    ".kCCCCCCCck.....",
-    "..kCCCbCCk......",
-    "..kcccccck......",
-    "..knnk.knk......",
-    ".kaaak.kaak.....",
+# debout : rangées 8 à 15 (la tête en 2 à 7)
+DEBOUT = [
+    "...kCwwCk.......",
+    "...kCCcCk.......",
+    "...kCbcCk.......",
+    "...kCCpCk.......",
+    "...knnnnk.......",
+    "....knknk.......",
+    "....knknk.......",
+    "...kaakaak......",
 ]
-TRAVAIL_BAS = TRAVAIL_HAUT[:1] + [
-    ".kcCCCCbCCk.....",
-    ".kCCCCCCCcpk....",
-] + TRAVAIL_HAUT[3:]
+# le bras qui pend devant le torse : effacé quand il se lève ou travaille
+BRAS = [(6, 9), (6, 10), (6, 11)]
+EPAULE = (8, 8)
 
-# l'attente, le bras levé qui tient le drapeau (rangées 9 à 15, et la main en 7 et 8)
-ATTENTE = [
-    "..kcSSSSScCk....",
-    "..kCCCCbCCk.....",
-    ".kpCCCCCCck.....",
-    "..kCCCbCCck.....",
-    "..kccccccck.....",
-    "...knnk.knk.....",
-    "..kaaak.kaak....",
-]
-BRAS_LEVE = [(11, 7, ["p"]), (10, 8, ["pk"])]
-DRAPEAU = [
-    [".........k......",
-     ".........kOOOw..",
-     ".........kOOww..",
-     ".........kOww...",
-     ".........kw.....",
-     ".........k......",
-     "..........k....."],
-    ["...........k....",
-     "..........kk.OO.",
-     "..........kOOOww",
-     "..........kOOww.",
-     "..........kw....",
-     "..........k.....",
-     "..........k....."],
+# assis par terre, les jambes devant : rangées 11 à 15 (la tête descend de 3)
+ASSIS = [
+    "...kCwwCk.......",
+    "...kCCcCk.......",
+    "...kCCpCk.......",
+    "...knnnnnnnaak..",
+    "...kkkkkkkkkkk..",
 ]
 
-# le repos : assis, la tête basse (rangées 11 à 15 ; la tête en 6 à 10)
-REPOS = [
-    ".kcSSSSSSSck....",
-    ".kCCCCbCCCCk....",
-    ".kccccccccpkk...",
-    "..knnnnnnnnaak..",
-    "..kkkkkkkkkkkk..",
-]
 Z = ["uuuu", "...u", "..u.", ".u..", "uuuu"]
-ZZZ = [[], [(10, 3, ["u"])], [(10, 1, Z)], [(12, 0, Z), (9, 4, ["u"])]]
-
-# l'échec : assis par terre, de face, dans la fumée (rangées 10 à 15 ; la tête en 4 à 9)
-ECHEC = [
-    "..kcSSSSSSSck...",
-    ".kpCCCCbCCCCpk..",
-    ".kkccccccccckk..",
-    "..knnnnnnnnnnk..",
-    ".kaakkkkkkkkaak.",
-    ".kkk........kkk.",
-]
+ZZZ = [[], [(11, 3, ["u"])], [(11, 1, Z)], [(12, 0, Z), (10, 4, ["u"])]]
 FUMEE = [
-    [(7, 2, [".x.", "xXx", "..."]), (10, 4, ["x"])],
-    [(7, 1, ["..X", ".xXx", "xx.."])],
-    [(8, 0, [".XX", "xXx", ".x.", "x.."]), (11, 4, ["x"])],
+    [(8, 2, [".x.", "xXx"]), (1, 9, ["x"]), (12, 10, ["X"])],
+    [(8, 1, ["..X", ".xXx", "xx.."]), (1, 8, ["X"]), (12, 9, ["x"])],
+    [(9, 0, [".XX", "xXx", ".x."]), (0, 9, ["x"]), (13, 10, ["x"]), (10, 4, ["x"])],
 ]
 
-# parle : debout, de face (rangées 9 à 15 ; la tête en 3 à 8)
-PARLE = [
-    "...kcSSSSSSSck..",
-    "..kcCCCCbCCCCk..",
-    "..kpCCCCCCCcpk..",
-    "...kCCCCbCCCk...",
-    "...kcccccccck...",
-    "....knnk.knnk...",
-    "...kaaak.kaaak..",
-]
 
-# -- les ouvrages (l'état travail) : chaque image dit son bras (haut ou bas) et ce qu'on pose ---------
+def drapeau(x, y, f):
+    """Le bras levé (épaule en x, y), la main, la hampe et le drapeau qui flotte ; image f."""
+    m = [(x + 1, y, ["C"]), (x + 2, y - 1, ["C"]), (x + 2, y - 2, ["p"])]
+    hampe = [(x + 2, y - 8 + i, ["r"]) for i in range(6)]
+    tissu = [["OOOw", "OOww", "Oww."], [".OOw", "OOOw", "OOww"]][f]
+    return hampe + m + [(x + 3, y - 8, tissu)]
+
+
+# -- les ouvrages (l'état travail) : le bras tendu et l'objet, image par image --------------------------
+
+def bras_devant(main):
+    """Le bras tendu de l'épaule (8, 9) à la main ; main = (x, y)."""
+    x, y = main
+    return [(8, 9, ["C"])] + ([(9, y, ["C"])] if x > 9 else []) + [(x, y, ["p"])]
+
 
 CLAVIER = [
-    ('haut', [(9, 11, [".kkkkkk", "kdgsgdk", "krrrrrk", "krRRRrk", "kkkkkkk"])]),
-    ('bas', [(9, 11, [".pkkkkk", "kdggsdk", "krrrrrk", "krRRRrk", "kkkkkkk"])]),
+    bras_devant((10, 10)) + [(10, 11, ["kkkkkk"]), (10, 12, ["dgsgdk"]), (9, 13, ["krrrrrk"]), (9, 14, ["krRRRrk"]), (9, 15, ["kkkkkkk"])],
+    bras_devant((10, 11)) + [(11, 11, ["kkkkk"]), (10, 12, ["dggsdk"]), (9, 13, ["krrrrrk"]), (9, 14, ["krRRRrk"]), (9, 15, ["kkkkkkk"])],
 ]
-# le marteau levé, puis abattu sur l'enclume, et l'étincelle
+_ENCLUME = [(10, 12, [".kkkkk"]), (10, 13, ["kAAAAk"]), (11, 14, ["kgk"]), (10, 15, ["kggggk"])]
 ENCLUME = [
-    ('haut', [(10, 6, ["..kk.", ".kAAk", "rkAk.", "r....", "....."]),
-              (10, 12, [".kkkkk", "kAAAAk", ".kgk..", "kggggk"])]),
-    ('bas', [(10, 9, ["......", ".....", ".rrkkk", "..kAAk"]),
-             (10, 12, [".kkkkk", "kAAAAk", ".kgk..", "kggggk"]), (13, 10, ["s.s"])]),
-    ('bas', [(10, 9, ["......", ".....", ".rrkkk", "..kAAk"]),
-             (10, 12, [".kkkkk", "kAAAAk", ".kgk..", "kggggk"]), (12, 9, ["s...s"]), (14, 11, ["s"])]),
+    bras_devant((9, 8)) + [(9, 5, [".kk", "kAAk", ".rk", ".r."])] + _ENCLUME,
+    bras_devant((10, 10)) + [(11, 10, ["rr"]), (13, 10, ["kAk"]), (13, 11, ["kAk"])] + _ENCLUME + [(12, 9, ["s.s"])],
+    bras_devant((10, 10)) + [(11, 10, ["rr"]), (13, 10, ["kAk"]), (13, 11, ["kAk"])] + _ENCLUME + [(11, 8, ["s...s"]), (15, 11, ["s"])],
 ]
-# la clé sur le moyeu d'une roue
+_ROUE = [(11, 9, [".kkk.", "kaaak", "kaAak", "kaaak", ".kkk."])]
 ROUE = [
-    ('haut', [(10, 9, ["..kkk.", ".kaaak", "kaAAak", "kaAkAa", "kaAAak", ".kaaak", "..kkk."]),
-              (11, 10, ["g", "g"])]),
-    ('bas', [(10, 9, ["..kkk.", ".kaaak", "kaAAak", "kaAkAa", "kaAAak", ".kaaak", "..kkk."]),
-             (11, 11, ["gg"])]),
+    bras_devant((10, 10)) + _ROUE + [(11, 10, ["g"]), (12, 11, ["g"])],
+    bras_devant((10, 12)) + _ROUE + [(11, 12, ["g"]), (12, 11, ["g"])],
 ]
-# le ciseau et la massette sur un bloc où s'écrit une lettre, les éclats
+_BLOC = [(10, 11, ["kkkkkk", "kWQQQk", "kQVQVk", "kQVVQk", "kkkkkk"])]
 PIERRE = [
-    ('haut', [(10, 11, ["kkkkkk", "kWQQQk", "kQVQVk", "kQVVQk", "kkkkkk"]), (10, 9, ["rk", ".g"])]),
-    ('bas', [(10, 11, ["kkkkkk", "kWQQQk", "kQVQVk", "kQVVQk", "kkkkkk"]), (10, 10, ["rk"]),
-             (12, 9, ["W.W"]), (14, 10, ["W"])]),
+    bras_devant((10, 9)) + _BLOC + [(10, 8, ["r"]), (11, 10, ["g"])],
+    bras_devant((10, 10)) + _BLOC + [(11, 9, ["r"]), (12, 8, ["W.W"]), (15, 9, ["W"])],
 ]
-# les mains sur l'orbe qui luit, posé sur un pied
-ORBE = [
-    ('haut', [(10, 8, [".kkk.", "kfFfk", "kFsFk", "kfFfk", ".kkk.", "..r..", "..r..", ".rrr."])]),
-    ('bas', [(10, 8, [".kkk.", "kFfFk", "kfYfk", "kFfFk", ".kkk.", "..r..", "..r..", ".rrr."]),
-             (9, 7, ["s"]), (15, 9, ["s"])]),
-]
-# le volant tenu, qui tourne d'un coup à l'autre
 VOLANT = [
-    ('haut', [(10, 8, [".kkk.", "kA.Ak", "k.y.k", "k.A.k", ".kkk.", "..k..", "..k.."])]),
-    ('bas', [(10, 8, [".kkk.", "kA..k", "k.yAk", "kA..k", ".kkk.", "..k..", "..k.."])]),
+    bras_devant((10, 9)) + [(10, 8, [".kkk.", "kA.Ak", "k.y.k", "k.A.k", ".kkk.", "..k..", "..k..", ".kkk."])],
+    bras_devant((10, 10)) + [(10, 8, [".kkk.", "kA..k", "k.yAk", "kA..k", ".kkk.", "..k..", "..k..", ".kkk."])],
 ]
 
 # -- les habitants -------------------------------------------------------------------------------------
 
 BASE = {
     'k': '#1b1a24', 'p': '#ecb48a', 'q': '#b97a55', 'w': '#f4f1ea', 'm': '#141018', 'M': '#7a2a2a',
-    'u': '#bff3ff', 'x': '#5e5966', 'X': '#8d8896', 'O': '#3f80dc', 'o': '#1f4f9e',
+    'u': '#bff3ff', 'x': '#5e5966', 'X': '#8d8896', 'O': '#3f80dc', 'o': '#1f4f9e', 'r': '#7a4a24',
+    'R': '#4a2c16', 'g': '#b4b7bf', 'd': '#7c808c', 's': '#ffd75e', 'c': '#7fd4ff',
 }
 
 HABITANTS = {
-    'voyageur': {
-        'description': "le voyageur générique, en cape à capuche à la couleur du profil : tout profil sans habitant",
-        'palette': {'n': '#5a4636', 'a': '#2e343a', 'b': '#7a4a24', 'r': '#7a4a24', 'R': '#4a2c16',
-                    'g': '#b4b7bf', 'd': '#7c808c', 's': '#fff3b0'},
-        'lettres': {'C': 'O', 'c': 'o', 'S': 'o'},
+    'marin': {
+        'description': "le marin en ciré jaune et suroît, barbe blanche, l'écharpe à la couleur du profil (Diorama, Route du Rhum)",
+        'palette': {'J': '#f8da1c', 'j': '#c9a40e', 'y': '#8a6a10', 'n': '#1e2a55', 'a': '#2e343a'},
+        'corps': {'C': 'J', 'c': 'j', 'w': 'O', 'b': 'y'},
+        'tete': [
+            "....kkkk........",
+            "...kJJJJk.......",
+            "..kjjjjjjkk.....",
+            "..kjkppmpk......",
+            "...kpppmppk.....",
+            "....kwwwk.......",
+        ],
+        'yeux': [(7, 5), (7, 6)],
+        'bouche': (6, 7),
         'ouvrage': CLAVIER,
-        'profil': [
-            "....kkkkk.......",
-            "...kOOOOOk......",
-            "..kOoooooOk.....",
-            "..kokppmpk......",
-            "..kokppppqk.....",
-            "...kokqppk......",
-        ],
-        'dort': [
-            "....kkkkk.......",
-            "...kOOOOOk......",
-            "..kOoooooOk.....",
-            "..koOOOOOok.....",
-            "...kkqppqk......",
-        ],
-        'face': [
-            ".....kkkkkk.....",
-            "....kOOOOOOk....",
-            "...kOooooooOk...",
-            "...kOkmppmkOk...",
-            "...kokppppkok...",
-            "....kkqppqkk....",
-        ],
-        'bouche': (7, 8, ["MM"]),
     },
-    'galadriel': {
-        'profil_couleur': '#9a6ad0',
-        'description': "Galadriel, l'orchestratrice : cheveux d'or, robe blanche, l'orbe pour ouvrage",
-        'palette': {'h': '#f0d27a', 'H': '#b8923a', 'C': '#eceaf4', 'c': '#a9a6c8', 'b': '#e3a63c',
-                    'y': '#ffffff', 'r': '#8a90a0', 'f': '#bfe8ff', 'F': '#7fc8f0', 'Y': '#ffffff',
-                    's': '#fff3b0'},
-        'lettres': {'n': 'c', 'a': 'c', 'S': 'O'},
-        'robe': True,
-        'ouvrage': ORBE,
-        'profil': [
-            "....kkkk........",
-            "...khhhhk.......",
-            "..khHHyHhk......",
-            "..khhppmpk......",
-            "..khhpppppk.....",
-            "..khhkqppk......",
+    'voyageur': {
+        'description': "le voyageur générique : chapeau à large bord, cape à la couleur du profil, sac au dos",
+        'palette': {'h': '#5a3a22', 'H': '#8a6238', 'n': '#5a4636', 'a': '#2e2420', 'y': '#e3a63c'},
+        'corps': {'C': 'O', 'c': 'o', 'w': 'y', 'b': 'O'},
+        'tete': [
+            ".....kkk........",
+            "....kHHHk.......",
+            "..kkhhhhhkk.....",
+            "...khppmpk......",
+            "...kpppmppk.....",
+            "....kpppk.......",
         ],
-        'dort': [
-            "....kkkk........",
-            "...khhhhk.......",
-            "..khHHyHhk......",
-            "..khhhqpqk......",
-            "..khhkppk.......",
-        ],
-        'face': [
-            "......kkkk......",
-            ".....khhhhk.....",
-            "....khHyyHhk....",
-            "...khpmppmphk...",
-            "...khppppppqk...",
-            "...khhkqppkhhk..",
-        ],
-        'bouche': (7, 8, ["M"]),
-        'dos': [(2, 9, ["h", "h", "H"])],
+        'yeux': [(7, 5), (7, 6)],
+        'bouche': (7, 7),
+        'dos': [(0, 8, [".kk", "khh", "khH", ".kk"])],
+        'ouvrage': CLAVIER,
     },
     'forgeron': {
         'profil_couleur': '#d04a2a',
-        'description': "le forgeron des tickets d'Endurance : tablier de cuir, barbe brune, marteau et enclume",
-        'palette': {'h': '#4a2c16', 'C': '#8a5a30', 'c': '#5a3818', 'b': '#c9c4ba', 'n': '#3a3440',
-                    'a': '#2e2420', 'r': '#7a4a24', 'g': '#4a4e5c', 'A': '#a8aebc', 's': '#ffd75e'},
-        'lettres': {'S': 'O'},
+        'description': "le forgeron des tickets d'Endurance : crâne nu, barbe noire, bras nus, tablier de cuir, marteau et enclume",
+        'palette': {'P': '#f6d0b0', 'h': '#2a1e1a', 'A': '#4a3a34', 'n': '#3a3440', 'a': '#2e2420',
+                    'G': '#8a90a0'},
+        'corps': {'C': 'A', 'c': 'p', 'w': 'h', 'b': 'O'},
+        'tete': [
+            "................",
+            "....kkkkk.......",
+            "...kpPPppk......",
+            "...kpphhhk......",
+            "...kpppmpPk.....",
+            "....khhhhk......",
+        ],
+        'yeux': [(7, 6)],
+        'bouche': (6, 7),
+        # les épaules nues, la barbe sur la poitrine
+        'plus': [(4, 8, ["p"]), (7, 8, ["p"])],
         'ouvrage': ENCLUME,
-        'profil': [
-            "....kkkk........",
-            "...khhhhk.......",
-            "..khhhhhhk......",
-            "..khppppmpk.....",
-            "..kkppppppk.....",
-            "...khhhhhk......",
-        ],
-        'dort': [
-            "....kkkk........",
-            "...khhhhk.......",
-            "..khhhhhhk......",
-            "..khpqpqpk......",
-            "...khhhhhk......",
-        ],
-        'face': [
-            "......kkkk......",
-            ".....khhhhk.....",
-            "....khhhhhhk....",
-            "....kpmppmpk....",
-            "....kppppppk....",
-            "....khhhhhhk....",
-        ],
-        'bouche': (7, 8, ["MM"]),
+        'lettres_outil': {'A': 'G'},
     },
     'mecano': {
         'profil_couleur': '#e0902a',
         'description': "le mécano de vehigraph : bleu de travail, casquette à la couleur du profil, clé et roue",
-        'palette': {'h': '#3a2a1e', 'C': '#2f5a9e', 'c': '#1e3a6e', 'b': '#c9c4ba', 'n': '#2f5a9e',
-                    'a': '#2e343a', 'A': '#8a90a0', 'g': '#c9ccd4'},
-        'lettres': {'S': 'w'},
+        'palette': {'h': '#3a2a1e', 'C': '#2f5a9e', 'c': '#1e3a6e', 'n': '#264a84', 'a': '#2e343a',
+                    'b': '#c9c4ba', 'A': '#8a90a0'},
+        'corps': {},
+        'tete': [
+            "....kkkkk.......",
+            "...kOOOOOk......",
+            "...koooookkk....",
+            "...khppmpk......",
+            "...kpppmppk.....",
+            "....kpppk.......",
+        ],
+        'yeux': [(7, 5), (7, 6)],
+        'bouche': (7, 7),
         'ouvrage': ROUE,
-        'profil': [
-            "....kkkkk.......",
-            "...kOOOOOk......",
-            "..kooooooookk...",
-            "..khppppmpk.....",
-            "..kkppppppk.....",
-            "...kqpppqk......",
-        ],
-        'dort': [
-            "....kkkkk.......",
-            "...kOOOOOk......",
-            "..kooooooookk...",
-            "..khpqpqpk......",
-            "...kqpppqk......",
-        ],
-        'face': [
-            "......kkkkk.....",
-            ".....kOOOOOk....",
-            "...kkoooooookk..",
-            "....kpmppmpk....",
-            "....kppppppk....",
-            ".....kqppqk.....",
-        ],
-        'bouche': (7, 8, ["MM"]),
     },
     'tailleur': {
         'profil_couleur': '#3f8a4a',
-        'description': "le tailleur de pierre de LaPierreDesMots : béret à la couleur du profil, ciseau, une lettre au bloc",
-        'palette': {'h': '#9a948c', 'C': '#c8bfae', 'c': '#8e8676', 'b': '#7a4a24', 'n': '#5a5048',
-                    'a': '#3a2a1e', 'r': '#7a4a24', 'g': '#c9ccd4', 'Q': '#b0aab8', 'V': '#6e6876', 'W': '#e4e0ea'},
-        'lettres': {'S': 'b'},
+        'description': "le tailleur de pierre de LaPierreDesMots : béret à la couleur du profil, moustache grise, blouse, ciseau et bloc",
+        'palette': {'h': '#a8a29a', 'C': '#c8bfae', 'c': '#8e8676', 'b': '#7a4a24', 'n': '#5a5048',
+                    'a': '#3a2a1e', 'Q': '#b0aab8', 'V': '#6e6876', 'W': '#e4e0ea'},
+        'corps': {},
+        'tete': [
+            "................",
+            "....kkkkkk......",
+            "...kOOOOOOk.....",
+            "...khppmpkk.....",
+            "...kpppmppk.....",
+            "....khhhk.......",
+        ],
+        'yeux': [(7, 5), (7, 6)],
+        'bouche': (6, 7),
         'ouvrage': PIERRE,
-        'profil': [
-            "................",
-            "...kkkkkk.......",
-            "..kOOOOOOk......",
-            "..khkppmpk......",
-            "..kkppppppk.....",
-            "...khhhhk.......",
-        ],
-        'dort': [
-            "................",
-            "...kkkkkk.......",
-            "..kOOOOOOk......",
-            "..khkqpqpk......",
-            "...khhhhk.......",
-        ],
-        'face': [
-            "................",
-            ".....kkkkkk.....",
-            "....kOOOOOOk....",
-            "....kpmppmpk....",
-            "....kppppppk....",
-            ".....khhhhk.....",
-        ],
-        'bouche': (7, 8, ["MM"]),
     },
     'europa': {
         'profil_couleur': '#d04a2a',
-        'description': "la pilote de rallye d'Europa (VRallye) : casque à la couleur du profil, combinaison, volant",
-        'palette': {'C': '#e8e8ee', 'c': '#a8acb8', 'b': '#f0c020', 'n': '#a8acb8', 'a': '#2e343a',
-                    'e': '#22304a', 'E': '#7fd4ff', 'A': '#b4b7bf', 'y': '#f0c020'},
-        'lettres': {'S': 'O'},
+        'description': "la pilote de rallye d'Europa : casque ouvert à la couleur du profil, visière relevée, combinaison blanche, volant",
+        'palette': {'C': '#eceef4', 'c': '#a8acb8', 'n': '#d4d6de', 'a': '#2e343a', 'G': '#3a3f4c',
+                    'E': '#9fe0ff', 'A': '#b4b7bf', 'y': '#f0c020', 'h': '#5a3a22'},
+        'corps': {'w': 'O', 'b': 'O', 'p': 'G'},
+        'tete': [
+            "....kkkkk.......",
+            "...kOOOOOk......",
+            "..kOOEEEEk......",
+            "..kOOppmpk......",
+            "..kOOppmppk.....",
+            "...kOkppk.......",
+        ],
+        'yeux': [(7, 5), (7, 6)],
+        'bouche': (7, 7),
         'ouvrage': VOLANT,
-        'profil': [
-            "....kkkkk.......",
-            "...kOOOOOk......",
-            "..kOOOOOOOk.....",
-            "..kOOkeeEek.....",
-            "..kOOkeeeek.....",
-            "...koOOOok......",
+    },
+    'galadriel': {
+        'profil_couleur': '#9a6ad0',
+        'description': "Galadriel, l'orchestratrice, comme dans le Diorama : capuche bleu nuit étoilée, liserés d'or, visage dans l'ombre, yeux cyan",
+        'palette': {'N': '#26306a', 'n': '#161c46', 'y': '#e8c46a', 'z': '#0c0e1e', 'e': '#7ff0ff',
+                    'E': '#2a8aa0', 'f': '#bff8ff'},
+        'debout': [
+            "................",
+            ".......k........",
+            "......kNk.......",
+            ".....kNyNk......",
+            "....kNNNNNk.....",
+            "....kNzzzNk.....",
+            "....kNezeNk.....",
+            "....knNzNnk.....",
+            "...knNyeyNnk....",
+            "...kNnNeNnNk....",
+            "..kNNnNENnNNk...",
+            "..kNnNNNNNnNk...",
+            ".kNNnNNNNNnNNk..",
+            ".kNnNNyNNNnNNk..",
+            ".kNNnNNNyNnNNk..",
+            ".kyyyyyyyyyyyk..",
         ],
-        'dort': [
-            "....kkkkk.......",
-            "...kOOOOOk......",
-            "..kOOOOOOOk.....",
-            "..kOkeeeEk......",
-            "...koOOOok......",
+        'assis': [
+            "................",
+            "................",
+            "................",
+            "................",
+            "................",
+            ".......k........",
+            "......kNk.......",
+            ".....kNyNk......",
+            "....kNNNNNk.....",
+            "....kNzzzNk.....",
+            "....kNezeNk.....",
+            "...knnNzNnnk....",
+            "..knNNyeyNNnk...",
+            ".kNNnNNNNNnNNk..",
+            "kNNnNNyNNNNnNNk.",
+            "kyyyyyyyyyyyyyk.",
         ],
-        'face': [
-            "......kkkkk.....",
-            ".....kOOOOOk....",
-            "....kOOOOOOOk...",
-            "....kOkmppmkOk..",
-            "....kOkppppkOk..",
-            ".....kokqqkok...",
+        'yeux': [(6, 6), (8, 6)],
+        'ferme': 'E',
+        'bouche': (7, 7),
+        'bouche_lettre': 'e',
+        'epaule': (10, 9),
+        # l'orbe entre ses mains, qui luit, et les étincelles qui montent
+        'ouvrage': [
+            [(6, 10, ["kek"]), (6, 9, [".f."])],
+            [(6, 10, ["kfk"]), (6, 9, [".e."]), (5, 7, ["s"]), (10, 5, ["s"])],
+            [(6, 10, ["kek"]), (6, 9, [".f."]), (9, 4, ["s"]), (4, 6, ["s"])],
         ],
-        'bouche': (8, 8, ["MM"]),
     },
     'claudeterminal': {
-        'profil_couleur': '#3fb0a8',
-        'description': "le petit robot de ClaudeTerminal : un écran cathodique pour tête, le curseur qui clignote",
-        'palette': {'W': '#e6dcc0', 'V': '#a89a74', 'z': '#10241a', 'G': '#74e07a', 'C': '#8a90a0',
-                    'c': '#4a4e5c', 'b': '#74e07a', 'n': '#4a4e5c', 'a': '#2e343a', 'r': '#7a4a24',
-                    'R': '#4a2c16', 'g': '#b4b7bf', 'd': '#7c808c', 's': '#fff3b0', 'B': '#2b5fd8'},
-        'lettres': {'S': 'O', 'p': 'c'},
-        'ouvrage': CLAVIER,
-        'profil': [
-            "..kkkkkkkk......",
-            "..kWWWWWWVk.....",
-            "..kWzGzzzVk.....",
-            "..kWzzGzzVk.....",
-            "..kWzGzGGVk.....",
-            "..kkVVVVVkk.....",
+        'profil_couleur': '#d97757',
+        'description': "le petit ordinateur de ClaudeTerminal : un écran cathodique qui marche, deux yeux orange, le clavier",
+        'palette': {'W': '#ece4cc', 'V': '#b8ab88', 'z': '#1a2440', 'F': '#ff9a5a', 'a': '#4a4e5c',
+                    'B': '#2b5fd8', 'C': '#ece4cc', 'p': '#4a4e5c'},
+        'debout': [
+            "................",
+            "................",
+            "...kkkkkkkk.....",
+            "...kWWWWWWk.....",
+            "...kWzzzzVk.....",
+            "...kWFzFzVk.....",
+            "...kWFzFzVk.....",
+            "...kWzzzzVk.....",
+            "...kWWWWWVk.....",
+            "...kWWkkWVk.....",
+            "...kVVVVVVk.....",
+            "...kkkkkkkk.....",
+            ".....a..a.......",
+            ".....a..a.......",
+            "....kak.kak.....",
+            "....kkk.kkk.....",
         ],
-        'dort': [
-            "..kkkkkkkk......",
-            "..kWWWWWWVk.....",
-            "..kWzzzzzVk.....",
-            "..kWzzzzzVk.....",
-            "..kkVVVVVkk.....",
+        'assis': [
+            "................",
+            "................",
+            "................",
+            "................",
+            "................",
+            "...kkkkkkkk.....",
+            "...kWWWWWWk.....",
+            "...kWzzzzVk.....",
+            "...kWFzFzVk.....",
+            "...kWFzFzVk.....",
+            "...kWzzzzVk.....",
+            "...kWWWWWVk.....",
+            "...kWWkkWVk.....",
+            "...kVVVVVVk.....",
+            "...kkkkkkkkkak..",
+            ".........kkkkk..",
         ],
-        'face': [
-            "....kkkkkkkk....",
-            "....kWWWWWWVk...",
-            "....kWzGzzGVk...",
-            "....kWzzzzzVk...",
-            "....kWzzzzzVk...",
-            "....kkVVVVVkk...",
+        'yeux': [(5, 5), (7, 5)],
+        'ferme': 'z',
+        'bouche': (5, 7),
+        'bouche_lettre': 'FFF',
+        'epaule': (9, 8),
+        'triste': [(5, 4, ["BBBB", "BwBw", "BBBB", "wwwB"])],
+        'ouvrage': [
+            [(10, 8, ["a"]), (11, 9, ["a"]), (10, 11, ["kkkkkk"]), (10, 12, ["dgsgdk"]), (9, 13, ["kWWWWWk"]), (9, 14, ["kVVVVVk"]), (9, 15, ["kkkkkkk"])],
+            [(10, 9, ["a"]), (11, 10, ["a"]), (10, 11, ["kkkkkk"]), (10, 12, ["dggsdk"]), (9, 13, ["kWWWWWk"]), (9, 14, ["kVVVVVk"]), (9, 15, ["kkkkkkk"])],
         ],
-        'bouche': (7, 7, ["GG"]),
-        'triste': [(5, 5, ["BBBBB", "BwBwB", "BBBBB", "BwwwB"])],
+        'bras_attente': 'a',
     },
 }
 
@@ -401,90 +346,105 @@ def toile(corps, haut):
     return img
 
 
-def lettres(img, sub):
-    return [''.join(sub.get(c, c) for c in l) for l in img]
+def sub(lignes, table):
+    return [''.join(table.get(c, c) for c in l) for l in lignes]
 
 
-def robe(img, rangees):
-    """Les jambes d'une robe : de bord à bord, sans jour entre elles, et l'ourlet en contour."""
-    for y in rangees:
-        l = img[y]
-        g, d = l.find('k'), l.rfind('k')
-        if g < 0:
-            continue
-        mil = 'k' if y == 15 else 'c'
-        img[y] = l[:g] + 'k' + mil * (d - g - 1) + 'k' + l[d + 1:]
+def corps_commun(h, rangees, haut, dy_tete, sans_bras=False):
+    """Le corps commun aux couleurs de l'habitant, sa tête au-dessus (descendue de dy_tete)."""
+    corps = list(rangees)
+    if sans_bras:
+        for x, y in BRAS:
+            l = corps[y - 8]
+            corps[y - 8] = l[:x] + 'C' + l[x + 1:]
+    img = toile(sub(corps, h.get('corps', {})), haut)
+    for x, y, m in h.get('dos', []):
+        poser(img, x, y + dy_tete, m)
+    poser(img, 0, 2 + dy_tete, h['tete'])
+    for x, y, m in h.get('plus', []):
+        poser(img, x, y + dy_tete, m)
+    return img
 
 
 def habitant(nom, h):
-    sub = {'S': 'O'} | h.get('lettres', {})
-    dos = h.get('dos', [])
+    entier = 'debout' in h
+    ex, ey = h.get('epaule', EPAULE)
+    tc = h.get('corps', {})
+    ferme = h.get('ferme', 'q')
+    # de combien la tête descend quand il s'assoit
+    dy = {'galadriel': 3, 'claudeterminal': 3}.get(nom, 3)
 
-    def fini(img, debout=False):
-        if h.get('robe') and debout:
-            robe(img, [14, 15])
-        return lettres(img, sub)
+    def debout(sans_bras=False):
+        return list(h['debout']) if entier else corps_commun(h, DEBOUT, 8, 0, sans_bras)
+
+    def assis():
+        return list(h['assis']) if entier else corps_commun(h, ASSIS, 11, 3)
+
+    def yeux(img, lettre):
+        for x, y in h['yeux']:
+            poser(img, x, y + dy, [lettre])
+
+    def outil(objets):
+        # le bras prend les couleurs du corps ; l'outil garde les siennes (sauf lettres_outil)
+        if entier:
+            return objets
+        return [(x, y, sub(m, (tc if m in (["C"], ["p"]) else {}) | h.get('lettres_outil', {}))) for x, y, m in objets]
 
     etats = {}
     images = []
-    for bras, objets in h['ouvrage']:
-        img = toile(TRAVAIL_HAUT if bras == 'haut' else TRAVAIL_BAS, 9)
-        for x, y, m in dos:
+    for objets in h['ouvrage']:
+        img = debout(sans_bras=True)
+        for x, y, m in outil(objets):
             poser(img, x, y, m)
-        poser(img, 0, 3, h['profil'])
-        for x, y, m in objets:
-            poser(img, x, y, m)
-        images.append(fini(img, True))
+        images.append(img)
     etats['travail'] = {'every': 2, 'images': images}
 
     images = []
     for zs in ZZZ:
-        img = toile(REPOS, 11)
-        for x, y, m in dos:
-            poser(img, x, y + 2, m)
-        poser(img, 0, 6, h['dort'])
+        img = assis()
+        yeux(img, ferme)
         for x, y, m in zs:
             poser(img, x, y, m)
-        images.append(fini(img))
+        images.append(img)
     etats['repos'] = {'every': 4, 'images': images}
 
     images = []
-    for drapeau in DRAPEAU:
-        img = toile(ATTENTE, 9)
-        for x, y, m in dos:
+    for f in range(2):
+        img = debout(sans_bras=True)
+        for x, y, m in drapeau(ex, ey, f):
+            if m == ["C"]:
+                m = [h.get('bras_attente', 'N')] if entier else [tc.get('C', 'C')]
+            elif m == ["p"]:
+                m = [h.get('bras_attente', 'e')] if entier else [tc.get('p', 'p')]
             poser(img, x, y, m)
-        poser(img, 0, 0, drapeau)
-        poser(img, 0, 3, h['profil'])
-        for x, y, m in BRAS_LEVE:
-            poser(img, x, y, m)
-        images.append(fini(img, True))
+        images.append(img)
     etats['attente'] = {'every': 2, 'images': images}
 
     images = []
     for fumee in FUMEE:
-        img = toile(ECHEC, 10)
+        img = assis()
         for x, y, m in fumee:
             poser(img, x, y, m)
-        poser(img, -1, 4, h['face'])
-        bx, by, bm = h['bouche']
-        poser(img, bx - 1, by + 1, bm)
         for x, y, m in h.get('triste', []):
-            poser(img, x - 1, y + 1, m)
-        images.append(fini(img))
+            poser(img, x, y + dy, m)
+        if not h.get('triste'):
+            bx, by = h['bouche']
+            poser(img, bx, by + dy, [h.get('bouche_lettre', 'M')[0]])
+        images.append(img)
     etats['echec'] = {'every': 3, 'images': images}
 
     images = []
     for ouverte in (False, True):
-        img = toile(PARLE, 9)
-        poser(img, 0, 3, h['face'])
+        img = debout()
         if ouverte:
-            poser(img, *h['bouche'])
-        images.append(fini(img, True))
+            bx, by = h['bouche']
+            poser(img, bx, by, [h.get('bouche_lettre', 'M')])
+        images.append(img)
     etats['parle'] = {'every': 2, 'images': images}
 
     for e in etats.values():
         for img in e['images']:
-            assert all(len(l) == 16 for l in img) and len(img) == 16, nom
+            assert len(img) == 16 and all(len(l) == 16 for l in img), nom
     utilisees = {c for e in etats.values() for img in e['images'] for l in img for c in l} - {'.'}
     pal = BASE | h['palette']
     if 'profil_couleur' in h:
@@ -507,9 +467,11 @@ if __name__ == '__main__':
     for nom in noms:
         chemin = os.path.join(RACINE, f'{nom}.json')
         ancien = json.load(open(chemin, encoding='utf-8')) if os.path.exists(chemin) else None
-        h = habitant(nom, HABITANTS[nom])
         # un dessin validé par le user le reste : le gabarit ne le repasse pas à false en silence
+        h = habitant(nom, HABITANTS[nom])
         if ancien and ancien.get('valide'):
-            sys.exit(f'{nom} est validé : le refaire demande de remettre valide à false à la main')
+            # un validé ne se remplace pas : sa nouvelle version va à la revue, à côté
+            chemin = os.path.join(RACINE, 'revue', f'{nom}-nouveau.json')
+            os.makedirs(os.path.dirname(chemin), exist_ok=True)
         open(chemin, 'w', encoding='utf-8', newline='\n').write(ranger(h))
         print(nom)

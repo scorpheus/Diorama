@@ -6,6 +6,7 @@
     "w": "#f4f1ea",
     "g": "#b4b7bf",
     "d": "#7c808c",
+    "a": "#4a4e5c",
     "O": "#3f80dc",
     "o": "#1f4f9e",
     "y": "#e3a63c",
@@ -16,7 +17,6 @@
     "W": "#f2ead6",
     "V": "#c8bc9e",
     "r": "#7a4a24",
-    "R": "#4a2c16",
     "p": "#ecb48a",
     "m": "#141018",
     "c": "#7fd4ff",
@@ -32,7 +32,10 @@
     "u": "#dcdcea",
     "x": "#8d8896",
     "j": "#5aa08a",
-    "q": "#e08a6a"
+    "q": "#e08a6a",
+    "J": "#d8a85a",
+    "L": "#9a6a2c",
+    "A": "#a8aebc"
   },
   "accessoires": {
     "pigeon": {
@@ -466,7 +469,7 @@
     "bourse": {
       "taille": [10, 10],
       "every": 4,
-      "usage": "le coût de la session : 0 plate, 1 ronde, 2 pleine",
+      "usage": "le coût de la session : 0 presque vide, 1 à moitié, 2 pleine",
       "niveaux": [
         [
           [
@@ -474,40 +477,40 @@
             "..........",
             "..........",
             "..........",
-            "....kk....",
-            "...krrk...",
-            "...kyyk...",
-            "..krrrrk..",
-            ".krrrrRRk.",
-            ".kkkkkkkk."
+            "..kk..kk..",
+            "..kJkkJk..",
+            "..kEEEEk..",
+            ".kJJYYJLk.",
+            ".kJLJJLLk.",
+            "..kkkkkk.."
           ]
         ],
         [
           [
             "..........",
             "..........",
-            "....kk....",
-            "...krrk...",
-            "...kyyk...",
-            "..krrrrk..",
-            ".krrrrrRk.",
-            "krrrrrrRRk",
-            "krrrrrRRRk",
-            ".kkkkkkkk."
+            "..kk..kk..",
+            ".kJJkkJJk.",
+            "..kEEEEk..",
+            ".kJJJJJJk.",
+            "kJJJYYJJLk",
+            "kJJYyyYJLk",
+            ".kJJJJJLk.",
+            "..kkkkkk.."
           ]
         ],
         [
           [
-            "..k..kk...",
-            ".kYkkYyk..",
-            "..kyk.kk..",
-            "...kyyk...",
-            "..krrrrk..",
-            ".krrrrrRk.",
-            "krrrrrrRRk",
-            "krrrrrrRRk",
-            "krrrrRRRRk",
-            ".kkkkkkkk."
+            "..kk..kk..",
+            ".kJJkkJJk.",
+            "..kJJJJk..",
+            "..kEEEEk..",
+            ".kJJJJJJk.",
+            "kJJJYYJJLk",
+            "kJJYyyYJLk",
+            "kJJJYYJJLk",
+            ".kJJJJJLk.",
+            "..kkkkkk.."
           ]
         ]
       ]
@@ -659,59 +662,75 @@
       ]
     },
     "mineur": {
-      "taille": [8, 8],
+      "taille": [10, 12],
       "every": 2,
-      "usage": "un diagnostic de fond : part sous la barre d'onglets, tourné vers la droite (miroir pour la gauche)",
+      "usage": "un diagnostic de fond : part sous la barre d'onglets, la pioche sur l'épaule, tourné vers la droite (miroir pour la gauche)",
       "niveaux": [
         [
           [
-            "g...kkk.",
-            "gr.kyyyY",
-            ".rkppmk.",
-            "..rkOOk.",
-            "..kpOOpk",
-            "..kOOOk.",
-            "..kRkRk.",
-            ".kk..kk."
+            ".AAAk.....",
+            "Ak.r......",
+            "...rkkkk..",
+            "..rkyyyyYs",
+            "..rkpppmk.",
+            "...kpppmpk",
+            "....kppk..",
+            "...kOOOk..",
+            "...kOoOk..",
+            "...kOpOk..",
+            "...kNkNk..",
+            "..kak.kak."
           ],
           [
-            "g...kkk.",
-            "gr.kyyyY",
-            ".rkppmk.",
-            "..rkOOk.",
-            "..kpOOpk",
-            "..kOOOk.",
-            "...kRk..",
-            "..kkkk.."
+            ".AAAk.....",
+            "Ak.r......",
+            "...rkkkk..",
+            "..rkyyyyY.",
+            "..rkpppmk.",
+            "...kpppmpk",
+            "....kppk..",
+            "...kOOOk..",
+            "...kOoOk..",
+            "...kOpOk..",
+            "...kNNk...",
+            "...kaak..."
           ]
         ]
       ]
     },
     "mineur-lingot": {
-      "taille": [8, 8],
+      "taille": [10, 12],
       "every": 2,
-      "usage": "le même, qui revient avec un lingot quand son rapport est versé",
+      "usage": "le même, qui revient avec un lingot d'or levé quand son rapport est versé",
       "niveaux": [
         [
           [
-            "..kkkk..",
-            ".kYyyyk.",
-            ".pkyyyYp",
-            "..kppmk.",
-            "..kpOOpk",
-            "..kOOOk.",
-            "..kRkRk.",
-            ".kk..kk."
+            "..kkkkkk..",
+            ".pkYYYyk..",
+            "..pkkkkk..",
+            "..pkyyyyY.",
+            "...kpppmk.",
+            "...kpppmpk",
+            "....kppk..",
+            "...kOOOk..",
+            "...kOOOk..",
+            "...kOOOk..",
+            "...kNkNk..",
+            "..kak.kak."
           ],
           [
-            "..kkkk..",
-            ".kYyyyk.",
-            ".pkyyyYp",
-            "..kppmk.",
-            "..kpOOpk",
-            "..kOOOk.",
-            "...kRk..",
-            "..kkkk.."
+            "..kkkkkk..",
+            ".pkYYYyk..",
+            "..pkkkkk..",
+            "..pkyyyyY.",
+            "...kpppmk.",
+            "...kpppmpk",
+            "....kppk..",
+            "...kOOOk..",
+            "...kOOOk..",
+            "...kOOOk..",
+            "...kNNk...",
+            "...kaak..."
           ]
         ]
       ]

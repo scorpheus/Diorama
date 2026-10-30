@@ -207,6 +207,11 @@ def dossier_de_revue(dossier, teinte=None):
     # le marin d'abord (le validé), le voyageur ensuite, les accessoires à la fin
     ordre = lambda f: (os.path.basename(f) != 'marin.json', os.path.basename(f) != 'voyageur.json', f.endswith('accessoires.json'), f)
     tous.sort(key=ordre)
+    # la nouvelle version proposée d'un validé (gabarits.py la range ici), juste sous lui
+    for f in sorted(glob.glob(os.path.join(dossier, '*-nouveau.json'))):
+        base = os.path.join(racine, os.path.basename(f).replace('-nouveau', ''))
+        i = next((k for k, t in enumerate(tous) if os.path.samefile(t, base)), -1) if os.path.exists(base) else -1
+        tous.insert(i + 1, f)
     for f in tous:
         nom = os.path.splitext(os.path.basename(f))[0]
         png, gif = os.path.join(dossier, f'{nom}.png'), os.path.join(dossier, f'{nom}.gif')

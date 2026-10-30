@@ -21,6 +21,7 @@ PALETTE = {
     'c': '#7fd4ff', 'C': '#eef0f6', 'D': '#a8aebc', 'n': '#5a6070', 'N': '#3a3f4c',
     'E': '#e05050', 'H': '#ff8c2a', 'G': '#74e07a', 'B': '#3f80dc', 'P': '#b07cff',
     'u': '#dcdcea', 'x': '#8d8896', 'j': '#5aa08a', 'q': '#e08a6a',
+    'J': '#d8a85a', 'L': '#9a6a2c', 'A': '#a8aebc',
 }
 
 
@@ -126,13 +127,38 @@ def piece():
 
 
 def bourse():
-    plate = ["..........", "..........", "..........", "..........", "....kk....",
-             "...krrk...", "...kyyk...", "..krrrrk..", ".krrrrRRk.", ".kkkkkkkk."]
-    ronde = ["..........", "..........", "....kk....", "...krrk...", "...kyyk...",
-             "..krrrrk..", ".krrrrrRk.", "krrrrrrRRk", "krrrrrRRRk", ".kkkkkkkk."]
-    pleine = ["..k..kk...", ".kYkkYyk..", "..kyk.kk..", "...kyyk...", "..krrrrk..",
-              ".krrrrrRk.", "krrrrrrRRk", "krrrrrrRRk", "krrrrRRRRk", ".kkkkkkkk."]
-    return {'taille': [10, 10], 'every': 4, 'usage': "le coût de la session : 0 plate, 1 ronde, 2 pleine",
+    # le sac d'écus : deux oreilles, le lien rouge, le cuir clair, une pièce d'or dessinée dessus
+    pleine = ["..kk..kk..",
+              ".kJJkkJJk.",
+              "..kJJJJk..",
+              "..kEEEEk..",
+              ".kJJJJJJk.",
+              "kJJJYYJJLk",
+              "kJJYyyYJLk",
+              "kJJJYYJJLk",
+              ".kJJJJJLk.",
+              "..kkkkkk.."]
+    ronde = ["..........",
+             "..........",
+             "..kk..kk..",
+             ".kJJkkJJk.",
+             "..kEEEEk..",
+             ".kJJJJJJk.",
+             "kJJJYYJJLk",
+             "kJJYyyYJLk",
+             ".kJJJJJLk.",
+             "..kkkkkk.."]
+    plate = ["..........",
+             "..........",
+             "..........",
+             "..........",
+             "..kk..kk..",
+             "..kJkkJk..",
+             "..kEEEEk..",
+             ".kJJYYJLk.",
+             ".kJLJJLLk.",
+             "..kkkkkk.."]
+    return {'taille': [10, 10], 'every': 4, 'usage': "le coût de la session : 0 presque vide, 1 à moitié, 2 pleine",
             'niveaux': [[plate], [ronde], [pleine]]}
 
 
@@ -202,30 +228,38 @@ def arc():
 
 
 def mineur():
-    corps = ["..kRkRk.", ".kk..kk."], ["...kRk..", "..kkkk.."]
+    jambes = [["...kNkNk..", "..kak.kak."], ["...kNNk...", "...kaak..."]]
     images = []
-    for jambes in corps:
-        images.append(["g...kkk.",
-                       "gr.kyyyY",
-                       ".rkppmk.",
-                       "..rkOOk.",
-                       "..kpOOpk",
-                       "..kOOOk."] + list(jambes))
-    return {'taille': [8, 8], 'every': 2, 'usage': "un diagnostic de fond : part sous la barre d'onglets, tourné vers la droite (miroir pour la gauche)",
+    for f, j in enumerate(jambes):
+        images.append([".AAAk.....",
+                       "Ak.r......",
+                       "...rkkkk..",
+                       "..rkyyyyY" + ("s" if f == 0 else "."),
+                       "..rkpppmk.",
+                       "...kpppmpk",
+                       "....kppk..",
+                       "...kOOOk..",
+                       "...kOoOk..",
+                       "...kOpOk.."] + j)
+    return {'taille': [10, 12], 'every': 2, 'usage': "un diagnostic de fond : part sous la barre d'onglets, la pioche sur l'épaule, tourné vers la droite (miroir pour la gauche)",
             'niveaux': [images]}
 
 
 def mineur_lingot():
-    corps = ["..kRkRk.", ".kk..kk."], ["...kRk..", "..kkkk.."]
+    jambes = [["...kNkNk..", "..kak.kak."], ["...kNNk...", "...kaak..."]]
     images = []
-    for jambes in corps:
-        images.append(["..kkkk..",
-                       ".kYyyyk.",
-                       ".pkyyyYp",
-                       "..kppmk.",
-                       "..kpOOpk",
-                       "..kOOOk."] + list(jambes))
-    return {'taille': [8, 8], 'every': 2, 'usage': "le même, qui revient avec un lingot quand son rapport est versé",
+    for j in jambes:
+        images.append(["..kkkkkk..",
+                       ".pkYYYyk..",
+                       "..pkkkkk..",
+                       "..pkyyyyY.",
+                       "...kpppmk.",
+                       "...kpppmpk",
+                       "....kppk..",
+                       "...kOOOk..",
+                       "...kOOOk..",
+                       "...kOOOk.."] + j)
+    return {'taille': [10, 12], 'every': 2, 'usage': "le même, qui revient avec un lingot d'or levé quand son rapport est versé",
             'niveaux': [images]}
 
 
