@@ -1,6 +1,7 @@
 """Aperçu des habitants des onglets (habitants/*.json, contrat : habitants/LISEZMOI.md).
 
     python tools/habitants/apercu.py habitants/marin.json planche.png [--anime anim.gif] [--teinte #e05050]
+    python tools/habitants/apercu.py --revue revue.png habitants/*.json [--teinte #e05050]
 
 Vérifie le fichier (taille des images, lettres de la palette, états obligatoires) et dessine une
 planche : une rangée par état, ses images agrandies, puis l'habitant à sa vraie taille et deux
@@ -121,9 +122,105 @@ def anime(h, pal, chemin):
     images[0].save(chemin, save_all=True, append_images=images[1:], duration=TIC_MS, loop=0)
 
 
+def charger_accessoires(chemin, teinte=None):
+    d = json.load(open(chemin, encoding='utf-8'))
+    pal = {k: hexa(v) for k, v in d['palette'].items()}
+    if teinte:
+        pal['O'] = hexa(teinte)
+        pal['o'] = assombrir(pal['O'], 0.62)
+    fautes = []
+    if not isinstance(d.get('valide'), bool):
+        fautes.append('valide doit être true ou false')
+    for nom, a in d['accessoires'].items():
+        w, h = a['taille']
+        if not isinstance(a.get('every'), int) or a['every'] < 1:
+            fautes.append(f'{nom} : every doit être un entier ≥ 1')
+        if not a.get('niveaux') or not all(a['niveaux']):
+            fautes.append(f'{nom} : niveaux vide')
+        for n, niv in enumerate(a['niveaux']):
+            for i, img in enumerate(niv):
+                if len(img) != h or any(len(l) != w for l in img):
+                    fautes.append(f'{nom} niveau {n} image {i} : pas {w} × {h}')
+                if any(c != '.' and c not in pal for l in img for c in l):
+                    fautes.append(f'{nom} niveau {n} image {i} : lettre hors palette')
+    if fautes:
+        sys.exit(f'{chemin} refusé :\n  ' + '\n  '.join(fautes[:20]))
+    return d, pal
+
+
+def planche_accessoires(d, pal, loupe=6):
+    """Une rangée par niveau de chaque accessoire, ses images à la suite."""
+    rangs = [(nom, n, niv, a) for nom, a in d['accessoires'].items() for n, niv in enumerate(a['niveaux'])]
+    hmax = lambda a: a['taille'][1] * loupe + 6
+    W = 170 + max(len(niv) * (a['taille'][0] * loupe + 6) for _, _, niv, a in rangs) + 20
+    H = 10 + sum(hmax(a) + 4 for _, _, _, a in rangs) + 10
+    out = Image.new('RGBA', (W, H), (40, 42, 50, 255))
+    d_ = ImageDraw.Draw(out)
+    y = 10
+    for nom, n, niv, a in rangs:
+        w, h = a['taille']
+        titre = nom if len(a['niveaux']) == 1 else f'{nom} niveau {n}'
+        d_.text((10, y + hmax(a) // 2 - 6), f"{titre} x{a['every']}", fill=(220, 220, 220))
+        x = 170
+        for img in niv:
+            d_.rectangle([x, y, x + w * loupe + 3, y + h * loupe + 3], fill=(62, 66, 78))
+            out.alpha_composite(image(img, pal, loupe), (x + 2, y + 2))
+            x += w * loupe + 6
+        y += hmax(a) + 4
+    return out
+
+
+def revue(chemins, teinte=None):
+    """Tous les habitants l'un sous l'autre : chaque état et ses images, puis la vraie taille."""
+    loupe, marge, nomw = 5, 10, 120
+    rangs = [charger(c, teinte) for c in chemins]
+    largeur = max(sum(len(e['images']) for e in h['etats'].values()) * (16 * loupe + 4)
+                  + len(h['etats']) * 10 for h, _ in rangs)
+    W = nomw + largeur + marge * 2 + 70
+    rh = 16 * loupe + 22
+    out = Image.new('RGBA', (W, marge * 2 + len(rangs) * rh), (40, 42, 50, 255))
+    d = ImageDraw.Draw(out)
+    for r, (h, pal) in enumerate(rangs):
+        y = marge + r * rh
+        d.text((marge, y + 30), h['nom'], fill=(235, 235, 235))
+        d.text((marge, y + 46), 'valide' if h['valide'] else 'a valider', fill=(120, 200, 120) if h['valide'] else (220, 180, 90))
+        x = nomw
+        for nom, e in h['etats'].items():
+            d.text((x, y), nom, fill=(190, 190, 200))
+            for img in e['images']:
+                d.rectangle([x, y + 12, x + 16 * loupe + 1, y + 12 + 16 * loupe + 1], fill=(62, 66, 78))
+                out.alpha_composite(image(img, pal, loupe), (x + 1, y + 13))
+                x += 16 * loupe + 4
+            x += 10
+        # à vraie taille, sur une barre claire
+        d.rectangle([x + 4, y + 12, x + 60, y + 12 + 16 * loupe], fill=(232, 228, 220))
+        out.alpha_composite(image(h['etats']['travail']['images'][0], pal), (x + 10, y + 40))
+        out.alpha_composite(image(h['etats']['travail']['images'][0], pal, 2), (x + 28, y + 24))
+    return out
+
+
 if __name__ == '__main__':
     a = sys.argv[1:]
+    if a[0] == '--revue':
+        teinte = a[a.index('--teinte') + 1] if '--teinte' in a else None
+        fichiers = [f for f in a[2:] if f.endswith('.json') and not f.endswith('accessoires.json')]
+        out = revue(fichiers, teinte)
+        acc = [f for f in a[2:] if f.endswith('accessoires.json')]
+        if acc:
+            # les accessoires sous les habitants, dans la même planche
+            pa = planche_accessoires(*charger_accessoires(acc[0], teinte))
+            tout = Image.new('RGBA', (max(out.width, pa.width), out.height + pa.height), (40, 42, 50, 255))
+            tout.alpha_composite(out, (0, 0))
+            tout.alpha_composite(pa, (0, out.height))
+            out = tout
+        out.save(a[1])
+        print('ok')
+        sys.exit(0)
     teinte = a[a.index('--teinte') + 1] if '--teinte' in a else None
+    if a[0].endswith('accessoires.json'):
+        planche_accessoires(*charger_accessoires(a[0], teinte)).save(a[1])
+        print('ok')
+        sys.exit(0)
     h, pal = charger(a[0], teinte)
     planche(h, pal).save(a[1])
     if '--anime' in a:

@@ -1,0 +1,759 @@
+{
+  "nom": "accessoires",
+  "valide": false,
+  "palette": {
+    "k": "#1b1a24",
+    "w": "#f4f1ea",
+    "g": "#b4b7bf",
+    "d": "#7c808c",
+    "O": "#3f80dc",
+    "o": "#1f4f9e",
+    "y": "#e3a63c",
+    "Y": "#fff3b0",
+    "s": "#ffd75e",
+    "F": "#ff5a1f",
+    "f": "#ffb02e",
+    "W": "#f2ead6",
+    "V": "#c8bc9e",
+    "r": "#7a4a24",
+    "R": "#4a2c16",
+    "p": "#ecb48a",
+    "m": "#141018",
+    "c": "#7fd4ff",
+    "C": "#eef0f6",
+    "D": "#a8aebc",
+    "n": "#5a6070",
+    "N": "#3a3f4c",
+    "E": "#e05050",
+    "H": "#ff8c2a",
+    "G": "#74e07a",
+    "B": "#3f80dc",
+    "P": "#b07cff",
+    "u": "#dcdcea",
+    "x": "#8d8896",
+    "j": "#5aa08a",
+    "q": "#e08a6a"
+  },
+  "accessoires": {
+    "pigeon": {
+      "taille": [8, 6],
+      "every": 1,
+      "usage": "vole d'un onglet à l'autre quand une session écrit à une autre, la lettre dans les pattes",
+      "niveaux": [
+        [
+          [
+            "...kk...",
+            "..kgdk..",
+            ".kkgdkkk",
+            "kgggggjq",
+            ".kdggggk",
+            "...kwk.."
+          ],
+          [
+            "........",
+            "......kk",
+            "kddddkgq",
+            "kgggggjk",
+            ".kdggggk",
+            "...kwk.."
+          ],
+          [
+            "........",
+            "......kk",
+            ".kkgggjq",
+            "kggdgggk",
+            ".kdddkk.",
+            "..kdwk.."
+          ],
+          [
+            "........",
+            "......kk",
+            "kddddkgq",
+            "kgggggjk",
+            ".kdggggk",
+            "...kwk.."
+          ]
+        ]
+      ]
+    },
+    "toiles": {
+      "taille": [16, 16],
+      "every": 4,
+      "usage": "posé sur l'habitant d'une session au repos depuis longtemps : 0 poussière, 1 une toile, 2 toiles et araignée",
+      "niveaux": [
+        [
+          [
+            "................",
+            "................",
+            "................",
+            "..........x.....",
+            "...x............",
+            "................",
+            "................",
+            "................",
+            "................",
+            "......x.........",
+            "................",
+            "................",
+            "............x...",
+            "................",
+            "................",
+            "................"
+          ]
+        ],
+        [
+          [
+            "uuuuuu..........",
+            "uu..u...........",
+            "u.uu............",
+            "u.u.......x.....",
+            "uu.x............",
+            "u...............",
+            "................",
+            "................",
+            "................",
+            "......x.........",
+            "................",
+            "................",
+            "............x...",
+            "..x.............",
+            "................",
+            "................"
+          ]
+        ],
+        [
+          [
+            "uuuuuu....uuuuuu",
+            "uu..u......uu.uu",
+            "u.uu........uu.u",
+            "u.u.......x.uu.u",
+            "uu.x........u.uu",
+            "u..........k.k.u",
+            "........x...k...",
+            "...........k.k..",
+            "................",
+            "......x.........",
+            "................",
+            "................",
+            "............x...",
+            "..x.............",
+            "................",
+            "................"
+          ]
+        ]
+      ]
+    },
+    "bougie": {
+      "taille": [7, 16],
+      "every": 2,
+      "usage": "le contexte : niveau 0 presque fondue, 4 neuve (après un compactage) ; la flamme vacille",
+      "niveaux": [
+        [
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "...f...",
+            "..fYf..",
+            "...F...",
+            "...k...",
+            ".kkkkk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "....f..",
+            "...Yf..",
+            "...FF..",
+            "...k...",
+            ".kkkkk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "...f...",
+            "..fYf..",
+            "..FYF..",
+            "...k...",
+            ".kkkkk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ]
+        ],
+        [
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "...f...",
+            "..fYf..",
+            "...F...",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "....f..",
+            "...Yf..",
+            "...FF..",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "...f...",
+            "..fYf..",
+            "..FYF..",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ]
+        ],
+        [
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "...f...",
+            "..fYf..",
+            "...F...",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "....f..",
+            "...Yf..",
+            "...FF..",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+            "...f...",
+            "..fYf..",
+            "..FYF..",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ]
+        ],
+        [
+          [
+            ".......",
+            ".......",
+            ".......",
+            "...f...",
+            "..fYf..",
+            "...F...",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            ".......",
+            ".......",
+            "....f..",
+            "...Yf..",
+            "...FF..",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            ".......",
+            ".......",
+            "...f...",
+            "..fYf..",
+            "..FYF..",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ]
+        ],
+        [
+          [
+            ".......",
+            "...f...",
+            "..fYf..",
+            "...F...",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            "....f..",
+            "...Yf..",
+            "...FF..",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ],
+          [
+            ".......",
+            "...f...",
+            "..fYf..",
+            "..FYF..",
+            "...k...",
+            ".kkkkk.",
+            ".kWWVk.",
+            ".WWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            ".kWWVk.",
+            "kyyyyyk",
+            ".kkkkk."
+          ]
+        ]
+      ]
+    },
+    "piece": {
+      "taille": [4, 4],
+      "every": 1,
+      "usage": "une pièce qui tourne en tombant vers la bourse, au fil des jetons dépensés",
+      "niveaux": [
+        [
+          [
+            ".kk.",
+            "kYyk",
+            "kyyk",
+            ".kk."
+          ],
+          [
+            ".kk.",
+            ".kYk",
+            ".kyk",
+            ".kk."
+          ],
+          [
+            "..k.",
+            "..k.",
+            "..k.",
+            "..k."
+          ],
+          [
+            ".kk.",
+            "kYk.",
+            "kyk.",
+            ".kk."
+          ]
+        ]
+      ]
+    },
+    "bourse": {
+      "taille": [10, 10],
+      "every": 4,
+      "usage": "le coût de la session : 0 plate, 1 ronde, 2 pleine",
+      "niveaux": [
+        [
+          [
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "....kk....",
+            "...krrk...",
+            "...kyyk...",
+            "..krrrrk..",
+            ".krrrrRRk.",
+            ".kkkkkkkk."
+          ]
+        ],
+        [
+          [
+            "..........",
+            "..........",
+            "....kk....",
+            "...krrk...",
+            "...kyyk...",
+            "..krrrrk..",
+            ".krrrrrRk.",
+            "krrrrrrRRk",
+            "krrrrrRRRk",
+            ".kkkkkkkk."
+          ]
+        ],
+        [
+          [
+            "..k..kk...",
+            ".kYkkYyk..",
+            "..kyk.kk..",
+            "...kyyk...",
+            "..krrrrk..",
+            ".krrrrrRk.",
+            "krrrrrrRRk",
+            "krrrrrrRRk",
+            "krrrrRRRRk",
+            ".kkkkkkkk."
+          ]
+        ]
+      ]
+    },
+    "meteo-soleil": {
+      "taille": [16, 8],
+      "every": 4,
+      "usage": "la météo : tout va bien",
+      "niveaux": [
+        [
+          [
+            "........s.......",
+            ".......ff.......",
+            "......sYss......",
+            ".....fYYssf.....",
+            "...ssfssssfss...",
+            "......ssss......",
+            ".......ff.......",
+            "........s......."
+          ],
+          [
+            "....s......s....",
+            ".....s.ff.s.....",
+            "......sYss......",
+            ".....fYYssf.....",
+            ".....fssssf.....",
+            "......ssss......",
+            ".....s.ff.s.....",
+            "....s......s...."
+          ]
+        ]
+      ]
+    },
+    "meteo-averse": {
+      "taille": [16, 8],
+      "every": 1,
+      "usage": "la météo : une compilation ratée",
+      "niveaux": [
+        [
+          [
+            "......kkk.......",
+            "....kkCCCkkk....",
+            "...kCCCCCCCCk...",
+            "..kCCCCCCCCCCk..",
+            "...kDDDDDDDDk...",
+            "....c.......c...",
+            ".....c.c........",
+            ".........cc....."
+          ],
+          [
+            "......kkk.......",
+            "....kkCCCkkk....",
+            "...kCCCCCCCCk...",
+            "..kCCCCCCCCCCk..",
+            "...kDDDDDDDDk...",
+            ".........cc.....",
+            "....c.......c...",
+            ".....c.c........"
+          ],
+          [
+            "......kkk.......",
+            "....kkCCCkkk....",
+            "...kCCCCCCCCk...",
+            "..kCCCCCCCCCCk..",
+            "...kDDDDDDDDk...",
+            ".....c.c........",
+            ".........cc.....",
+            "....c.......c..."
+          ]
+        ]
+      ]
+    },
+    "meteo-orage": {
+      "taille": [16, 8],
+      "every": 2,
+      "usage": "la météo : un plantage",
+      "niveaux": [
+        [
+          [
+            "......kkk.......",
+            "....kknnnkkk....",
+            "...knnnnnnnnk...",
+            "..knnnnnnnnnnk..",
+            "...kNNNNNNNNk...",
+            "................",
+            "................",
+            "................"
+          ],
+          [
+            "......kkk.......",
+            "....kknnnkkk....",
+            "...knnnnnnnnk...",
+            "..knnnnnnnnnnk..",
+            "...kNNNNNNNNk...",
+            "........Y.......",
+            ".......YY.......",
+            ".......Y........"
+          ],
+          [
+            "......kkk.......",
+            "....kkDDDkkk....",
+            "...kDDDDDDDDk...",
+            "..kDDDDDDDDDDk..",
+            "...kNNNNNNNNk...",
+            "........Y.......",
+            ".......YY.......",
+            ".......Y........"
+          ],
+          [
+            "......kkk.......",
+            "....kknnnkkk....",
+            "...knnnnnnnnk...",
+            "..knnnnnnnnnnk..",
+            "...kNNNNNNNNk...",
+            "................",
+            "................",
+            "................"
+          ]
+        ]
+      ]
+    },
+    "meteo-arc": {
+      "taille": [16, 8],
+      "every": 3,
+      "usage": "la météo : un test qui passe",
+      "niveaux": [
+        [
+          [
+            ".....EEEEEE.....",
+            "...EEEEEEEEEE...",
+            "..EEEEHHHHEEEE..",
+            ".EEEHHssssHHEEE.",
+            "EEHHssGGGGssHHEE",
+            "EEHsGGBBBBGGsHEE",
+            "EHssGBPPPPBGssHE",
+            "EHsGBPP..PPBGsHE"
+          ],
+          [
+            ".....EEEEEEw....",
+            "...EwEEEEEEEE...",
+            "..EEEEHHHHEEEE..",
+            ".EEEHHssssHHEEE.",
+            "EEHHssGGGGssHHEE",
+            "EEHsGGBBBBGGsHEE",
+            "EHssGBPPPPBGssHE",
+            "EHsGBPP..PPBGsHE"
+          ]
+        ]
+      ]
+    },
+    "mineur": {
+      "taille": [8, 8],
+      "every": 2,
+      "usage": "un diagnostic de fond : part sous la barre d'onglets, tourné vers la droite (miroir pour la gauche)",
+      "niveaux": [
+        [
+          [
+            "g...kkk.",
+            "gr.kyyyY",
+            ".rkppmk.",
+            "..rkOOk.",
+            "..kpOOpk",
+            "..kOOOk.",
+            "..kRkRk.",
+            ".kk..kk."
+          ],
+          [
+            "g...kkk.",
+            "gr.kyyyY",
+            ".rkppmk.",
+            "..rkOOk.",
+            "..kpOOpk",
+            "..kOOOk.",
+            "...kRk..",
+            "..kkkk.."
+          ]
+        ]
+      ]
+    },
+    "mineur-lingot": {
+      "taille": [8, 8],
+      "every": 2,
+      "usage": "le même, qui revient avec un lingot quand son rapport est versé",
+      "niveaux": [
+        [
+          [
+            "..kkkk..",
+            ".kYyyyk.",
+            ".pkyyyYp",
+            "..kppmk.",
+            "..kpOOpk",
+            "..kOOOk.",
+            "..kRkRk.",
+            ".kk..kk."
+          ],
+          [
+            "..kkkk..",
+            ".kYyyyk.",
+            ".pkyyyYp",
+            "..kppmk.",
+            "..kpOOpk",
+            "..kOOOk.",
+            "...kRk..",
+            "..kkkk.."
+          ]
+        ]
+      ]
+    },
+    "bulle": {
+      "taille": [12, 8],
+      "every": 3,
+      "usage": "la ligne « Dit : » prononcée : sort de l'onglet, trois points qui s'écrivent",
+      "niveaux": [
+        [
+          [
+            "..kkkkkkkk..",
+            ".kwwwwwwwwk.",
+            "kwwwwwwwwwwk",
+            "kwwmwwwwwwwk",
+            "kwwwwwwwwwwk",
+            ".kwwwwwwwwk.",
+            "..kwkkkkkk..",
+            "..kk........"
+          ],
+          [
+            "..kkkkkkkk..",
+            ".kwwwwwwwwk.",
+            "kwwwwwwwwwwk",
+            "kwwmwwmwwwwk",
+            "kwwwwwwwwwwk",
+            ".kwwwwwwwwk.",
+            "..kwkkkkkk..",
+            "..kk........"
+          ],
+          [
+            "..kkkkkkkk..",
+            ".kwwwwwwwwk.",
+            "kwwwwwwwwwwk",
+            "kwwmwwmwwmwk",
+            "kwwwwwwwwwwk",
+            ".kwwwwwwwwk.",
+            "..kwkkkkkk..",
+            "..kk........"
+          ]
+        ]
+      ]
+    }
+  }
+}

@@ -4,8 +4,7 @@ Un personnage par profil, dans le style du Diorama, que la barre d'onglets de Cl
 l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\KT\.claude\projets\onglets-habitants.md`).
 
 - **Où** : dépôt Diorama, dossier `habitants/`. Un fichier par personnage, `habitants/<nom>.json` (UTF-8). Les
-  accessoires (pigeon, toiles, bougie, bourse, météo, mineurs, bulle) viendront dans `habitants/accessoires.json`, mêmes
-  images, format écrit ici avant d'être dessinés.
+  accessoires (pigeon, toiles, bougie, bourse, météo, mineurs, bulle) tous dans `habitants/accessoires.json` (plus bas).
 - **Format** : le dessin à lettres des thèmes du Diorama (THEMES.md), une lettre par pixel, `.` transparent.
   ```json
   { "nom": "marin", "description": "…", "valide": false, "taille": [16, 16],
@@ -23,7 +22,7 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
 
   | état | quand | ce qu'on voit |
   |---|---|---|
-  | `travail` | la session travaille | tape au clavier |
+  | `travail` | la session travaille | à son ouvrage : clavier (marin, voyageur, claudeterminal), enclume, roue, pierre, orbe, volant |
   | `repos` | la session est au repos | dort, des Z montent |
   | `attente` | la session attend le user | agite un drapeau |
   | `echec` | erreur, échec | assis dans la fumée |
@@ -37,8 +36,29 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   refuse un fichier faux (taille, lettre hors palette, état obligatoire absent, `every` non entier ≥ 1) et dessine
   la planche. Le lecteur de ClaudeTerminal refuse les mêmes fautes et prend alors le voyageur.
 - **Profil → habitant** : à ClaudeTerminal (sa config ; par défaut, le nom du profil en minuscules sans accents).
-  Fichiers prévus : `galadriel` (Orchestratrice), `forgeron` (Endurance), `marin` (Diorama, Route du Rhum), `mecano`
-  (vehigraph), `tailleur` (LaPierreDesMots), `voyageur`.
+  Les habitants : `galadriel` (Orchestratrice), `forgeron` (Endurance), `marin` (Diorama, Route du Rhum), `mecano`
+  (vehigraph), `tailleur` (LaPierreDesMots), `europa` (Europa, une pilote de rallye), `claudeterminal` (ClaudeTerminal,
+  un robot à tête d'écran), `voyageur` (tous les autres, dont « Claude »). Ils sont faits d'un même gabarit,
+  `tools/habitants/gabarits.py` (corps et poses communs, tête et ouvrage propres) : un nouvel habitant y est une entrée.
+- **Accessoires** : `habitants/accessoires.json`, une palette pour tous (complète, `"#rrggbb"`, `O`/`o` à la couleur
+  du profil comme chez les habitants), et chaque accessoire nommé :
+  ```json
+  { "nom": "accessoires", "valide": false, "palette": { … },
+    "accessoires": { "pigeon": { "taille": [8, 6], "every": 1, "usage": "…", "niveaux": [ [ image, image, … ] ] }, … } }
+  ```
+  - `niveaux` : une liste de niveaux, chacun une liste d'images jouées en boucle à `every` tics de 150 ms. Un
+    accessoire animé seul n'a qu'un niveau. Un accessoire qui suit une grandeur (la bougie, les toiles, la bourse) en a
+    plusieurs, du plus bas au plus haut : le lecteur prend le niveau `min(n − 1, ⌊f × n⌋)` pour une fraction `f` de 0
+    à 1, ou l'indice qu'il tient lui-même (les toiles : 0, 1, 2 selon ses seuils de repos).
+  - Placement : par le milieu du bord bas, agrandi du même facteur entier que l'habitant. Les accessoires dessinés
+    tournés vers la droite (`pigeon`, `mineur`, `mineur-lingot`) se retournent en miroir pour aller à gauche.
+    `toiles` fait 16 × 16 et se pose **sur** l'habitant, au même point.
+  - `usage` dit en une phrase quand le montrer ; la liste : `pigeon` (vol d'un onglet à l'autre), `toiles` (repos
+    long : 0 poussière, 1 une toile, 2 toiles et araignée), `bougie` (contexte : niveaux du plus fondu au plus neuf,
+    flamme qui vacille), `piece` (une pièce qui tourne en tombant), `bourse` (le coût : plate, ronde, pleine),
+    `meteo-soleil`, `meteo-averse`, `meteo-orage`, `meteo-arc` (16 × 8, au-dessus de l'onglet), `mineur` (part au
+    diagnostic de fond), `mineur-lingot` (revient avec le rapport), `bulle` (la ligne « Dit : », trois points qui
+    s'animent).
 - **File des demandes** (le paragraphe « Si aucune session Diorama n'est ouverte ») : `habitants/demandes/<nom>.json`,
   écrit par ClaudeTerminal ou l'orchestratrice, `{ "nom", "profil", "couleur": "#rrggbb", "sujet": "ce que fait le
   profil, en une phrase", "le": "AAAA-MM-JJ" }`. La session Diorama dessine `habitants/<nom>.json` avec `valide: false`,
@@ -48,4 +68,6 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   que l'habitant. Exemple : `habitants/demandes/vehigraph.json` →
   `{ "nom": "vehigraph", "profil": "vehigraph", "couleur": "#4a9e5c", "sujet": "outil de diagnostic véhicule", "le": "2026-11-03" }`.
   La file n'est pas suivie par git (`.gitignore`) : elle vit sur le disque de la machine, pas dans l'historique.
-- **Fait** : `marin.json` (premier habitant, `valide: false` en attendant l'avis du user).
+- **Fait** : `marin.json` validé (30-10) ; `voyageur`, `galadriel`, `forgeron`, `mecano`, `tailleur`, `europa`,
+  `claudeterminal` et `accessoires.json` dessinés, `valide: false`, pour une seule revue
+  (`python tools/habitants/apercu.py --revue revue.png habitants/*.json`).

@@ -1,7 +1,7 @@
 {
   "nom": "marin",
   "description": "le marin en ciré jaune et suroît, l'écharpe à la couleur du profil (Diorama, Route du Rhum)",
-  "valide": false,
+  "valide": true,
   "taille": [16, 16],
   "palette": {
     "k": "#1b1a24",
