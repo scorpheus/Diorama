@@ -101,10 +101,19 @@ nœuds. Écrire dans un fichier à côté, puis le renommer : la session ne doit
 sans dépendance. Rejoué sur 2022 (`--annee 2022 --instant 2022-11-12T14:00Z`), il donne 138 bateaux
 et un premier par classe. **Reste à faire** quand la carte 2026 sera en ligne, sans doute avant le
 1er novembre :
-- le relancer une fois, pour vérifier les noms des classes et l'état avant le départ ;
+- ~~le relancer une fois, pour vérifier les noms des classes et l'état avant le départ~~ : fait le 30 octobre (ci-dessous) ;
 - ~~le faire tourner pendant la course~~ : fait, la session désignée le lance tous les quarts
   d'heure (`rhumFetch` dans `hooks/register.tsx`), d'une semaine avant le départ à quarante jours
   après.
+
+**Fait sur le PC, le 30 octobre** : la carte 2026 n'est pas sur `routedurhum.geovoile.com/2026/tracker/`
+(toujours « Mise en ligne à venir ») mais sur `carto.routedurhum.com/fr/index.html`, la page que
+charge `routedurhum.com/cartographie` ; c'est le même tracker GeoVoile. Le script la lit : 115 bateaux
+au port, état `STANDBY`, départ `2026-11-01T12:02Z` (celui du plugin). Les classes Rhum Mono et Rhum
+Multi s'y appellent **Vintage Mono** et **Vintage Multi** (13 chacune) : le plugin, le script et le
+cerveau de ClaudeTerminal les nomment ainsi, et lisent encore les anciens noms. Le script dit
+désormais au journal une classe qu'il laisse de côté, et ne perd plus un pointage quand Edge tient
+encore son profil temporaire.
 
 Le rejeu a montré un piège, déjà corrigé dans le plugin : un bateau qui abandonne a, chez GeoVoile,
 le rang 0 et 0 mille à faire. Il serait devenu premier de sa classe, et le décor serait parti en

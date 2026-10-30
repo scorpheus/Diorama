@@ -101,7 +101,7 @@ Ce fichier, quiconque a les données l'écrit : un script, un orchestrateur. Son
 }
 ```
 
-- `classe` : `Ultim`, `Ocean Fifty`, `IMOCA`, `Class40`, `Rhum Multi` ou `Rhum Mono`.
+- `classe` : `Ultim`, `Ocean Fifty`, `IMOCA`, `Class40`, `Vintage Multi` ou `Vintage Mono` (`Rhum Multi` et `Rhum Mono`, leurs noms jusqu'en 2022, sont lus aussi).
 - `couleurs` : la coque, puis la bande.
 - `rang` : le rang dans la classe, déduit de `dtf` s'il manque.
 - `dtf` : les milles jusqu'à l'arrivée.

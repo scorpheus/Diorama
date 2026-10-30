@@ -1723,6 +1723,9 @@ test("the fleet's last report shows on the chart, colours the bay's boats, and n
       { nom: 'Trimaran Rouge', classe: 'ULTIM', lat: 31.2, lon: -32.1, rang: 2, dtf: 1850 },
       { nom: 'Monocoque Noir', classe: 'imoca', lat: 40.5, lon: -15.2, dtf: 2600 },
       { nom: 'Sans classe', classe: 'Optimist', lat: 40, lon: -10 },
+      // the 2026 tracker's name for the old Rhum Mono, and the old name itself
+      { nom: 'Vieux Gréement', classe: 'Vintage Mono', lat: 45, lon: -8, dtf: 3000 },
+      { nom: 'Vieux Trimaran', classe: 'Rhum Multi', lat: 46, lon: -9, dtf: 3100 },
     ],
   })
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 3, 15, 0) })
@@ -1732,10 +1735,10 @@ test("the fleet's last report shows on the chart, colours the bay's boats, and n
   await clock.advance(450)
   const line = (await ui.find({ text: /^ {3}\S+ · 1er / }))?.text ?? ''
   expect(line).toMatch(/^ {3}(Ultim · 1er Trimaran Bleu \(A\. Marin\) · 1 771 milles · 31,3 nœuds|IMOCA · 1er Monocoque Noir · 2 600 milles) · pointage \d\dh00$/)
-  expect(await ui.find({ text: /Route du Rhum : pointage de \d\dh00, 3 bateaux/ })).toBeDefined()
+  expect(await ui.find({ text: /Route du Rhum : pointage de \d\dh00, 5 bateaux/ })).toBeDefined()
   const w = worldsPosted().at(-1)
   // the boat without a known class is left out; the IMOCA's rank comes from its distance
-  expect(w?.rhumFlotte).toEqual([[0, 30, -34, 1], [0, 31.2, -32.1, 2], [2, 40.5, -15.2, 1]])
+  expect(w?.rhumFlotte).toEqual([[0, 30, -34, 1], [0, 31.2, -32.1, 2], [2, 40.5, -15.2, 1], [5, 45, -8, 1], [4, 46, -9, 1]])
   expect(w?.rhumTetes).toEqual([[0, 0x1d3f8a, 0xf2c14e]])
   // the scenery travels with the leaders: 1 771 of 3 542 miles still to go
   expect(w?.rhumProgress).toBe(0.5)

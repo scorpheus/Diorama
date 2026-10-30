@@ -1681,7 +1681,8 @@ function rhumProgressAt(ms: number): number {
 
 const RHUM_DATA = 'diorama-route-du-rhum.json'
 /** The race's classes, in the order the native render numbers them. */
-const RHUM_CLASSES = ['Ultim', 'Ocean Fifty', 'IMOCA', 'Class40', 'Rhum Multi', 'Rhum Mono'] as const
+// the last two were Rhum Multi and Rhum Mono until 2022; the 2026 tracker calls them Vintage
+const RHUM_CLASSES = ['Ultim', 'Ocean Fifty', 'IMOCA', 'Class40', 'Vintage Multi', 'Vintage Mono'] as const
 type RhumBoat = { name: string; skipper?: string; cls: number; colours?: readonly [number, number]; lat: number; lon: number; rank?: number; dtf?: number; speed?: number; out?: true; arrived?: true; track?: ReadonlyArray<readonly [number, number]> }
 /** The statuses of a boat out of the race: retired, not started, disqualified (GeoVoile says RET). */
 const RHUM_OUT = /^(ret|abd|abandon|dnf|dns|dsq|np)$/i
@@ -1690,7 +1691,7 @@ type RhumFleet = { at: number; boats: RhumBoat[] }
 /** A class by its name, however written: « class 40 », « Ocean50 », « rhum-mono ». */
 function classOf(name: unknown): number {
   const key = String(name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
-  const known: Record<string, number> = { ultim: 0, oceanfifty: 1, ocean50: 1, imoca: 2, class40: 3, rhummulti: 4, rhummono: 5 }
+  const known: Record<string, number> = { ultim: 0, oceanfifty: 1, ocean50: 1, imoca: 2, class40: 3, rhummulti: 4, rhummono: 5, vintagemulti: 4, vintagemono: 5 }
   return known[key] ?? -1
 }
 

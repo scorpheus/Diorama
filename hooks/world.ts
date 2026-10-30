@@ -110,7 +110,7 @@ export type World = {
   rhum?: 'before' | 'race'
   /** Where the race stands, 0 at the start to 1 at the first arrivals: the native render's scenery travels (Saint-Malo, the open sea, the Azores, the tropics, Guadeloupe). */
   rhumProgress?: number
-  /** The fleet at its last report, for the native render's chart: [class, latitude, longitude, rank in its class]; the classes Ultim, Ocean Fifty, IMOCA, Class40, Rhum Multi, Rhum Mono. */
+  /** The fleet at its last report, for the native render's chart: [class, latitude, longitude, rank in its class]; the classes Ultim, Ocean Fifty, IMOCA, Class40, Vintage Multi, Vintage Mono. */
   rhumFlotte?: ReadonlyArray<readonly [number, number, number, number]>
   /** Each class leader's colours, for the boats in the bay: [class, hull, stripe], 0xRRGGBB. */
   rhumTetes?: ReadonlyArray<readonly [number, number, number]>

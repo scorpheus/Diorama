@@ -8,6 +8,10 @@
 //   node tools/route-du-rhum-suivre.mts --annee 2022 --instant 2022-11-12T14:00Z --une-fois
 //                                                       rejoue un instant d'une édition passée
 //   node tools/route-du-rhum-suivre.mts --sortie <fichier>   écrit ailleurs (--sortie - : à l'écran)
+//   node tools/route-du-rhum-suivre.mts --url <page>    une autre page du tracker
+//
+// En 2026, la carte officielle n'est plus sur routedurhum.geovoile.com (« Mise en ligne à venir »
+// jusqu'au départ) mais sur carto.routedurhum.com, le même tracker GeoVoile sous le nom de la course.
 //
 // Les positions arrivent chiffrées du serveur de GeoVoile ; seul leur JavaScript les décode. On
 // charge donc la carte dans Edge (ou Chrome) sans fenêtre, par le protocole de ses outils de
@@ -34,7 +38,7 @@ const minutes = Math.max(10, Number(option('--minutes') ?? 15))
 const uneFois = args.includes('--une-fois')
 const config = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
 const sortie = option('--sortie') ?? join(config, 'diorama-route-du-rhum.json')
-const url = `https://routedurhum.geovoile.com/${annee}/tracker/`
+const url = option('--url') ?? (annee === '2026' ? 'https://carto.routedurhum.com/fr/index.html' : `https://routedurhum.geovoile.com/${annee}/tracker/`)
 const SAINT_MALO = { lat: 48.65, lon: -2.02 }
 
 const navigateur = [
@@ -87,7 +91,7 @@ const LIRE = (quand: number | null) => {
         skipper: marin ? `${marin.fname ?? ''} ${marin.lname ?? ''}`.trim() : null,
         classe: classe[b.id] ?? null,
         coque: b.hullColors ?? [],
-        trace: b.mainColor ?? b.track?.color ?? null,
+        couleur: b.mainColor ?? b.track?.color ?? null,
         position: position(b),
         rang: l?.rank ?? null,
         dtf: l?.dtf ?? null,
@@ -139,9 +143,16 @@ async function lireLeTracker(): Promise<ReturnType<typeof LIRE>> {
     return lu
   } finally {
     ws?.close()
+    // Edge fermé pour de bon avant d'ôter son profil : sous Windows, il le tient encore un moment,
+    // et un profil qui résiste ne doit pas faire perdre un pointage déjà lu
+    const ferme = new Promise(r => p.once('exit', r))
     p.kill()
-    await dormir(500)
-    rmSync(profil, { recursive: true, force: true, maxRetries: 3 })
+    await Promise.race([ferme, dormir(5000)])
+    try {
+      rmSync(profil, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
+    } catch (e) {
+      console.log(`${heure()}  profil ${profil} laissé : ${e instanceof Error ? e.message : e}`)
+    }
   }
 }
 
@@ -152,8 +163,8 @@ function classeDe(nom: string | null): string | undefined {
   if (k.includes('fifty') || k.startsWith('ocean50')) return 'Ocean Fifty'
   if (k.startsWith('imoca')) return 'IMOCA'
   if (k.startsWith('class40')) return 'Class40'
-  if (k.startsWith('rhummulti')) return 'Rhum Multi'
-  if (k.startsWith('rhummono')) return 'Rhum Mono'
+  if (k.startsWith('rhummulti') || k.startsWith('vintagemulti')) return 'Vintage Multi'
+  if (k.startsWith('rhummono') || k.startsWith('vintagemono')) return 'Vintage Mono'
   return undefined
 }
 
@@ -161,7 +172,9 @@ function classeDe(nom: string | null): string | undefined {
 function couleursDe(coque: string[], trace: string | null): [string, string] | undefined {
   const c = coque.filter(x => /^[0-9a-f]{6}$/i.test(x))
   const fond = c[0] ?? trace
-  const bande = [trace, c[2], c[1], c[3]].find(x => x && /^[0-9a-f]{6}$/i.test(x) && x.toLowerCase() !== fond?.toLowerCase())
+  // une bande qui se voit sur la coque : #FEFEFE sur #FFFFFF n'en est pas une
+  const ecart = (a: string, b: string) => [0, 2, 4].reduce((s, i) => s + Math.abs(parseInt(a.slice(i, i + 2), 16) - parseInt(b.slice(i, i + 2), 16)), 0)
+  const bande = [trace, c[2], c[1], c[3]].find(x => x && /^[0-9a-f]{6}$/i.test(x) && (!fond || ecart(x, fond) > 60))
   return fond && bande ? [`#${fond}`, `#${bande}`] : undefined
 }
 
@@ -173,13 +186,15 @@ async function pointer(): Promise<void> {
     console.log(`${heure()}  ${url} : ${lu.pas} ; rien d'écrit`)
     return
   }
+  const inconnues = new Map<string, number>()
   const bateaux = lu.bateaux.flatMap((b: any) => {
     const classe = classeDe(b.classe)
+    if (!classe) inconnues.set(String(b.classe), (inconnues.get(String(b.classe)) ?? 0) + 1)
     if (!classe || !b.nom) return []
     // avant le départ, les inscrits sans position sont au port
     const pos = b.position ?? (lu.pointage === null ? SAINT_MALO : null)
     if (!pos) return []
-    const couleurs = couleursDe(b.coque, b.trace)
+    const couleurs = couleursDe(b.coque, b.couleur)
     return [{
       nom: b.nom,
       ...(b.skipper ? { skipper: b.skipper } : {}),
@@ -194,6 +209,8 @@ async function pointer(): Promise<void> {
       ...(Array.isArray(b.trace) && b.trace.length > 1 ? { trace: b.trace } : {}),
     }]
   })
+  // une classe que le plugin ne connaît pas ne s'écrit pas : on le dit, pour qu'elle ne manque pas en silence
+  if (inconnues.size > 0) console.log(`${heure()}  classes laissées de côté : ${[...inconnues].map(([c, n]) => `${c} (${n})`).join(', ')}`)
   if (bateaux.length === 0) {
     console.log(`${heure()}  ${url} : aucun bateau lisible (état ${lu.etat}) ; rien d'écrit`)
     return
@@ -208,7 +225,9 @@ async function pointer(): Promise<void> {
   const cote = `${sortie}.${process.pid}.tmp`
   writeFileSync(cote, texte)
   renameSync(cote, sortie)
-  console.log(`${heure()}  pointage de ${at} (état ${lu.etat}) : ${bateaux.length} bateaux (${parClasse}) → ${sortie}`)
+  // le départ que donne le tracker, à comparer à celui du plugin (RHUM_START, 1er novembre 12h02 UTC)
+  const depart = typeof lu.depart === 'number' ? `, départ ${new Date(lu.depart * 1000).toISOString().replace(/:00\.000Z$/, 'Z')}` : ''
+  console.log(`${heure()}  pointage de ${at} (état ${lu.etat}${depart}) : ${bateaux.length} bateaux (${parClasse}) → ${sortie}`)
 }
 
 for (;;) {

@@ -417,6 +417,39 @@ mod film {
         std::fs::write(std::env::var("FILM").unwrap(), super::png(&out, vue as u32, ((h + 4) * ages.len() as i32) as u32)).unwrap();
     }
 
+    /// Ce que coûte une image de la session de la course telle qu'elle tourne le 30 octobre : la
+    /// flotte réelle au port (115 bateaux, tous à Saint-Malo), forge et belvédère, avant le
+    /// départ et pendant le spectacle : cargo test --release chrono_rhum_reel -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn chrono_rhum_reel() {
+        use std::time::Instant;
+        let (cw, ch, n) = (9i32, 19i32, 200);
+        let (w, h) = (149 * cw, 16 * ch);
+        let mut px = vec![0u32; (w * h) as usize];
+        let flotte: Vec<[f32; 4]> = [(0, 8), (1, 10), (2, 22), (3, 49), (4, 13), (5, 13)].iter().flat_map(|&(c, k)| (0..k).map(move |r| [c as f32, 48.65, -2.02, r as f32 + 1.0])).collect();
+        for (nom, gala, flotte, fete) in [("forge, sans flotte", false, None, false), ("forge, 115 au port", false, Some(flotte.clone()), false), ("forge, spectacle", false, Some(flotte.clone()), true), ("belvédère, sans flotte", true, None, false), ("belvédère, 115 au port", true, Some(flotte.clone()), false), ("belvédère, spectacle", true, Some(flotte.clone()), true)] {
+            let mut monde = Monde { hour: 11.3, month: 10, day: 30, clock: 400, ..Monde::default() };
+            monde.rhum = Some(PhaseRhum::Avant);
+            monde.rhum_flotte = flotte;
+            if gala {
+                monde.perso = Some(Perso::Galadriel);
+            }
+            if fete {
+                monde.rhum_fete = Some(SpectacleRhum { kind: FeteRhum::Depart, age: 0 });
+            }
+            let mut s = SceneForge::new();
+            s.recevoir(Etat { recadrage: Recadrage::Full, extra: 77, lit: true, activite: Activite::Idle, tick: 0, monde });
+            let mut image = Image { pixels: &mut px, w: w as u32, h: h as u32, cellule: (cw as u32, ch as u32) };
+            s.peindre(&mut image, 0.15, true);
+            let t = Instant::now();
+            for _ in 0..n {
+                std::hint::black_box(s.peindre(&mut image, 0.15, false));
+            }
+            println!("{nom} : {:.3} ms l'image", t.elapsed().as_secs_f64() * 1000.0 / n as f64);
+        }
+    }
+
     /// Ce que coûte une image de la Route du Rhum, baie comprise, à côté de la cour ordinaire,
     /// scène par scène de la planche : cargo test --release chrono_baie -- --ignored --nocapture
     #[test]

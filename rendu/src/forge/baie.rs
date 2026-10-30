@@ -1563,7 +1563,7 @@ const ILES: [(f32, f32, f32); 17] = [
     (-15.5, 28.1, 0.4), (-13.7, 28.6, 0.4), (-16.6, 28.3, 0.4), (-17.9, 27.8, 0.3), (-23.6, 15.1, 0.4), (-24.4, 16.6, 0.4),
     (-61.6, 16.2, 0.6), (-61.35, 15.4, 0.4), (-61.0, 14.6, 0.5), (-61.8, 17.1, 0.35), (-66.4, 18.2, 0.9), (-62.8, 17.9, 0.3),
 ];
-/// Les classes sur la carte : Ultim, Ocean Fifty, IMOCA, Class40, Rhum Multi, Rhum Mono.
+/// Les classes sur la carte : Ultim, Ocean Fifty, IMOCA, Class40, Vintage Multi (ex-Rhum Multi), Vintage Mono.
 const TEINTES: [u32; 6] = [0xd8402e, 0x8a4ad0, 0x1a1a24, 0xf0a020, 0x2e9a4a, 0x2a8ad8];
 
 /// Un point de la route de Saint-Malo à Pointe-à-Pitre, sur l'arc de grand cercle : `f` de 0 à 1 ;

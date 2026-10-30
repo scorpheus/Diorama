@@ -1072,7 +1072,7 @@ impl Pinceau<'_> {
     }
 }
 
-/// La couleur d'un travail : celle des éclats qui coulent du bassin vers ses mains.
+/// La couleur d'un travail : celle de la vision qui monte du bassin.
 fn teinte(s: Saveur) -> Rgb {
     hex(match s {
         Saveur::Forge => 0x8ff6ff,
@@ -1107,7 +1107,8 @@ struct Scene<'a> {
     t: f32,
     /// le milieu de sa place, en pixels de dessin
     ex: f32,
-    mains: (f32, f32),
+    /// la vision du travail, qui flotte au-dessus du bassin
+    orbe: (f32, f32),
     echec: bool,
     sommeil: bool,
 }
@@ -1123,7 +1124,7 @@ impl<'a> Scene<'a> {
             tick: v.tick,
             t: w.clock as f32,
             ex,
-            mains: (ex - 2.0, 228.0),
+            orbe: (BX, 112.0),
             echec: a == Activite::Failed || a == Activite::Quench && w.outcome == Some(Issue::Fail),
             sommeil: a == Activite::Sleep,
         }
@@ -1189,7 +1190,7 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
         p.eclat(lu, lv, hex(0xffffff), 0.8, 1.0);
     }
 
-    // les éclats du bassin, hors du travail (au travail ils coulent vers elle, devant)
+    // les éclats du bassin, hors du travail (au travail ils montent en vision, devant)
     if !travail {
         let n = match a {
             Activite::Thinking | Activite::Review => 16,
@@ -1430,34 +1431,56 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
     p.muet = false;
 }
 
-/// Ce qui passe devant elle : le flot du bassin vers ses mains, les éclats autour d'elle, les
+/// Ce qui passe devant elle : la vision qui monte du bassin, les éclats autour d'elle, les
 /// z du sommeil, le papillon d'un envoi, la chouette messagère.
 fn anime_devant(p: &mut Pinceau, v: &Vue) {
     let s = Scene::de(v);
     let (w, t, a, tick, ex) = (s.w, s.t, s.a, s.tick, s.ex);
     match a {
         Activite::Running => {
-            // le travail : un flot de lumière, du bassin à ses mains, à la couleur de l'ouvrage
+            // le travail : la vision monte du bassin en spirale, à la couleur de l'ouvrage, et se
+            // noue en une sphère qui flotte au-dessus de l'eau. Rien ne va sur elle : un flot qui
+            // finissait à ses mains se lisait sur son ventre.
             let base = teinte(w.flavor);
-            for i in 0..36 {
-                let f = (t * (0.035 + 0.025 * h2(i, 5)) + h2(i, 91)).fract();
-                let depart = (BX - 28.0 + 56.0 * h2(i, 23), BORD - 3.0);
-                let milieu = (BX + 80.0 + 50.0 * h2(i, 29), BORD - 160.0 + 40.0 * h2(i, 31));
-                let fin = (s.mains.0 + 14.0 * (h2(i, 37) - 0.5), s.mains.1 + 10.0 * (h2(i, 41) - 0.5));
+            let (ou, ov) = s.orbe;
+            for i in 0..28 {
+                let f = (t * (0.03 + 0.02 * h2(i, 5)) + h2(i, 91)).fract();
                 let c = if h2(i, 17) < 0.3 { hex(0xffe39a) } else { base };
                 for k in 0..3 {
-                    let q = (f - k as f32 * 0.012).max(0.0);
-                    let (u, y) = bezier(depart, milieu, fin, q);
-                    let al = (1.0 - k as f32 * 0.35) * (q * 8.0).min(1.0) * (1.0 - (q - 0.85).max(0.0) * 5.0);
+                    let q = (f - k as f32 * 0.03).max(0.0);
+                    // la spirale se resserre en montant, de la largeur de l'eau à celle de la sphère
+                    let ang = h2(i, 23) * 2.0 * PI + q * 3.0 * PI + t * 0.08;
+                    let rayon = (BW - 14.0) * (1.0 - q) + 8.0 * q;
+                    let (u, y) = (BX + rayon * ang.cos(), BORD - 3.0 - (BORD - 3.0 - ov - 10.0) * q + 3.0 * ang.sin());
+                    let al = (1.0 - k as f32 * 0.35) * (q * 8.0).min(1.0) * (1.0 - (q - 0.85).max(0.0) * 6.0);
                     if k == 0 {
-                        etincelle(p, (u + 2.0 * (t * 0.3 + i as f32).sin()).floor(), y.floor(), c, al, h2(i, 47) < 0.2);
+                        etincelle(p, u.floor(), y.floor(), c, al, h2(i, 47) < 0.2);
                     } else {
-                        p.eclat((u + 2.0 * (t * 0.3 + i as f32).sin()).floor(), y.floor(), c, al * 0.6, 0.0);
+                        p.eclat(u.floor(), y.floor(), c, al * 0.6, 0.0);
                     }
                 }
             }
-            // ses mains, qui reçoivent
-            p.lueur(s.mains.0, s.mains.1, 12.0, base, 0.25 + 0.1 * (t * 0.5).sin());
+            // la sphère : un halo qui respire, un cœur blanc, un anneau d'éclats qui tourne
+            let souffle = 0.5 + 0.5 * (t * 0.4).sin();
+            p.lueur(ou, ov, 26.0, base, 0.35 + 0.15 * souffle);
+            // un globe de verre plein de lumière : clair au cœur, le reflet en haut à gauche
+            for dy in -8..=8 {
+                for dx in -8..=8 {
+                    let d = ((dx * dx + dy * dy) as f32).sqrt() / 8.5;
+                    if d <= 1.0 {
+                        let reflet = ((dx as f32 + 3.0).powi(2) + (dy as f32 + 3.0).powi(2)).sqrt() < 2.2;
+                        let c = if reflet { hex(0xffffff) } else { mix(mix(base, hex(0xffffff), 0.75), fois(base, 0.75), d) };
+                        p.poser(ou + dx as f32, ov + dy as f32, c, if d > 0.85 { 0.7 } else { 0.92 });
+                    }
+                }
+            }
+            for i in 0..8 {
+                let ang = t * 0.12 + i as f32 * 2.0 * PI / 8.0;
+                // l'anneau penché : les éclats de derrière plus pâles
+                let (u, y) = (ou + 26.0 * ang.cos(), ov + 8.0 * ang.sin() - 5.0 * ang.cos());
+                let c = if i % 3 == 0 { OR } else { base };
+                etincelle(p, u.floor(), y.floor(), c, if ang.sin() < 0.0 { 0.45 } else { 1.0 }, false);
+            }
         }
         Activite::Waiting => {
             // trois éclats tournent autour de sa tête : elle attend un mot
@@ -1529,9 +1552,10 @@ fn anime_devant(p: &mut Pinceau, v: &Vue) {
             }
         }
         Activite::Ship if w.ship == Some(Envoi::Push) => {
-            // un papillon de lune part de ses mains vers le large, une traînée derrière lui
+            // un papillon de lune s'envole du bassin, passe au-dessus d'elle et file vers le large
             let f = (tick as f32 / 26.0).clamp(0.0, 1.0);
-            let route = |f: f32| (s.mains.0 + (LARGE + 300.0 - s.mains.0) * f, s.mains.1 - 100.0 * f - 22.0 * (f * PI * 3.0).sin());
+            let (ou, ov) = s.orbe;
+            let route = |f: f32| (ou + (LARGE + 300.0 - ou) * f, ov - 10.0 - 70.0 * (f * PI).sin() * (1.0 - f * 0.5) - 14.0 * (f * PI * 3.0).sin());
             if f < 1.0 {
                 for k in 1..10 {
                     let (u, y) = route((f - k as f32 * 0.012).max(0.0));

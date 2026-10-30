@@ -198,7 +198,7 @@ pub struct Monde {
     /// Où en est la course, de 0 au départ à 1 aux premières arrivées : le décor voyage.
     pub rhum_progress: Option<f64>,
     /// La flotte au dernier pointage, pour la carte : (classe, latitude, longitude, rang dans sa
-    /// classe) ; les classes : 0 Ultim, 1 Ocean Fifty, 2 IMOCA, 3 Class40, 4 Rhum Multi, 5 Rhum Mono.
+    /// classe) ; les classes : 0 Ultim, 1 Ocean Fifty, 2 IMOCA, 3 Class40, 4 Vintage Multi, 5 Vintage Mono.
     pub rhum_flotte: Option<Vec<[f32; 4]>>,
     /// Les couleurs du premier de chaque classe, pour les bateaux de la baie : (classe, coque, bande).
     pub rhum_tetes: Option<Vec<[u32; 3]>>,
