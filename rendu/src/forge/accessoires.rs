@@ -6,7 +6,7 @@ use super::pixels::{arr, hasard, Grille, Palette};
 
 const fn palette() -> Palette {
     let mut p: Palette = [None; 128];
-    let couleurs: [(u8, u32); 59] = [
+    let couleurs: [(u8, u32); 60] = [
         (b'k', 0x1b1a24), // contour
         (b'd', 0x7c808c), // fourrure, ombre
         (b'g', 0xb4b7bf), // fourrure grise
@@ -63,7 +63,8 @@ const fn palette() -> Palette {
         (b'3', 0xead29a), // son museau
         (b'4', 0xd6e64a), // son œil vert
         (b'5', 0x8a6424), // ses pattes du fond, dans l'ombre
-        (0, 0),
+        (b'6', 0x9c7e0a), // ciré jaune, sombre
+        (b'7', 0xf8da1c), // ciré jaune : la tenue de la session qui montre la Route du Rhum
         (0, 0),
         (0, 0),
     ];

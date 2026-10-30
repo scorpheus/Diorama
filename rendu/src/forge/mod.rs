@@ -5,6 +5,7 @@
 pub mod accessoires;
 pub mod atelier;
 pub mod baie;
+pub mod bateaux;
 pub mod belvedere;
 pub mod cellules;
 pub mod cour;
@@ -74,13 +75,19 @@ impl Forge {
         let gala = world.galadriel();
         let mut acteurs: Vec<pet::Acteur> = Vec::new();
         if pet {
+            // la session qui montre la Route du Rhum : lui en ciré jaune, ses invités dans leurs capes
+            let cire = world.rhum.is_some();
             if !world.absent && gala {
                 // elle flotte : un pixel d'écran de haut en bas, lentement
                 let (rangee, image) = pet::moment_galadriel(activity, tick, world);
                 let houle = 0.5 + 0.5 * (world.clock as f32 * 0.35).sin();
                 acteurs.push(pet::Acteur { rangee, image, x: (C.0 + world.x + 8) as f32, y: SH as f32 - 0.7 - 0.45 * houle, eclairage: None, cape: b'O', accessoire: Accessoire::Aucun, perso: Perso::Galadriel });
             } else if !world.absent {
-                acteurs.push(acteur(activity, tick, world, C.0 + world.x));
+                let mut lui = acteur(activity, tick, world, C.0 + world.x);
+                if cire {
+                    lui.cape = CIRE;
+                }
+                acteurs.push(lui);
             }
             let mut invites: Vec<_> = self.ctx.invites.iter().map(|v| acteur(v.activite, v.tick, &v.monde, v.x)).collect();
             // ses robes sont larges : un invité dont la place tomberait sur elle se tient à côté,
@@ -232,6 +239,9 @@ impl Etat {
         Ok(Etat { recadrage, extra, lit, activite, tick, monde })
     }
 }
+
+/// La lettre du ciré jaune (accessoires::PALETTE) : sa tenue pendant la Route du Rhum.
+const CIRE: u8 = b'7';
 
 /// Un tic du monde, en secondes : celui du plugin (register.tsx : TICK_MS).
 const TIC: f32 = 0.15;

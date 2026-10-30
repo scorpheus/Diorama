@@ -351,7 +351,9 @@ fn teindre(rgba: &mut [[f32; 4]], cape: u8) {
         return;
     };
     let (r, t) = (tsv(hexa(VERT)), tsv(hexa(cible)));
-    let (ks, kv) = (t[1] / r[1], (t[2] / r[2]).sqrt());
+    // le ciré jaune brille : son éclat entier, pas la racine qui tempère les capes
+    let kv = if cape == b'7' { t[2] / r[2] } else { (t[2] / r[2]).sqrt() };
+    let ks = t[1] / r[1];
     for p in rgba {
         if p[3] < 1.0 {
             continue;
