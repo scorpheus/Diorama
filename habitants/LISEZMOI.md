@@ -36,10 +36,12 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   refuse un fichier faux (taille, lettre hors palette, état obligatoire absent, `every` non entier ≥ 1) et dessine
   la planche. Le lecteur de ClaudeTerminal refuse les mêmes fautes et prend alors le voyageur.
 - **Profil → habitant** : à ClaudeTerminal (sa config ; par défaut, le nom du profil en minuscules sans accents).
-  Les habitants : `galadriel` (Orchestratrice), `forgeron` (Endurance), `marin` (Diorama, Route du Rhum), `mecano`
-  (vehigraph), `tailleur` (LaPierreDesMots), `europa` (Europa, une pilote de rallye), `claudeterminal` (ClaudeTerminal,
-  un robot à tête d'écran), `voyageur` (tous les autres, dont « Claude »). Ils sont faits d'un même gabarit,
-  `tools/habitants/gabarits.py` (corps et poses communs, tête et ouvrage propres) : un nouvel habitant y est une entrée.
+  Les habitants, de face, trapus, à la manière des créatures de Dwarf Fortress, et pas forcément humains :
+  `galadriel` (Orchestratrice, comme son pet du Diorama), `forgeron` (Endurance, un nain), `marin` (Diorama, Route du
+  Rhum), `mecano` (vehigraph), `tailleur` (LaPierreDesMots, un golem de pierre), `europa` (Europa, une voiture de
+  rallye), `claudeterminal` (ClaudeTerminal, un petit ordinateur), `voyageur` (tous les autres, dont « Claude » : un
+  escargot qui porte sa maison). Tous dans `tools/habitants/gabarits.py` (le dessin debout, puis ce qui change d'un
+  état à l'autre) : un nouvel habitant y est une entrée.
 - **Accessoires** : `habitants/accessoires.json`, une palette pour tous (complète, `"#rrggbb"`, `O`/`o` à la couleur
   du profil comme chez les habitants), et chaque accessoire nommé :
   ```json

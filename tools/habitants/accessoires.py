@@ -21,7 +21,7 @@ PALETTE = {
     'c': '#7fd4ff', 'C': '#eef0f6', 'D': '#a8aebc', 'n': '#5a6070', 'N': '#3a3f4c',
     'E': '#e05050', 'H': '#ff8c2a', 'G': '#74e07a', 'B': '#3f80dc', 'P': '#b07cff',
     'u': '#dcdcea', 'x': '#8d8896', 'j': '#5aa08a', 'q': '#e08a6a',
-    'J': '#d8a85a', 'L': '#9a6a2c', 'A': '#a8aebc',
+    'J': '#d8a85a', 'L': '#9a6a2c', 'A': '#a8aebc', 'h': '#c0602a',
 }
 
 
@@ -227,39 +227,39 @@ def arc():
     return {'taille': [16, 8], 'every': 3, 'usage': "la météo : un test qui passe", 'niveaux': [images]}
 
 
+def nain(moities):
+    """Un petit nain de face : chaque ligne donne ses 5 colonnes de gauche, le reste en miroir."""
+    return [m + m[::-1] for m in moities]
+
+
+# le petit nain mineur : casque jaune à lampe, barbe, les jambes qui marchent
+NAIN = [".....", "...kk", "..kyy", ".kyyy", ".kkkk", ".kpmp", ".khpq", "khhhh", "kOhhh", "kOOhh"]
+PAS = [[".knk.", ".kak."], ["..knk", "..kak"]]
+
+
 def mineur():
-    jambes = [["...kNkNk..", "..kak.kak."], ["...kNNk...", "...kaak..."]]
     images = []
-    for f, j in enumerate(jambes):
-        images.append([".AAAk.....",
-                       "Ak.r......",
-                       "...rkkkk..",
-                       "..rkyyyyY" + ("s" if f == 0 else "."),
-                       "..rkpppmk.",
-                       "...kpppmpk",
-                       "....kppk..",
-                       "...kOOOk..",
-                       "...kOoOk..",
-                       "...kOpOk.."] + j)
-    return {'taille': [10, 12], 'every': 2, 'usage': "un diagnostic de fond : part sous la barre d'onglets, la pioche sur l'épaule, tourné vers la droite (miroir pour la gauche)",
+    for jambes in PAS:
+        img = nain(NAIN + jambes)
+        img[2] = img[2][:4] + 'YY' + img[2][6:]
+        # la pioche sur l'épaule : le manche, et le fer au-dessus
+        for y in range(2, 9):
+            img[y] = img[y][:9] + 'r'
+        img[0] = img[0][:6] + 'kAAk'
+        img[1] = img[1][:7] + 'A.r'
+        images.append(img)
+    return {'taille': [10, 12], 'every': 2, 'usage': "un diagnostic de fond : un petit nain mineur qui part sous la barre d'onglets, la pioche sur l'épaule",
             'niveaux': [images]}
 
 
 def mineur_lingot():
-    jambes = [["...kNkNk..", "..kak.kak."], ["...kNNk...", "...kaak..."]]
     images = []
-    for j in jambes:
-        images.append(["..kkkkkk..",
-                       ".pkYYYyk..",
-                       "..pkkkkk..",
-                       "..pkyyyyY.",
-                       "...kpppmk.",
-                       "...kpppmpk",
-                       "....kppk..",
-                       "...kOOOk..",
-                       "...kOOOk..",
-                       "...kOOOk.."] + j)
-    return {'taille': [10, 12], 'every': 2, 'usage': "le même, qui revient avec un lingot d'or levé quand son rapport est versé",
+    for jambes in PAS:
+        # le lingot levé à deux mains au-dessus du casque, le nain dessous
+        img = ["..kkkkkk..", ".pkYYYykp."] + nain(NAIN[2:] + jambes)
+        img[2] = img[2][:4] + "YY" + img[2][6:]
+        images.append(img[:12])
+    return {'taille': [10, 12], 'every': 2, 'usage': "le même, qui revient en levant un lingot d'or quand son rapport est versé",
             'niveaux': [images]}
 
 
@@ -326,7 +326,13 @@ def ranger(d):
 
 if __name__ == '__main__':
     chemin = os.path.join(RACINE, 'accessoires.json')
-    if os.path.exists(chemin) and json.load(open(chemin, encoding='utf-8')).get('valide'):
+    # écrit seulement une fois le tout fait : une faute ne laisse pas un fichier vide
+    texte = ranger(ecrire())
+    try:
+        valide = json.load(open(chemin, encoding='utf-8')).get('valide')
+    except (OSError, ValueError):
+        valide = False
+    if valide:
         sys.exit('accessoires.json est validé : le refaire demande de remettre valide à false à la main')
-    open(chemin, 'w', encoding='utf-8', newline='\n').write(ranger(ecrire()))
+    open(chemin, 'w', encoding='utf-8', newline='\n').write(texte)
     print('ok')

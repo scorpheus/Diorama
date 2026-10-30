@@ -35,7 +35,8 @@
     "q": "#e08a6a",
     "J": "#d8a85a",
     "L": "#9a6a2c",
-    "A": "#a8aebc"
+    "A": "#a8aebc",
+    "h": "#c0602a"
   },
   "accessoires": {
     "pigeon": {
@@ -664,36 +665,36 @@
     "mineur": {
       "taille": [10, 12],
       "every": 2,
-      "usage": "un diagnostic de fond : part sous la barre d'onglets, la pioche sur l'épaule, tourné vers la droite (miroir pour la gauche)",
+      "usage": "un diagnostic de fond : un petit nain mineur qui part sous la barre d'onglets, la pioche sur l'épaule",
       "niveaux": [
         [
           [
-            ".AAAk.....",
-            "Ak.r......",
-            "...rkkkk..",
-            "..rkyyyyYs",
-            "..rkpppmk.",
-            "...kpppmpk",
-            "....kppk..",
-            "...kOOOk..",
-            "...kOoOk..",
-            "...kOpOk..",
-            "...kNkNk..",
-            "..kak.kak."
+            "......kAAk",
+            "...kkkkA.r",
+            "..kyYYyk.r",
+            ".kyyyyyykr",
+            ".kkkkkkkkr",
+            ".kpmppmpkr",
+            ".khpqqphkr",
+            "khhhhhhhhr",
+            "kOhhhhhhOr",
+            "kOOhhhhOOk",
+            ".knk..knk.",
+            ".kak..kak."
           ],
           [
-            ".AAAk.....",
-            "Ak.r......",
-            "...rkkkk..",
-            "..rkyyyyY.",
-            "..rkpppmk.",
-            "...kpppmpk",
-            "....kppk..",
-            "...kOOOk..",
-            "...kOoOk..",
-            "...kOpOk..",
-            "...kNNk...",
-            "...kaak..."
+            "......kAAk",
+            "...kkkkA.r",
+            "..kyYYyk.r",
+            ".kyyyyyykr",
+            ".kkkkkkkkr",
+            ".kpmppmpkr",
+            ".khpqqphkr",
+            "khhhhhhhhr",
+            "kOhhhhhhOr",
+            "kOOhhhhOOk",
+            "..knkknk..",
+            "..kakkak.."
           ]
         ]
       ]
@@ -701,36 +702,36 @@
     "mineur-lingot": {
       "taille": [10, 12],
       "every": 2,
-      "usage": "le même, qui revient avec un lingot d'or levé quand son rapport est versé",
+      "usage": "le même, qui revient en levant un lingot d'or quand son rapport est versé",
       "niveaux": [
         [
           [
             "..kkkkkk..",
-            ".pkYYYyk..",
-            "..pkkkkk..",
-            "..pkyyyyY.",
-            "...kpppmk.",
-            "...kpppmpk",
-            "....kppk..",
-            "...kOOOk..",
-            "...kOOOk..",
-            "...kOOOk..",
-            "...kNkNk..",
-            "..kak.kak."
+            ".pkYYYykp.",
+            "..kyYYyk..",
+            ".kyyyyyyk.",
+            ".kkkkkkkk.",
+            ".kpmppmpk.",
+            ".khpqqphk.",
+            "khhhhhhhhk",
+            "kOhhhhhhOk",
+            "kOOhhhhOOk",
+            ".knk..knk.",
+            ".kak..kak."
           ],
           [
             "..kkkkkk..",
-            ".pkYYYyk..",
-            "..pkkkkk..",
-            "..pkyyyyY.",
-            "...kpppmk.",
-            "...kpppmpk",
-            "....kppk..",
-            "...kOOOk..",
-            "...kOOOk..",
-            "...kOOOk..",
-            "...kNNk...",
-            "...kaak..."
+            ".pkYYYykp.",
+            "..kyYYyk..",
+            ".kyyyyyyk.",
+            ".kkkkkkkk.",
+            ".kpmppmpk.",
+            ".khpqqphk.",
+            "khhhhhhhhk",
+            "kOhhhhhhOk",
+            "kOOhhhhOOk",
+            "..knkknk..",
+            "..kakkak.."
           ]
         ]
       ]
