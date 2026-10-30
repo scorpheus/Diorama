@@ -43,5 +43,9 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   écrit par ClaudeTerminal ou l'orchestratrice, `{ "nom", "profil", "couleur": "#rrggbb", "sujet": "ce que fait le
   profil, en une phrase", "le": "AAAA-MM-JJ" }`. La session Diorama dessine `habitants/<nom>.json` avec `valide: false`,
   et ne supprime jamais la demande ; elle est servie quand l'habitant existe avec `valide: true`, et son auteur la
-  retire alors.
+  retire alors. **En attente** = la demande existe et `habitants/<nom>.json` n'existe pas encore (dessiné mais pas
+  validé : il attend le user, pas une session). `<nom>` : minuscules, sans accents ni espaces (`[a-z0-9-]+`), le même
+  que l'habitant. Exemple : `habitants/demandes/vehigraph.json` →
+  `{ "nom": "vehigraph", "profil": "vehigraph", "couleur": "#4a9e5c", "sujet": "outil de diagnostic véhicule", "le": "2026-11-03" }`.
+  La file n'est pas suivie par git (`.gitignore`) : elle vit sur le disque de la machine, pas dans l'historique.
 - **Fait** : `marin.json` (premier habitant, `valide: false` en attendant l'avis du user).

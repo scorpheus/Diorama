@@ -5,3 +5,6 @@ apercu*.png
 rendu/target/
 __pycache__/
 tools/pet/chatgpt/
+
+# la file des demandes d habitants (habitants/LISEZMOI.md) : sur le disque, pas dans l historique
+habitants/demandes/
