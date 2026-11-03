@@ -135,6 +135,7 @@ export type Guest = {
   accessory: string
   tick: number
   waving: boolean
+  perso?: 'galadriel' // her own body, kept on a visit; none: the smith
 }
 
 /**

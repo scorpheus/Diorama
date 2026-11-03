@@ -36,6 +36,25 @@ pub fn smooth(a: f32, b: f32, v: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
+thread_local! {
+    static PALIERS: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+/// Les bords nets du pixel art (la cour fine, paysage.rs) : l'opacité de chaque pixel posé arrondie à `n` paliers ;
+/// 0, lissée comme avant (la baie).
+pub fn paliers(n: u8) {
+    PALIERS.with(|p| p.set(n));
+}
+
+/// Une opacité arrondie aux paliers en cours.
+#[inline]
+pub fn palier(a: f32) -> f32 {
+    match PALIERS.with(|p| p.get()) {
+        0 => a,
+        n => (a * n as f32).round() / n as f32,
+    }
+}
+
 /// Une toile : `w` × `h` pixels, ligne après ligne.
 pub struct Toile<'a> {
     pub px: &'a mut [u32],
@@ -47,6 +66,7 @@ impl Toile<'_> {
     /// Pose `c` sur le pixel (x, y), vu à travers `a`.
     #[inline]
     pub fn poser(&mut self, x: i32, y: i32, c: Rgb, a: f32) {
+        let a = palier(a);
         if x < 0 || y < 0 || x as usize >= self.w || y as usize >= self.h || a <= 0.0 {
             return;
         }

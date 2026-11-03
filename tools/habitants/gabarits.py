@@ -1,6 +1,6 @@
 """Les habitants des onglets, dessinés un par un, de face, à la manière des créatures de Dwarf
 Fortress : trapus, deux masses franches (coiffe, corps), l'outil qui sort de la silhouette,
-contour sombre, peu de couleurs. Pas forcément des humains : un nain, un escargot, un golem,
+contour sombre, peu de couleurs. Pas forcément des humains : un nain, un golem,
 une voiture. Écrit habitants/<nom>.json (valide: false) ; la nouvelle version d'un habitant
 validé va à habitants/revue/<nom>-nouveau.json, à côté.
 
@@ -167,36 +167,42 @@ HABITANTS = {
             [(7, 10, ["fe"]), (6, 11, ["kEEk"]), (10, 3, ["s"]), (3, 7, ["s"])],
         ],
     },
-    # le voyageur : un escargot, sa maison sur le dos à la couleur du profil, un baluchon
+    # le voyageur : un petit marcheur des contes, capuche pointue et cape à la couleur du profil, broche en
+    # feuille, grands pieds nus, bâton au bourgeon vert ; à l'ouvrage, il note la route dans son carnet
+    # (user, 02-11 : l'escargot n'allait pas avec le reste, « des thèmes un peu plus fantasy »)
     'voyageur': {
-        'description': "le voyageur : un escargot qui porte sa maison, la coquille à la couleur du profil, un baluchon",
-        'palette': {'b': '#b8c48a', 'B': '#7e8a58', 'W': '#efe2c0', 'r': '#7a4a24'},
-        'debout': bas([
-            "...........m.m..",
-            "...........b.b..",
-            "....kkkk...b.b..",
-            "...kOOOOk.kbbbk.",
-            "..kOoooOOkkbbbbk",
-            "..kOoOOoOkkbbbbk",
-            "..kOoOoOOkkbbbMk",
-            "..kOOooOOkbbbbk.",
-            "...kOOOOkbbbbbk.",
-            ".kkkkkkkkbbbbk..",
-            "kbbbbbbbbbbbk...",
-            ".kBBBBBBBBBk....",
-            "..kkkkkkkkk.....",
+        'description': "le voyageur : un petit marcheur des contes, capuche pointue et cape à la couleur du profil, broche en feuille, grands pieds nus, bâton ; il note la route dans son carnet",
+        'palette': {'h': '#6a4428', 'v': '#7cc06a', 'W': '#efe2c0', 'r': '#7a4a24'},
+        'debout': miroir([
+            "........",
+            ".......k",
+            "......kO",
+            ".....kOO",
+            "....kOOO",
+            "...kOOhh",
+            "...kOhpp",
+            "...kOpmp",
+            "...kOppp",
+            "..kOOOkp",
+            "..kOOOOv",
+            ".kOoOOOO",
+            ".kOoOOOO",
+            ".kOoOOOo",
+            "..kkkkkk",
+            "..kpqk..",
         ]),
-        'plus': [(6, 1, ["kWWk", "kWWWk"]), (6, 3, ["r"]), (5, 4, ["r"])],
-        'yeux': [(11, 3), (13, 3)],
-        'ferme': '.',
-        'bouche': (14, 9, ["M"]),
-        'triste': [(11, 3, ["."]), (13, 3, ["."]), (11, 4, ["m.m"]), (11, 5, ["b.b"])],
-        'main': (7, 7),
+        # le bâton dans sa main droite (à gauche pour nous), un bourgeon vert au sommet ; le drapeau de l'attente
+        # flotte de l'autre côté
+        'plus': [(0, 1, ["v"] + ["r"] * 14), (1, 10, ["p"])],
+        'yeux': [(6, 7), (9, 7)],
+        'ferme': 'q',
+        'bouche': (7, 8, ["MM"]),
+        'triste': [(6, 7, ["p..p"]), (6, 8, ["m..m"]), (10, 8, ["c"])],
+        'main': (13, 10),
         'ouvrage': [
-            [(0, 12, ["c"]), (14, 9, ["k"])],
-            [(1, 13, ["c"]), (0, 12, ["."])],
+            [(3, 12, ["kkkkkkkkk", "kWWWkWWWk", "kWmWkWWWk", "kkkkkkkkk"]), (11, 11, ["p"]), (12, 10, ["w"])],
+            [(3, 12, ["kkkkkkkkk", "kWWWkWWWk", "kWmWkWmWk", "kkkkkkkkk"]), (9, 11, ["p"]), (10, 10, ["w"])],
         ],
-        'decale': [0, 1],
     },
     # le tailleur de LaPierreDesMots : un golem de pierre, les yeux et la rune à la couleur du profil
     'tailleur': {

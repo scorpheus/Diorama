@@ -32,6 +32,7 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
         accessory: Accessoire::Lunettes,
         tick: 3,
         waving: true,
+        perso: None,
     };
     let mut s: Vec<(Activite, i64, Monde)> = vec![
         (Activite::Idle, 0, calme()),
@@ -244,7 +245,7 @@ pub fn galadriel(dossier: &str, extra: i32) -> std::io::Result<()> {
         ("dehors-nuit", Activite::Idle, 0, gala(&|w| { w.rhum = None; w.x = 27 })),
         ("visite", Activite::Idle, 0, gala(&|w| {
             // deux invités à leurs places, comme le plugin les y mène : le second tomberait sur elle
-            let invite = Invite { x: GUEST_SPOT, walking: false, facing: -1, cape: [Lettre(b'N'), Lettre(b'L')], accessory: Accessoire::Lunettes, tick: 3, waving: true };
+            let invite = Invite { x: GUEST_SPOT, walking: false, facing: -1, cape: [Lettre(b'N'), Lettre(b'L')], accessory: Accessoire::Lunettes, tick: 3, waving: true, perso: None };
             w.guests = vec![invite.clone(), Invite { x: GUEST_SPOT - 14, cape: [Lettre(b'C'), Lettre(b'D')], accessory: Accessoire::Bandeau, tick: 40, waving: false, ..invite }];
             w.x = 4;
         })),

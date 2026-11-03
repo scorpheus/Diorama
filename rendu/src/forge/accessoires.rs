@@ -6,7 +6,7 @@ use super::pixels::{arr, hasard, Grille, Palette};
 
 const fn palette() -> Palette {
     let mut p: Palette = [None; 128];
-    let couleurs: [(u8, u32); 60] = [
+    let couleurs: [(u8, u32); 66] = [
         (b'k', 0x1b1a24), // contour
         (b'd', 0x7c808c), // fourrure, ombre
         (b'g', 0xb4b7bf), // fourrure grise
@@ -65,6 +65,13 @@ const fn palette() -> Palette {
         (b'5', 0x8a6424), // ses pattes du fond, dans l'ombre
         (b'6', 0x9c7e0a), // ciré jaune, sombre
         (b'7', 0xf8da1c), // ciré jaune : la tenue de la session qui montre la Route du Rhum
+        // l'arc-en-ciel par la fenêtre : ses six bandes à moitié fondues dans le ciel bleu (`c`)
+        (b'8', 0xbf9ab0), // rouge
+        (b'9', 0xbfc2b0), // orange
+        (b'0', 0xbfe2b8), // jaune
+        (b'!', 0x78dabc), // vert
+        (b'#', 0x70baff), // bleu
+        (b'%', 0x90a2f0), // violet
         (0, 0),
         (0, 0),
     ];
@@ -249,7 +256,8 @@ const CIELS: &[u8] = b"cnxXBbfF";
 pub fn draw_sky(g: &mut Grille, w: &Monde, tick: i64, v: &Vitres, volets: bool) {
     let (ix, iy, iw, ih) = (v.x, v.y, v.w, v.h);
     let night = w.nuit();
-    let twilight = !night && (w.hour < 8.0 || w.hour >= 18.0);
+    let ciel = w.heure_ciel();
+    let twilight = !night && !(8.0..18.0).contains(&ciel);
     let storm = w.weather == Some(Temps::Storm);
     for j in 0..ih {
         for i in 0..iw {
@@ -265,8 +273,24 @@ pub fn draw_sky(g: &mut Grille, w: &Monde, tick: i64, v: &Vitres, volets: bool) 
             g.put(ix + i, iy + j, sky);
         }
     }
+    // l'arc-en-ciel après une série de réussites : un arc d'un pixel par bande, pastel, dont la vitre ne montre
+    // qu'un morceau ; derrière le soleil (user, 03-11 : « tu peux le faire plus joli »)
+    if w.weather == Some(Temps::Rainbow) && !storm && !night {
+        // la vitre est petite : quatre bandes (rouge, jaune, vert, bleu) sur un arc dont on voit la courbe
+        let (cx, cy) = (ix as f64 + iw as f64 * 0.5, iy as f64 + ih as f64 + 0.5);
+        let rayon = (iw as f64 * 0.5).min(ih as f64) + 0.5;
+        for j in 0..ih {
+            for i in 0..iw {
+                let d = (ix as f64 + i as f64 + 0.5 - cx).hypot(iy as f64 + j as f64 + 0.5 - cy);
+                let k = rayon - d;
+                if (0.0..4.0).contains(&k) {
+                    g.put(ix + i, iy + j, b"80!#"[k as usize]);
+                }
+            }
+        }
+    }
     // le soleil ou la lune, le long d'un arc à travers le jour ou la nuit
-    let along = if night { ((w.hour + 3.0) % 24.0) / 9.0 } else { (w.hour - 6.0) / 15.0 };
+    let along = if night { ((ciel + 3.0) % 24.0) / 9.0 } else { (ciel - 6.0) / 15.0 };
     let bx = ix + arr(along.clamp(0.0, 1.0) * (iw - 2) as f64);
     let by = iy + arr((along - 0.5).abs() * 2.0 * (ih - 3) as f64);
     if !storm {
@@ -304,17 +328,6 @@ pub fn draw_sky(g: &mut Grille, w: &Monde, tick: i64, v: &Vitres, volets: bool) 
             }
             g.line(ix + 6, iy, ix + 4, iy + 3, b'Y');
             g.line(ix + 4, iy + 3, ix + 6, iy + 6, b'Y');
-        }
-    } else if w.weather == Some(Temps::Rainbow) {
-        for (k, &ch) in b"FfyGbP".iter().enumerate() {
-            for i in 0..iw {
-                let h = (iw - 1) as f64 / 2.0;
-                let t = (i as f64 - h) / h;
-                let ry = iy + 1 + k as i32 + arr(t * t * 3.0);
-                if ry < iy + ih {
-                    g.put(ix + i, ry, ch);
-                }
-            }
         }
     }
     let sea = w.saison();

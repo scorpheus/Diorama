@@ -169,7 +169,7 @@ const BELLOWS_SPOT: i32 = -8; // où se tient Scorpheus : à bout de bras, le so
 
 const ANVIL: [&str; 7] =
     ["kkkkkkkkkkkkk", "kAAAAAAAAAAAk", ".kkaaaaaaakk.", "...kaaaaak...", "...kaaaaak...", "..kaaaaaaak..", ".kkkkkkkkkkk."];
-const ANVIL_AT: (i32, i32) = (16, 25);
+pub(super) const ANVIL_AT: (i32, i32) = (16, 25);
 const INGOT: (i32, i32, i32) = (21, 24, 4);
 pub(super) const IMPACT: (i32, i32) = (22, 23);
 
@@ -177,13 +177,13 @@ pub(super) const C: (i32, i32) = (30, 6); // la tête de Scorpheus, en haut à g
 
 const SCROLL: [&str; 5] = ["kWWWWWWk", "kWVVVVWk", "kWWWWWWk", "kWVVVWWk", ".kkkkkk."];
 const BUCKET: [&str; 5] = ["kcccccck", "kAAAAAAk", "krRrRrRk", "krRrRrRk", ".kkkkkk."];
-const BUCKET_AT: (i32, i32) = (18, 27);
+pub(super) const BUCKET_AT: (i32, i32) = (18, 27);
 // La caisse du jour sur l'enclume, en planches claires aux coins d'acier, son couvercle dessus.
 const CRATE_BOX: [&str; 3] = ["kArrRrrrAk", "kVrrrrRrVk", "kkkkkkkkkk"];
 const LID_OPEN: [&str; 8] = ["kk", "kV", "kV", "kV", "kV", "kV", "kV", "kV"];
 const LID_CLOSING: [&str; 3] = ["....kkkkkk", "kkkkVVVVVk", "kVVVkkkkkk"];
 const LID_SHUT: [&str; 2] = ["kkkkkkkkkk", "kVVVVVVVVk"];
-const CRATE_AT: (i32, i32) = (17, 19); // le bord, en haut à gauche ; la caisse pose sur l'enclume
+pub(super) const CRATE_AT: (i32, i32) = (17, 19); // le bord, en haut à gauche ; la caisse pose sur l'enclume
 const SEAL: (i32, i32) = (CRATE_AT.0 + 3, CRATE_AT.1 + 1); // la cire d'or sur la jointure du couvercle
 const HOURGLASS_X: [i32; 3] = [17, 21, 25]; // sur l'enclume, de gauche à droite
 const BELL_AT: (i32, i32) = (25, 0);
@@ -1652,7 +1652,8 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
     }
 
     draw_yard(&mut g, world);
-    if let Some(cat) = &world.cat {
+    // au pixel, la panthère se peint en pixel art (chat.rs)
+    if let Some(cat) = world.cat.as_ref().filter(|_| !ctx.pet) {
         draw_cat(&mut g, cat);
     }
     if let Some(gift) = &world.gift {
@@ -1673,6 +1674,8 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
             x: gx - shift,
             walking: v.walking,
             facing: v.facing,
+            // son corps à lui, jamais celui de l'hôte
+            perso: v.perso,
             cape: v.cape,
             accessory: v.accessory,
             absent: false,

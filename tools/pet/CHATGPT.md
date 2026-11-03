@@ -234,3 +234,16 @@ changé, puis remplace l'appli qui tourne.
   Au-delà, le calque prend des morceaux de corps décalés : refaire la planche.
 - **Accessoires : un calque vide** (« sans accessoire trouvé ») : l'accessoire est caché dans
   cette pose, ou l'IA l'a oublié.
+
+---
+
+## Le lissage de forge.webp (03-11)
+
+La planche des gestes était revenue de Gemini en **JPEG** : délavée, floue, tachée par les blocs de 8 × 8. Elle a été
+reprise sans rien redessiner : un débruitage qui garde les bords (OpenCV `fastNlMeansDenoisingColored`, force 7),
+puis la luminance des pixels opaques ramenée aux quantiles de celle du pet d'origine (`scorpheus.webp`), les teintes
+gardées, et les restes du fond magenta retirés du bord. **Pas d'accentuation** : elle gonflait les blocs du JPEG en
+taches (le livre, la blouse) et cernait la crête d'un liseré blanc (user, 03-11). L'ancienne planche :
+`tools/pet/chatgpt/forge-avant-lissage.webp`. Pour retrouver le détail perdu, il faut que l'IA rende la planche en
+PNG.
+

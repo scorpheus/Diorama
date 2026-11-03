@@ -30,7 +30,7 @@ fn smooth(a: f64, b: f64, v: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
 /// Un bruit qui roule plutôt qu'il ne saute, le long d'un axe.
-fn roll(x: f64, seed: i64) -> f64 {
+pub(super) fn roll(x: f64, seed: i64) -> f64 {
     let i = x.floor();
     let f = x - i;
     let u = f * f * (3.0 - 2.0 * f);
@@ -80,15 +80,22 @@ const BOUGHS: [f64; 3] = [0.45, 1.0, 1.8];
 
 /// L'heure et le temps dehors : les deux bouts du ciel, la lumière, la lueur de la forge à la porte.
 #[derive(Clone, Copy)]
-struct Ciel {
-    top: Rgb,
-    low: Rgb,
-    amb: Rgb,
-    spill: f64,
-    night: bool,
-    dusk: bool,
-    storm: bool,
-    flash: bool,
+pub(super) struct Ciel {
+    pub(super) top: Rgb,
+    pub(super) low: Rgb,
+    pub(super) amb: Rgb,
+    pub(super) spill: f64,
+    pub(super) night: bool,
+    pub(super) dusk: bool,
+    pub(super) storm: bool,
+    pub(super) flash: bool,
+    /// l'arc-en-ciel après une série de réussites, le jour
+    pub(super) arc: bool,
+}
+
+/// Le ciel de la cour pour la cour fine (paysage.rs) : le même, pour que la lumière des acteurs lui réponde.
+pub(super) fn ciel(w: &Monde) -> Ciel {
+    sky_of(w)
 }
 
 /// La lumière du ciel sur qui se tient dans la cour : l'ambiance de l'heure et du temps qu'il
@@ -100,7 +107,7 @@ pub fn lumiere_dehors(w: &Monde) -> ([f32; 3], f32) {
 
 fn sky_of(w: &Monde) -> Ciel {
     let night = w.nuit();
-    let dusk = !night && (w.hour < 8.0 || w.hour >= 18.0);
+    let dusk = !night && !(8.0..18.0).contains(&w.heure_ciel());
     let storm = w.weather == Some(Temps::Storm);
     // l'éclair, au rythme de la fenêtre
     let flash = storm && w.clock % 23 < 2;
@@ -127,9 +134,11 @@ fn sky_of(w: &Monde) -> Ciel {
             dusk,
             storm,
             flash,
+            arc: false,
         };
     }
-    Ciel { top, low, amb, spill, night, dusk, storm, flash }
+    let arc = w.weather == Some(Temps::Rainbow) && !night;
+    Ciel { top, low, amb, spill, night, dusk, storm, flash, arc }
 }
 
 /// Où se tiennent les choses dans une cour de la porte (`from`) au bord (`to`).
@@ -140,6 +149,13 @@ pub struct Plan {
     pub tree: (i32, f64),
     pub well: Option<i32>,
     falls: Vec<(i32, bool)>,
+}
+
+impl Plan {
+    /// Les cascades : la colonne de chacune, et si elle descend la chaîne proche.
+    pub fn falls(&self) -> &[(i32, bool)] {
+        &self.falls
+    }
 }
 
 fn place_all(from: i32, to: i32) -> Plan {
@@ -212,7 +228,7 @@ struct Immobile {
     moving: Vec<u32>,
 }
 
-type Cle = (i32, i32, u8, bool, bool, bool, bool, u8, bool);
+type Cle = (i32, i32, u8, bool, bool, bool, bool, u8, bool, bool);
 const STILLS: usize = 12; // les derniers ciels et largeurs gardés ; l'heure et la fenêtre changent lentement
 
 /// Ce que la cour garde d'une image à l'autre : ce qui ne bouge pas n'est jamais peint deux fois.
@@ -221,6 +237,15 @@ pub struct Cour {
     plans: HashMap<(i32, i32), Plan>,
     stills: HashMap<Cle, Immobile>,
     ordre: Vec<Cle>,
+    /// la cour fine (paysage.rs) se peint dessous : les cellules n'en gardent que la porte
+    pub fin: bool,
+}
+
+impl Cour {
+    /// Une cour dont le décor se peint au vrai pixel (paysage.rs), sous ses cellules.
+    pub fn fine() -> Cour {
+        Cour { fin: true, ..Cour::default() }
+    }
 }
 
 /// La cour d'une image : la couleur derrière les acteurs, et la lumière du dehors sur eux.
@@ -276,6 +301,7 @@ impl Cour {
             sky,
             se,
             rhum: w.rhum,
+            fin: self.fin,
             galadriel: w.galadriel(),
             winter: se == Saison::Hiver,
             clock: w.clock,
@@ -289,7 +315,7 @@ impl Cour {
             pouring: RefCell::new(None),
         };
         // peinte entière une fois par ciel, saison et largeur ; puis, image après image, ce qui bouge
-        let key: Cle = (from, to, se as u8, sky.night, sky.dusk, sky.storm, sky.flash, w.rhum.map_or(0, |r| r as u8 + 1), w.galadriel());
+        let key: Cle = (from, to, se as u8, sky.night, sky.dusk, sky.storm, sky.flash, w.rhum.map_or(if self.fin { 9 } else { 0 }, |r| r as u8 + 1), w.galadriel(), sky.arc);
         let mut colours = vec![0u32; (width * HEIGHT) as usize];
         match self.stills.get(&key) {
             None => {
@@ -329,6 +355,8 @@ struct Peintre {
     sky: Ciel,
     se: Saison,
     rhum: Option<PhaseRhum>,
+    /// la cour fine se peint dessous (paysage.rs)
+    fin: bool,
     /// le belvédère de Galadriel borde la cour : ni porte de chêne ni lueur de forge
     galadriel: bool,
     winter: bool,
@@ -344,12 +372,12 @@ struct Peintre {
     pouring: RefCell<Option<Vec<(i32, f64, f64)>>>,
 }
 
-const CY: f64 = 19.0;
-const R: f64 = 7.0;
-const STEP: f64 = 2.0 * PI / 10.0;
+pub(super) const CY: f64 = 19.0;
+pub(super) const R: f64 = 7.0;
+pub(super) const STEP: f64 = 2.0 * PI / 10.0;
 
 /// Jusqu'où descend un angle sur la roue : 0 à la couronne, π au pied ; hors de [0, π] de l'autre côté.
-fn down(th: f64) -> f64 {
+pub(super) fn down(th: f64) -> f64 {
     if th < 0.0 {
         -PI / 2.0 - th
     } else {
@@ -357,7 +385,7 @@ fn down(th: f64) -> f64 {
     }
 }
 /// Combien les godets sont pleins : remplis à la couronne, pleins le long du flanc, vidés passé le bas.
-fn fill(q: f64) -> f64 {
+pub(super) fn fill(q: f64) -> f64 {
     smooth(0.05, 0.45, q) * (1.0 - smooth(1.5, 2.3, q))
 }
 
@@ -470,10 +498,35 @@ impl Peintre {
         a * (1.0 - u) + b * u
     }
 
+    /// L'arc-en-ciel sur le ciel de la cour : un grand arc centré sur elle, qui plonge derrière les montagnes ; ses
+    /// six couleurs fondues l'une dans l'autre et dans le ciel, plus pâles vers ses bords et vers ses pieds. Les
+    /// nuages passent devant (user, 03-11 : « l'arc-en-ciel… tu peux le faire plus joli »).
+    fn arc_en_ciel(&self, x: i32, y: i32, c: Rgb) -> Rgb {
+        let largeur = (self.to - self.from).max(1) as f64;
+        let (cx, cy) = (self.from as f64 + largeur * 0.5, HORIZON + largeur * 0.22);
+        let rayon = cy - 3.0;
+        let epaisseur = 4.5;
+        let d = (x as f64 + 0.5 - cx).hypot(y as f64 + 0.5 - cy);
+        let k = (rayon - d) / epaisseur;
+        if !(0.0..1.0).contains(&k) {
+            return c;
+        }
+        let bandes = [hex(0xff6a5a), hex(0xffae4a), hex(0xfff07a), hex(0x7ee08a), hex(0x6aa8ff), hex(0xa682e8)];
+        let f = k * 5.0;
+        let teinte = mix(bandes[f as usize], bandes[(f as usize + 1).min(5)], f.fract());
+        // plus pâle vers ses deux bords, et vers ses pieds, dans la brume de l'horizon
+        let bord = (k * (1.0 - k) * 4.0).sqrt();
+        let pied = clamp01(1.0 - (y as f64 - 4.0) / (HORIZON - 2.0)).sqrt();
+        mix(c, teinte, 0.5 * bord * (0.35 + 0.65 * pied))
+    }
+
     fn sky_at(&self, x: i32, y: i32) -> Rgb {
         let sky = &self.sky;
         let yf = y as f64;
         let mut c = mix(sky.top, sky.low, clamp01(yf / HORIZON));
+        if sky.arc {
+            c = self.arc_en_ciel(x, y, c);
+        }
         if sky.night && !sky.storm && y < 18 && hasard((x * 97 + y * 13) as i64) > 0.975 {
             c = if hasard((x + y) as i64) > 0.6 { [250.0, 245.0, 220.0] } else { [170.0, 180.0, 220.0] };
         }
@@ -877,7 +930,8 @@ impl Peintre {
         let eave_end = from + 12;
         let eave = (x - from).div_euclid(3);
         let lit = |c| Some(self.lit(c, 0.0));
-        if x <= eave_end {
+        // la cour fine peint l'avant-toit elle-même, ses ardoises et ses gouttes (paysage.rs)
+        if x <= eave_end && !self.fin {
             if y >= eave && y <= eave + 2 {
                 return lit(if y == eave {
                     if self.winter {
@@ -899,7 +953,7 @@ impl Peintre {
                 return lit(hex(0x7fd4ff));
             }
         }
-        if self.sky.storm && x == eave_end {
+        if self.sky.storm && x == eave_end && !self.fin {
             // et du bout, goutte après goutte, jusqu'au sol
             let lip = (eave_end - from).div_euclid(3) + 3;
             for k in 0..2 {
@@ -922,6 +976,8 @@ impl Peintre {
             Some(c) => c,
             // la Route du Rhum : la baie se peint dessous, au vrai pixel (baie.rs)
             None if self.rhum.is_some() => return BAIE,
+            // la cour fine : son décor se peint dessous, au vrai pixel (paysage.rs)
+            None if self.fin => return BAIE,
             None => {
                 // sous les feuilles, ni ciel ni collines ne se peignent
                 let c = self.crown(x, y).unwrap_or_else(|| if y >= GROUND { self.ground(x, y) } else { self.hills(x, y) });
@@ -962,7 +1018,8 @@ pub fn draw_yard_weather(cour: &mut Cour, g: &mut Grille, w: &Monde, from: i32, 
             g.dot(2.0 * fx, 2.0 * fy, b'w', Some(clair));
         }
     }
-    if (se == Saison::Automne || se == Saison::Printemps) && w.rhum.is_none() {
+    // la cour fine fait tomber les siennes, au vrai pixel (paysage.rs)
+    if (se == Saison::Automne || se == Saison::Printemps) && w.rhum.is_none() && !cour.fin {
         // au bord de la mer, pas d'arbre ; ailleurs, de la couronne de l'arbre jusqu'à l'herbe, en tournoyant, le vent les prenant à gauche
         let (tx, tr) = cour.layout(from, to).tree;
         let colours = if se == Saison::Automne { b"FyF" } else { b"MMi" };

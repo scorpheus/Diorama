@@ -111,6 +111,7 @@ type Presence = {
   idleSince?: number // since when this forge has had nothing to do: three at once make a banquet
   scene?: Scene // where its scene stands in its window, for the passeur
   visiting?: string // whose forge he is off to, from the moment he sets out until he turns home
+  perso?: 'galadriel' // its body; none: the smith (what an older session reads)
 }
 
 /** The scene as the band draws it, for the passeur (passeur/passeur.ps1): its columns from the left, its rows. */
@@ -143,6 +144,7 @@ type Visit = {
   // the handover: 'there' while he visits; 'leaving' when he means to go (the
   // visitor writes it); 'gone' once the host has walked him out (the host writes it)
   phase?: 'there' | 'leaving' | 'gone'
+  perso?: 'galadriel' // the visitor's own body, which the host draws; none: the smith
   // for the passeur, who flies him from his window to the host's and back: his walk, his scene
   sprite?: Sprite; scene?: Scene
 }
@@ -498,7 +500,7 @@ const anim = {
   tripUntil: 0, // a banquet sets how long he stays
   // a guest from another session: who, in what look, since when, leaving since when
   // guests from other sessions: who, in what look, since when, leaving since when
-  guests: new Map<string, { project: string; name?: string; title?: string; cape: string; accessory: Accessory; arrived: number; leaving?: number }>(),
+  guests: new Map<string, { project: string; name?: string; title?: string; cape: string; accessory: Accessory; perso?: 'galadriel'; arrived: number; leaving?: number }>(),
   personality: 'calme' as Personality,
   opening: '', // how the conversation began: what his look and his dreams draw on
   idleSince: undefined as number | undefined,
@@ -753,6 +755,7 @@ async function heartbeat($: EngineInterface) {
     project: anim.project, cape: anim.cape, accessory: anim.accessory, seen: now, away: anim.trip?.phase === 'away',
     ...(anim.trip && anim.trip.phase !== 'back' ? { visiting: anim.trip.host } : {}),
     personality: anim.personality, idleSince: anim.idleSince, name: anim.name, ...(anim.title || anim.goal ? { title: anim.title || anim.goal } : {}),
+    ...(anim.perso ? { perso: anim.perso } : {}),
     ...sceneField(),
   }
   for (const [id, p] of Object.entries(all)) if (now - p.seen > 24 * 60 * 60 * 1000) delete all[id] // a day gone: forgotten
@@ -922,6 +925,7 @@ function guestsNow(): Guest[] {
       accessory: g.accessory,
       tick: age + (hashOf(id) % 997),
       waving: !walking && age - (offstage - spot) / pace < 16,
+      ...(g.perso ? { perso: g.perso } : {}), // she keeps her own body: one sees who came
     })
   }
   return out
@@ -1106,7 +1110,7 @@ async function arriveAway($: EngineInterface, voice: string) {
   const title = anim.title || anim.goal
   const visit: Visit = {
     host: trip.host, until: trip.until, project: anim.project, cape: anim.cape, accessory: anim.accessory, phase: 'there',
-    name: anim.name, ...(title ? { title } : {}), ...spriteField(), ...sceneField(),
+    name: anim.name, ...(title ? { title } : {}), ...(anim.perso ? { perso: anim.perso } : {}), ...spriteField(), ...sceneField(),
   }
   await $.store.set(VISIT_PREFIX + anim.sessionId, visit)
   await setAct($, 'away', trip.name)
@@ -1233,7 +1237,7 @@ async function pollVisits($: EngineInterface, voice: string) {
   }
   for (const [id, v] of here) {
     if (anim.guests.has(id) || anim.hostAcks.includes(id)) continue
-    anim.guests.set(id, { project: v.project, name: v.name, title: v.title, cape: v.cape, accessory: v.accessory, arrived: anim.clock })
+    anim.guests.set(id, { project: v.project, name: v.name, title: v.title, cape: v.cape, accessory: v.accessory, ...(v.perso === 'galadriel' ? { perso: v.perso } : {}), arrived: anim.clock })
     const trip = anim.trip
     if (trip && trip.phase !== 'back') {
       // he is out: on his way to this very guest (they crossed), or elsewhere; then he hurries

@@ -18,12 +18,16 @@
 // développement, et on lit l'objet décodé en mémoire : `tracker._boats`, ses classes, ses
 // pointages. Rien à installer. DIORAMA_NAVIGATEUR donne un autre navigateur Chromium.
 // Le fichier s'écrit à côté puis se renomme : la session ne lit jamais un fichier à moitié écrit.
+// Ce qu'on lit dans la page est dans route-du-rhum-lire.mts, avec son banc sur un vrai pointage
+// (node --test tools/route-du-rhum-lire.banc.mts).
 // Node 22.6 ou plus.
 
 import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+import { LIRE } from './route-du-rhum-lire.mts'
 
 const args = process.argv.slice(2)
 const option = (nom: string) => {
@@ -53,54 +57,15 @@ const navigateur = [
 const dormir = (ms: number) => new Promise(r => setTimeout(r, ms))
 const heure = () => new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
-/**
- * Ce qu'on lit dans la page, une fois le tracker chargé : chaque bateau, sa classe, sa position
- * au pointage, et la ligne du pointage (rang, distance à l'arrivée, vitesse, statut). `quand` :
- * l'instant à rejouer, en secondes, ou null pour le dernier pointage.
- */
-const LIRE = (quand: number | null) => {
-  const t = (window as any).tracker
-  if (!t || !Array.isArray(t._boats) || t._boats.length === 0) return { pas: 'pas de tracker dans la page' }
-  const classe: Record<string, string> = {}
-  for (const c of Object.values<any>(t._boatClassesByIds ?? {})) for (const b of c.boats ?? []) classe[b.id] = c.name
-  const pointages: any[] = t._reports ?? []
-  const pointage = quand === null ? pointages[pointages.length - 1] : [...pointages].reverse().find(p => p.timecode <= quand)
-  const lignes: Record<string, any> = {}
-  for (const l of pointage?.lines ?? []) lignes[l.boat] = l
-  // la route d'un premier de classe : au plus une quarantaine de points, jusqu'au pointage
-  const trace = (b: any) => {
-    const locs: any[] = (b.track?.locations ?? []).filter((l: any) => quand === null || l.timecode <= quand)
-    const pas = Math.max(1, Math.ceil(locs.length / 40))
-    const gardes = locs.filter((_, i) => i % pas === 0 || i === locs.length - 1)
-    return gardes.map(l => [Math.round(l.lat * 100) / 100, Math.round(l.lng * 100) / 100])
-  }
-  const position = (b: any) => {
-    const locs: any[] = b.track?.locations ?? []
-    const loc = quand === null ? b.track?.lastLocation : [...locs].reverse().find(l => l.timecode <= quand)
-    return loc && typeof loc.lat === 'number' ? { lat: loc.lat, lon: loc.lng } : null
-  }
-  return {
-    etat: t._eventState,
-    depart: t.timecodeOfficialStart,
-    pointage: pointage?.timecode ?? null,
-    bateaux: t._boats.map((b: any) => {
-      const l = lignes[b.id]
-      const marin = b.sailors?.[0]
-      return {
-        nom: String(b.name ?? '').trim(),
-        skipper: marin ? `${marin.fname ?? ''} ${marin.lname ?? ''}`.trim() : null,
-        classe: classe[b.id] ?? null,
-        coque: b.hullColors ?? [],
-        couleur: b.mainColor ?? b.track?.color ?? null,
-        position: position(b),
-        rang: l?.rank ?? null,
-        dtf: l?.dtf ?? null,
-        vitesse: l?.speed ?? null,
-        statut: l?.racestatus ?? null,
-        trace: l?.rank === 1 && /^(RAC|ARV)$/.test(l?.racestatus ?? '') ? trace(b) : null,
-      }
-    }),
-  }
+/** Ferme le navigateur entier (tous ses processus), par la connexion du navigateur, pas celle de la page. */
+async function fermerLeNavigateur(port: number): Promise<void> {
+  const v: any = await fetch(`http://127.0.0.1:${port}/json/version`).then(r => r.json())
+  if (!v?.webSocketDebuggerUrl) return
+  const b = new WebSocket(v.webSocketDebuggerUrl)
+  await new Promise((ok, ko) => { b.addEventListener('open', ok); b.addEventListener('error', ko) })
+  b.send(JSON.stringify({ id: 1, method: 'Browser.close' }))
+  await dormir(300)
+  b.close()
 }
 
 /** La page du tracker chargée dans un navigateur sans fenêtre, et ce que LIRE en tire. */
@@ -144,10 +109,14 @@ async function lireLeTracker(): Promise<ReturnType<typeof LIRE>> {
   } finally {
     ws?.close()
     // Edge fermé pour de bon avant d'ôter son profil : sous Windows, il le tient encore un moment,
-    // et un profil qui résiste ne doit pas faire perdre un pointage déjà lu
+    // et un profil qui résiste ne doit pas faire perdre un pointage déjà lu. `p.kill()` n'arrête que
+    // le premier processus d'Edge, ses enfants gardaient le profil (« laissé : EPERM », 3 novembre) :
+    // on lui demande d'abord de se fermer tout entier, par son protocole (Browser.close).
     const ferme = new Promise(r => p.once('exit', r))
-    p.kill()
+    await Promise.race([fermerLeNavigateur(port), dormir(3000)]).catch(() => undefined)
     await Promise.race([ferme, dormir(5000)])
+    p.kill()
+    await Promise.race([ferme, dormir(2000)])
     try {
       rmSync(profil, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
     } catch (e) {

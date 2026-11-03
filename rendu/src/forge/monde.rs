@@ -99,6 +99,10 @@ pub struct Invite {
     pub accessory: Accessoire,
     pub tick: i64,
     pub waving: bool,
+    /// son corps, celui de chez lui : un visiteur le garde, pour qu'on voie qui est venu ;
+    /// rien (un mod qui ne l'écrit pas) : Scorpheus
+    #[serde(default)]
+    pub perso: Option<Perso>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -163,6 +167,11 @@ pub struct Monde {
     pub ship: Option<Envoi>,
     /// L'heure locale, 0..24, minutes comprises.
     pub hour: f64,
+    /// L'heure du ciel : celle que la lumière et le ciel suivent, tirée du vrai soleil (ClaudeTerminal,
+    /// soleil.rs : 7 h au lever, 13 h au midi solaire, 19 h 30 au coucher, 21 h à la fin du crépuscule) ; sans
+    /// elle (le mod ne l'écrit pas), l'heure de la pendule. Les routines (volets, sommeil) gardent `hour`.
+    #[serde(default)]
+    pub ciel: Option<f64>,
     pub month: i32,
     pub day: i32,
     pub weather: Option<Temps>,
@@ -230,6 +239,7 @@ impl Default for Monde {
             outcome: None,
             ship: None,
             hour: 12.0,
+            ciel: None,
             month: 6,
             day: 15,
             weather: None,
@@ -319,6 +329,12 @@ impl Monde {
     }
 
     pub fn nuit(&self) -> bool {
-        self.hour < 6.0 || self.hour >= 21.0
+        let h = self.heure_ciel();
+        !(6.0..21.0).contains(&h)
+    }
+
+    /// L'heure que suivent la lumière et le ciel : celle du vrai soleil si on la connaît, sinon la pendule.
+    pub fn heure_ciel(&self) -> f64 {
+        self.ciel.unwrap_or(self.hour)
     }
 }

@@ -31,10 +31,12 @@ const OCX: f32 = 342.0;
 const OCY: f32 = 114.0;
 const RIN: f32 = 100.0;
 const RFR: f32 = 111.0;
-/// Le bassin : son centre, la hauteur de son bord, sa demi-largeur.
+/// Le bassin : son centre, la hauteur de son bord, sa demi-largeur, et son pied, posé sur le sol devant le
+/// mur (user, 02-11 : collé au pied du mur, « on dirait que c'est collé contre le mur »).
 const BX: f32 = 116.0;
-const BORD: f32 = 184.0;
+const BORD: f32 = 206.0;
 const BW: f32 = 56.0;
+const PIED: f32 = SOL + 22.0;
 const PILIER: f32 = 478.0;
 /// Les lanternes : où pend chacune (le haut de sa cage).
 const LANTERNES: [(f32, f32); 4] = [(26.0, 58.0), (74.0, 42.0), (200.0, 70.0), (468.0, 52.0)];
@@ -92,10 +94,19 @@ struct Ciel {
     /// la lune la nuit, le soleil le jour : où, et sa couleur
     astre: (f32, f32),
     lumiere_astre: Rgb,
+    /// l'astre est la lune
+    lune: bool,
+    /// la force du rai que l'astre jette par l'oculus (0 à 1), et sa direction (vers le bas)
+    rai: f32,
+    dir: (f32, f32),
+    /// le ciel qui lave le mur autour de l'oculus
+    lavis: Rgb,
+    /// où en sont les nuages, en pixels de dessin
+    derive: f32,
     orage: bool,
 }
 
-fn ciel(heure: f32, orage: bool) -> Ciel {
+fn ciel(heure: f32, orage: bool, phase: f32) -> Ciel {
     let h = heure.rem_euclid(24.0);
     let nuit = if h < 5.0 || h >= 21.5 {
         1.0
@@ -106,7 +117,8 @@ fn ciel(heure: f32, orage: bool) -> Ciel {
     } else {
         0.0
     };
-    let crepuscule = ((1.0 - (h - 19.6).abs() / 1.6).max(0.0) + (1.0 - (h - 6.2).abs() / 1.2).max(0.0)).min(1.0);
+    // le doré commence quand le soleil baisse (17 h du ciel), culmine au coucher, s'éteint dans la nuit
+    let crepuscule = ((1.0 - (h - 19.4).abs() / 2.4).max(0.0) + (1.0 - (h - 6.8).abs() / 1.8).max(0.0)).min(1.0);
     let jour_haut = hex(0x5d8fd6);
     let jour_bas = hex(0xbfd8f0);
     let soir_haut = hex(0x3b3a7a);
@@ -115,18 +127,56 @@ fn ciel(heure: f32, orage: bool) -> Ciel {
     let nuit_bas = hex(0x273a7a);
     let mut haut = mix(mix(jour_haut, soir_haut, crepuscule), nuit_haut, nuit);
     let mut bas = mix(mix(jour_bas, soir_bas, crepuscule), nuit_bas, nuit);
-    let mut ambiance = mix(mix([1.75, 1.68, 1.5], [1.15, 0.85, 0.8], crepuscule), [0.15, 0.165, 0.33], nuit);
+    // la lumière du ciel dans la pièce, avant le rai : bleutée le jour, rose au crépuscule, d'encre
+    // la nuit ; l'intérieur reste plus sombre que dehors, c'est le rai qui fait le jour
+    let mut ambiance = mix(mix([1.45, 1.42, 1.48], [1.05, 0.76, 0.78], crepuscule), [0.15, 0.165, 0.33], nuit);
     if orage {
         haut = mix(haut, hex(0x2a2e3a), 0.6);
         bas = mix(bas, hex(0x4a5060), 0.6);
         ambiance = fois(ambiance, 0.75);
     }
-    // la lune court de droite à gauche au-dessus de sa capuche, de 18 h à 6 h ; le soleil, de
-    // gauche à droite, de 6 h à 18 h
-    let (p, lune) = if !(6.0..18.0).contains(&h) { (((h - 18.0).rem_euclid(24.0) / 12.0).clamp(0.0, 1.0), true) } else { ((h - 6.0) / 12.0, false) };
+    // le soleil court de gauche à droite au-dessus de sa capuche, du lever (7 h du ciel) au coucher
+    // (19 h 30) ; la lune, de droite à gauche, du coucher au lever
+    let (p, lune) = if (7.0..19.5).contains(&h) { ((h - 7.0) / 12.5, false) } else { (((h - 19.5).rem_euclid(24.0) / 11.5).clamp(0.0, 1.0), true) };
     let astre = if lune { (OCX + 64.0 - 128.0 * p, 64.0 - 26.0 * (PI * p).sin()) } else { (OCX - 64.0 + 128.0 * p, 62.0 - 24.0 * (PI * p).sin()) };
-    let lumiere_astre = if nuit > 0.5 { hex(0x9fb4ff) } else { mix(hex(0xfff0d0), hex(0xffb070), crepuscule) };
-    Ciel { haut, bas, nuit, crepuscule, ambiance, astre, lumiere_astre, orage }
+    let lumiere_astre = if lune { hex(0xa8bcff) } else { mix(hex(0xfff0d0), hex(0xffa860), crepuscule) };
+    // le rai : plein au midi, doré et bas vers le coucher ; la lune le donne à sa phase
+    let haut_astre = (PI * p).sin().max(0.0);
+    let eclairee = 0.5 - 0.5 * (2.0 * PI * phase).cos();
+    let mut rai = if lune { 0.7 * eclairee * haut_astre.powf(0.5) * nuit } else { haut_astre.powf(0.6) * (1.0 - 0.7 * nuit) };
+    if orage {
+        rai *= 0.12;
+    }
+    let dx = -(astre.0 - OCX) / 64.0 * 0.62;
+    let n = dx.hypot(1.0);
+    let lavis = fois(mix(bas, haut, 0.3), 1.0 - 0.5 * nuit);
+    Ciel { haut, bas, nuit, crepuscule, ambiance, astre, lumiere_astre, lune, rai, dir: (dx / n, 1.0 / n), lavis, derive: h * 9.0, orage }
+}
+
+/// Le rai de l'astre par l'oculus : ce que le point (u, v) en reçoit, de 0 à 1, ses stries (les
+/// festons de la vitre découpent la lumière) et son déclin compris ; rien au-dessus de l'oculus.
+fn rai(u: f32, v: f32, c: &Ciel) -> f32 {
+    if c.rai <= 0.0 {
+        return 0.0;
+    }
+    let (dx, dy) = c.dir;
+    let (wx, wy) = (u - OCX, v - OCY);
+    // le long du rai, depuis le centre de l'oculus ; et de travers, signé
+    let s = wx * dx + wy * dy;
+    if s <= 0.0 {
+        return 0.0;
+    }
+    let e = wx * dy - wy * dx;
+    let bord = RIN * 0.86 * (1.0 + s / 260.0) - e.abs();
+    let k = ((bord + 10.0) / 22.0).clamp(0.0, 1.0);
+    if k <= 0.0 {
+        return 0.0;
+    }
+    let k = k * k * (3.0 - 2.0 * k);
+    let stries = 0.62 + 0.38 * (0.5 + 0.5 * (e * 0.14 + 0.7).sin()) * (0.55 + 0.45 * (e * 0.053 - 1.1).cos());
+    // il naît au bas de la vitre, et s'use en descendant
+    let naitre = ((s - 40.0) / 60.0).clamp(0.0, 1.0);
+    c.rai * k * stries * (-s / 520.0).exp() * (0.25 + 0.75 * naitre)
 }
 
 /// La phase de la lune, de 0 (nouvelle) à 1, pour un jour de 2026 : la nouvelle lune du
@@ -197,6 +247,106 @@ struct Cadre {
     sy: f32,
 }
 
+/// Combien de secondes dure une vision : elle monte de l'eau, flotte, se défait.
+pub const VISION_S: f32 = 9.0;
+
+/// Une vision dans la vasque : l'habitant d'une session qui écrit à Galadriel, ou à qui elle écrit, monte de
+/// l'eau, pâle et cyan, flotte au-dessus d'elle quelques secondes, puis se défait (user, 02-11 : « je prends
+/// le 3, la vision dans la vasque »). L'appli la pose ; le monde du mod n'en sait rien. Posée quand le
+/// belvédère n'est pas à l'écran, elle attend qu'il y soit (`VISION_ATTENTE` au plus).
+pub struct Vision {
+    /// ses images, `w` × `h` en ARGB (alpha nul : transparent), qui tournent toutes les 150 ms
+    pub images: Vec<Vec<u32>>,
+    pub w: u32,
+    pub h: u32,
+    /// quand l'appli l'a posée
+    pub posee: std::time::Instant,
+    /// quand elle a commencé à monter : à la première image peinte après sa pose
+    pub nee: Option<std::time::Instant>,
+}
+
+/// Combien de temps une vision attend que le belvédère soit à l'écran : au-delà, elle est oubliée.
+pub const VISION_ATTENTE: std::time::Duration = std::time::Duration::from_secs(600);
+
+impl Vision {
+    /// Son âge en secondes depuis qu'elle monte ; `None` : pas encore montée.
+    pub fn age(&self) -> Option<f32> {
+        self.nee.map(|n| n.elapsed().as_secs_f32())
+    }
+}
+
+/// Où en est Lara, la voix de Galadriel, sur la carte graphique (l'appli le dit : `voix::EtatLara`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Lara {
+    /// pas de Lara pour cette appli : pas de dragon
+    #[default]
+    Aucune,
+    /// libérée : la carte est rendue, le dragon est parti
+    Liberee,
+    /// elle se charge : le dragon est là, éveillé
+    SeCharge,
+    /// chargée, elle tient la carte : le dragon dort sur son or
+    Prete,
+}
+
+/// Combien de secondes dure un vol du dragon, quand il part ou qu'il revient.
+pub const DRAGON_VOL_S: f32 = 3.5;
+
+/// Le dragon de Lara (user, 03-11 : « le dragon de la Lara, oui ») : quand Lara occupe la carte graphique, un petit
+/// dragon dort sur un tas d'or dans le coin du belvédère ; quand on la libère, il s'envole, et l'or reste seul ;
+/// quand on la reprend, il revient. L'appli dit où en est Lara (`suivre`) ; le monde du mod n'en sait rien.
+#[derive(Clone, Copy, Debug)]
+pub struct Dragon {
+    pub lara: Lara,
+    /// où elle en était avant le dernier changement
+    pub avant: Lara,
+    /// quand elle a changé
+    pub depuis: std::time::Instant,
+}
+
+impl Default for Dragon {
+    fn default() -> Self {
+        Dragon { lara: Lara::Aucune, avant: Lara::Aucune, depuis: std::time::Instant::now() }
+    }
+}
+
+/// Ce que le dragon fait à un instant.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Geste {
+    Absent,
+    Dort,
+    Eveille,
+    /// il part, ou il revient (`part` faux), à `f` de son vol (de 0 à 1)
+    Vole { part: bool, f: f32 },
+    /// parti : l'or reste seul
+    Parti,
+}
+
+impl Dragon {
+    /// Lara a peut-être changé.
+    pub fn suivre(&mut self, lara: Lara) {
+        if lara != self.lara {
+            self.avant = self.lara;
+            self.lara = lara;
+            self.depuis = std::time::Instant::now();
+        }
+    }
+
+    /// Ce que le dragon fait, `age` secondes après le dernier changement de Lara.
+    pub fn geste(&self, age: f32) -> Geste {
+        let la = |l: Lara| matches!(l, Lara::SeCharge | Lara::Prete);
+        let f = age / DRAGON_VOL_S;
+        match self.lara {
+            Lara::Aucune => Geste::Absent,
+            Lara::Liberee if la(self.avant) && f < 1.0 => Geste::Vole { part: true, f },
+            Lara::Liberee => Geste::Parti,
+            _ if !la(self.avant) && f < 1.0 => Geste::Vole { part: false, f },
+            Lara::SeCharge => Geste::Eveille,
+            Lara::Prete => Geste::Dort,
+        }
+    }
+}
+
 /// Ce qu'on demande au belvédère pour une image.
 pub struct Vue<'a> {
     pub monde: &'a Monde,
@@ -209,6 +359,10 @@ pub struct Vue<'a> {
     pub ch: i32,
     /// où se tient Galadriel, en pixels de forge (le milieu de sa place)
     pub elle: Option<f32>,
+    /// la vision qui monte de la vasque, s'il y en a une
+    pub vision: Option<&'a Vision>,
+    /// le dragon de Lara
+    pub dragon: Option<&'a Dragon>,
 }
 
 impl Belvedere {
@@ -246,7 +400,7 @@ impl Belvedere {
             h: rh,
             sx: sx.to_bits(),
             sy: sy.to_bits(),
-            quart: (w.hour * 4.0).floor() as i32,
+            quart: (w.heure_ciel() * 4.0).floor() as i32,
             saison: w.saison() as u8,
             temps: w.weather.map_or(0, |t| t as u8 + 1),
             lanternes: [code(&lanternes[0]), code(&lanternes[1]), code(&lanternes[2]), code(&lanternes[3])],
@@ -255,7 +409,7 @@ impl Belvedere {
         let ox = -v.x0 * v.cw;
         let mut entier = neuve;
         if self.cle != Some(cle) {
-            let ciel = ciel(w.hour as f32, w.weather == Some(Temps::Storm));
+            let ciel = ciel(w.heure_ciel() as f32, w.weather == Some(Temps::Storm), phase_lune(w.month, w.day));
             self.fond = fond(rw, rh, sx, sy, &ciel, w, &lanternes, sommeil);
             self.grille = grille(&ciel, &lanternes, sommeil);
             self.ciel = Some(ciel);
@@ -264,7 +418,7 @@ impl Belvedere {
             self.cle = Some(cle);
             entier = true;
         }
-        let ciel = self.ciel.unwrap_or_else(|| ciel(w.hour as f32, false));
+        let ciel = self.ciel.unwrap_or_else(|| ciel(w.heure_ciel() as f32, false, phase_lune(w.month, w.day)));
         // la part visible de la région
         let (xa, xb) = (ox.max(0), (ox + rw as i32).min(pw as i32).min(v.cols * v.cw));
         let yb = rh.min(ph) as i32;
@@ -354,7 +508,7 @@ impl Belvedere {
 fn lanternes(w: &Monde, sommeil: bool) -> Lanternes {
     let mut l: Lanternes = [None; 4];
     let chaude = hex(0xffb85c);
-    if w.lantern_lit || w.hour >= 18.5 || w.hour < 7.0 {
+    if w.lantern_lit || !(7.0..18.5).contains(&w.heure_ciel()) {
         l[0] = Some(chaude);
     }
     let libres: Vec<usize> = [2usize, 1, 3, 0].into_iter().filter(|&i| l[i].is_none()).collect();
@@ -375,7 +529,6 @@ fn lanternes(w: &Monde, sommeil: bool) -> Lanternes {
 
 /// La lumière d'un point de la pièce, en facteur par canal.
 fn lumiere(u: f32, v: f32, ciel: &Ciel, lanternes: &Lanternes, sommeil: bool) -> Rgb {
-    let mut l = ciel.ambiance;
     let point = |l: &mut Rgb, x: f32, y: f32, c: Rgb, p: f32, r: f32| {
         let d2 = ((u - x) * (u - x) + (v - y) * (v - y)) / (r * r);
         let k = p / (1.0 + d2) / 255.0;
@@ -383,17 +536,33 @@ fn lumiere(u: f32, v: f32, ciel: &Ciel, lanternes: &Lanternes, sommeil: bool) ->
         l[1] += c[1] * k;
         l[2] += c[2] * k;
     };
-    // l'astre par l'oculus : le mur autour, une tache au sol
-    let r = (u - OCX).hypot(v - OCY);
-    let lavis = (-((r - RIN).max(0.0) / 34.0).powi(2)).exp() * 0.32 * (0.5 + 0.5 * ciel.nuit.max(1.0 - ciel.nuit));
-    let a = ciel.lumiere_astre;
-    l = plus(l, fois(a, lavis / 255.0));
-    if v >= SOL {
-        let ecart = (u - OCX - (v - SOL) * 0.35).abs() - (70.0 + (v - SOL) * 1.1);
-        let k = (1.0 - ecart / 18.0).clamp(0.0, 1.0) * 0.6;
-        l = plus(l, fois(a, k / 255.0));
+    // le jour du ciel : plein autour de l'oculus, plus sombre aux coins, sous le plafond, au pied
+    // du mur et sous le bassin
+    let loin = ((u - OCX) / 320.0).powi(2) + ((v - OCY - 40.0) / 240.0).powi(2);
+    let mut creux = (0.6 + 0.4 * (-loin).exp()) * (0.74 + 0.26 * ((v - 4.0) / 46.0).clamp(0.0, 1.0));
+    if v < SOL {
+        creux *= 1.0 - 0.3 * (1.0 - (SOL - v) / 12.0).clamp(0.0, 1.0);
+        // derrière la coupe, le mur est à l'ombre de la vasque, un peu décalée : elle est devant lui
+        if v > BORD - 2.0 {
+            let e = ((u - BX - 6.0) / (BW + 6.0)).powi(2) + ((v - BORD - 30.0) / 40.0).powi(2);
+            creux *= 1.0 - 0.32 * (1.0 - e).clamp(0.0, 1.0);
+        }
+    } else {
+        creux *= 1.0 - 0.6 * (-((u - BX - 4.0) / 40.0).powi(2) - ((v - PIED + 1.0) / 5.0).powi(2)).exp();
     }
+    let mut l = fois(ciel.ambiance, creux);
+    // le ciel par l'oculus lave le mur autour
+    let r = (u - OCX).hypot(v - OCY);
+    let lavis = (-((r - RIN).max(0.0) / 30.0).powi(2)).exp() * 0.5;
+    l = plus(l, fois(ciel.lavis, lavis / 255.0));
+    // le rai de l'astre : il effleure le mur, il s'étale au sol
+    let k = rai(u, v, ciel) * if v >= SOL { 1.5 } else { 0.5 };
+    l = plus(l, fois(ciel.lumiere_astre, k / 255.0));
     point(&mut l, BX, BORD - 6.0, CYAN, if sommeil { 0.6 } else { 1.0 }, 62.0);
+    if v >= SOL {
+        let k = (-((u - BX) / 70.0).powi(2) - ((v - PIED - 4.0) / 12.0).powi(2)).exp() * if sommeil { 0.18 } else { 0.3 };
+        l = plus(l, fois(CYAN, k / 255.0));
+    }
     for (i, c) in lanternes.iter().enumerate() {
         if let Some(c) = c {
             let (x, y) = LANTERNES[i];
@@ -438,23 +607,65 @@ fn fond(rw: usize, rh: usize, sx: f32, sy: f32, ciel: &Ciel, w: &Monde, lanterne
         let mut t = Trace { alb: &mut alb, emi: &mut emi, rw, rh, sx, sy };
         decor(&mut t, lanternes);
     }
-    let mut out = vec![0u32; n];
+    let mut col = vec![[0f32; 3]; n];
     for y in 0..rh {
         let v = (y as f32 + 0.5) / sy;
         for x in 0..rw {
             let u = (x as f32 + 0.5) / sx;
             let i = y * rw + x;
             let a = alb[i];
-            let c = if a == [0.0; 3] {
+            let mut c = if a == [0.0; 3] {
                 emi[i]
             } else {
                 let l = lumiere(u, v, ciel, lanternes, sommeil);
                 plus([a[0] * l[0], a[1] * l[1], a[2] * l[2]], emi[i])
             };
-            out[i] = pack(c);
+            if !dans_vitre(u, v) {
+                // l'air que le rai traverse, poudré de sa lumière
+                let k = rai(u, v, ciel);
+                if k > 0.0 {
+                    c = plus(c, fois(ciel.lumiere_astre, 0.21 * k));
+                }
+                // le halo d'une lanterne allumée
+                for (j, l) in lanternes.iter().enumerate() {
+                    if let Some(l) = l {
+                        let (lx, ly) = LANTERNES[j];
+                        let d = (u - lx).hypot(v - ly - 11.0) / 30.0;
+                        if d < 1.0 {
+                            c = plus(c, fois(*l, 0.2 * (1.0 - d) * (1.0 - d)));
+                        }
+                    }
+                }
+            }
+            col[i] = c;
         }
     }
-    out
+    // le sol de pierre de lune, poli : il rend un peu du lambris, du bassin et du rai
+    let sol = (SOL * sy).round() as usize;
+    let profond = 34.0 * sy;
+    for y in sol..rh {
+        let miroir = 2 * sol as i64 - 1 - y as i64;
+        if miroir < 0 {
+            continue;
+        }
+        let f = 0.2 * (1.0 - (y - sol) as f32 / profond).max(0.0);
+        for x in 0..rw {
+            let u = (x as f32 + 0.5) / sx;
+            if u >= PILIER || bassin(u, (y as f32 + 0.5) / sy).is_some() {
+                continue;
+            }
+            let m = col[miroir as usize * rw + x];
+            let c = &mut col[y * rw + x];
+            *c = plus(*c, fois(m, f));
+        }
+    }
+    col.into_iter().map(|c| pack(doux(c))).collect()
+}
+
+/// Un genou doux au-dessus de 200 : la lumière forte blanchit sans se figer d'un coup.
+fn doux(c: Rgb) -> Rgb {
+    let k = |x: f32| if x <= 200.0 { x } else { 200.0 + 55.0 * (1.0 - (-(x - 200.0) / 55.0).exp()) };
+    [k(c[0]), k(c[1]), k(c[2])]
 }
 
 /// Un pixel du fond avant les objets posés : le mur, le lambris, le sol, l'oculus et son ciel,
@@ -583,7 +794,7 @@ fn pixel_fond(u: f32, v: f32, ciel: &Ciel, saison: Saison, phase: f32, arc: bool
 /// Le bassin de vision : le fût cannelé, la coupe, son bord d'or, l'eau qui luit.
 fn bassin(u: f32, v: f32) -> Option<(Rgb, Rgb)> {
     let rien = [0.0; 3];
-    if !(BX - BW - 1.0..=BX + BW + 1.0).contains(&u) || !(BORD - 6.0..SOL).contains(&v) {
+    if !(BX - BW - 1.0..=BX + BW + 1.0).contains(&u) || !(BORD - 6.0..PIED).contains(&v) {
         return None;
     }
     // l'eau, et le bord
@@ -618,10 +829,14 @@ fn bassin(u: f32, v: f32) -> Option<(Rgb, Rgb)> {
     }
     // le fût, cannelé, et son socle
     if v >= BORD + 16.0 {
-        let hw = if v < SOL - 12.0 { 13.0 } else { 22.0 };
+        // le fût, puis le socle à deux marches, son arête claire
+        let hw = if v < PIED - 12.0 { 13.0 } else if v < PIED - 5.0 { 22.0 } else { 27.0 };
         if (u - BX).abs() <= hw {
-            if (v - (SOL - 12.0)).abs() < 0.5 {
+            if (v - (PIED - 12.0)).abs() < 0.5 || (v - (PIED - 5.0)).abs() < 0.5 {
                 return Some((fois(PIERRE, 1.25), rien));
+            }
+            if v >= PIED - 1.0 {
+                return Some((fois(PIERRE, 0.4), rien));
             }
             let t = (u - (BX - hw)) / (2.0 * hw);
             let mut c = fois(PIERRE, 0.55 + 0.6 * (PI * (t * 0.85 + 0.1)).sin());
@@ -642,7 +857,7 @@ fn ciel_px(u: f32, v: f32, ciel: &Ciel, saison: Saison, phase: f32, arc: bool) -
     let mut c = mix(ciel.haut, ciel.bas, t.powf(1.6));
     let (mx, my) = ciel.astre;
     let d = (u - mx).hypot(v - my);
-    let lune = ciel.nuit > 0.5;
+    let lune = ciel.lune;
     let rayon = if lune { 14.5 } else { 11.0 };
     // le halo
     let halo = (-((d - rayon).max(0.0) / if lune { 30.0 } else { 40.0 }).powf(1.1)).exp() * if lune { 0.6 } else { 0.8 };
@@ -683,6 +898,32 @@ fn ciel_px(u: f32, v: f32, ciel: &Ciel, saison: Saison, phase: f32, arc: bool) -
             c = if eclairee { l } else { mix(c, hex(0x3a4670), 0.6) };
         } else {
             c = mix(hex(0xfff8e0), hex(0xffd090), ciel.crepuscule);
+        }
+    }
+    // des nuages qui passent, éclairés par-dessous au couchant, d'encre et ourlés de lune la nuit
+    if !ciel.orage {
+        let mut nuage = 0f32;
+        let mut ombre = 0f32;
+        for k in 0..4 {
+            let cx = OCX - 130.0 + (h2(k, 201) * 260.0 + ciel.derive + 37.0 * k as f32).rem_euclid(300.0);
+            let cy = 34.0 + 70.0 * h2(k, 203);
+            for j in 0..5 {
+                let (ox, oy, r) = ((j as f32 - 2.0) * 7.0 + 4.0 * h2(k, j + 210), -4.0 * (1.0 - ((j as f32 - 2.0) / 2.5).powi(2)) + 2.0 * h2(k, j + 220), 6.0 + 4.0 * h2(k, j + 230));
+                let d = (u - cx - ox).hypot((v - cy - oy) * 1.6) / r;
+                if d < 1.0 {
+                    let a = (1.0 - d * d).min(1.0);
+                    if a > nuage {
+                        nuage = a;
+                        ombre = ((v - cy + 2.0) / 9.0).clamp(0.0, 1.0);
+                    }
+                }
+            }
+        }
+        if nuage > 0.0 {
+            let clair = mix(mix(hex(0xfafcff), hex(0xffd6b8), ciel.crepuscule), hex(0x38406a), ciel.nuit);
+            let sombre = mix(mix(hex(0xc4d0e6), hex(0x8a6a98), ciel.crepuscule), hex(0x141a38), ciel.nuit);
+            let teinte = mix(clair, sombre, ombre);
+            c = mix(c, teinte, (nuage * 2.2).min(1.0) * (0.85 - 0.25 * ciel.nuit));
         }
     }
     // la forêt d'argent au loin, puis la brume
@@ -789,32 +1030,50 @@ fn decor(t: &mut Trace, lanternes: &Lanternes) {
     }
     // la branche, sa part au-dessus du pilier
     branche(0.0, LARGE, &mut |u, v, c| t.tache(u, v, 1.0, 1.0, c, false));
-    // les lanternes, leurs chaînes d'or ; le verre luit de sa couleur quand l'aide est là
+    // les lanternes et leurs chaînes d'or, maillon après maillon ; le verre luit de sa couleur quand l'aide
+    // est là, éteint il garde un reflet
     for (i, &(lx, ly)) in LANTERNES.iter().enumerate() {
         let mut y = 20.0;
-        while y < ly {
-            if (y as i32) % 3 != 0 && !t.vitre(lx, y) {
-                t.tache(lx, y, 1.0, 1.0, OR_TERNI, false);
+        while y < ly - 3.0 {
+            if !t.vitre(lx, y) {
+                match (y as i32).rem_euclid(4) {
+                    0 | 2 => t.tache(lx, y, 1.0, 1.0, OR_TERNI, false),
+                    1 => {
+                        t.tache(lx - 1.0, y, 1.0, 1.0, OR_TERNI, false);
+                        t.tache(lx + 1.0, y, 1.0, 1.0, fois(OR_TERNI, 0.7), false);
+                    }
+                    _ => {}
+                }
             }
             y += 1.0;
         }
         for (j, rang) in LANTERNE.iter().enumerate() {
             for (k, c) in rang.bytes().enumerate() {
-                let (u, v) = (lx - 7.0 + 2.0 * k as f32, ly + 2.0 * j as f32);
+                let (u, v) = (lx - 6.0 + k as f32, ly - 3.0 + j as f32);
+                // l'or et l'argent prennent la lumière par la gauche du haut
+                let biais = 1.0 + 0.18 * (6.0 - k as f32) / 6.0;
                 match c {
-                    b'g' => t.tache(u, v, 2.0, 2.0, OR, false),
-                    b's' => t.tache(u, v, 2.0, 2.0, hex(0xc8d0ea), false),
-                    b'w' | b'W' | b'Y' => match lanternes[i] {
+                    b'r' => t.tache(u, v, 1.0, 1.0, OR_TERNI, false),
+                    b'g' => t.tache(u, v, 1.0, 1.0, fois(OR_TERNI, 0.85 * biais), false),
+                    b'G' => t.tache(u, v, 1.0, 1.0, fois(OR, biais), false),
+                    b'd' => t.tache(u, v, 1.0, 1.0, if k < 6 { OR } else { OR_TERNI }, false),
+                    b's' => t.tache(u, v, 1.0, 1.0, if k < 6 { hex(0xdde3f6) } else { hex(0x9aa3c4) }, false),
+                    b'w' | b'W' | b'Y' | b'F' => match lanternes[i] {
                         Some(l) => {
-                            let k = match c {
-                                b'w' => 0.75,
-                                b'W' => 1.0,
-                                _ => 1.25,
+                            let verre = match c {
+                                b'w' => mix(fois(l, 0.7), hex(0xfff8e6), 0.15),
+                                b'W' => mix(l, hex(0xfff8e6), 0.35),
+                                b'Y' => mix(fois(l, 1.2), hex(0xfffbf0), 0.7),
+                                _ => hex(0xfffef6),
                             };
-                            let verre = mix(fois(l, k), hex(0xfff8e6), if c == b'Y' { 0.7 } else { 0.25 });
-                            t.tache(u, v, 2.0, 2.0, verre, true);
+                            t.tache(u, v, 1.0, 1.0, verre, true);
                         }
-                        None => t.tache(u, v, 2.0, 2.0, hex(0x2a2f55), false),
+                        None => {
+                            // le verre éteint, sombre, un reflet sur sa gauche
+                            let reflet = (k == 4 && (10..=13).contains(&j)) || (k == 8 && (15..=16).contains(&j));
+                            let c = if reflet { hex(0x8a94c8) } else if c == b'w' { hex(0x23284c) } else { hex(0x2c3260) };
+                            t.tache(u, v, 1.0, 1.0, c, false);
+                        }
                     },
                     _ => {}
                 }
@@ -849,7 +1108,38 @@ fn branche(de: f32, a: f32, poser: &mut dyn FnMut(f32, f32, Rgb)) {
     }
 }
 
-const LANTERNE: [&str; 12] = ["...g...", "..ggg..", ".sssss.", "s.www.s", "s.wWw.s", "swWYWws", "swWYWws", "s.wWw.s", "s.www.s", ".sssss.", "..ggg..", "...g..."];
+/// Une lanterne d'elfe, un pixel de dessin par lettre, de treize de large : l'anneau (r), le dôme d'or (g, G),
+/// ses bords (d), la cage d'argent (s), le verre (w, W, Y) et la flamme (F) ; le haut de la cage à la quatrième
+/// rangée, la flamme à la onzième sous lui.
+const LANTERNE: [&str; 27] = [
+    "......r......",
+    ".....r.r.....",
+    "......r......",
+    "......g......",
+    ".....gGg.....",
+    "....gGGGg....",
+    "...gGGGGGg...",
+    "..gGGGGGGGg..",
+    ".ddddddddddd.",
+    "..swwwwwwws..",
+    "..swwWWWwws..",
+    "..swWWWWWws..",
+    "..swWWYWWws..",
+    "..swWYFYWws..",
+    "..swWYFYWws..",
+    "..swWYYYWws..",
+    "..swWWYWWws..",
+    "..swWWWWWws..",
+    "..swwWWWwws..",
+    "..swwwwwwws..",
+    ".ddddddddddd.",
+    "..gGGGGGGGg..",
+    "...gGGGGGg...",
+    "....gGGGg....",
+    ".....gGg.....",
+    "......g......",
+    "......G......",
+];
 
 // Le chat de la machine : une panthère tachetée, or aux rosettes sombres, l'œil vert ; tournée
 // vers la gauche, trois pixels de dessin par pixel.
@@ -879,6 +1169,168 @@ const PANTHERE_DORT: [&str; 8] = [
     "kOwwwwwwwwwwwOOOOk",
     ".kkkkkkkkkkkkkkkk.",
 ];
+
+// Le dragon de Lara : sarcelle, ventre d'or pâle, ailes violettes, cornes d'ivoire ; roulé sur son or, ou en vol.
+const DRAGON_DORT: [&str; 13] = [
+    ".h......h.................",
+    ".hk....kh.....k...........",
+    "..kkTTkk.....kWk..k.......",
+    ".kTTTTTTk...kWwWkkWk......",
+    "kTTtTTtTTk.kWwwwWWwWk.....",
+    "kTkkTTkkTTkTWWwwwwwWk.....",
+    "kTTTTTTTTTTTTWWWWWWTTk....",
+    ".kTnbbnTTTTTTTTTTTTTTTk...",
+    ".kTbbbbTkTTTtTTTTDTTTTTk..",
+    "..kkkkkkbbbbbbbbbTDDTTTTk.",
+    "....kTTkkkkkkkkkkkkkkTTTTk",
+    "...kTTTTTTTTTTTTTTTTTTTTk.",
+    "....kkkkkkkkkkkkkkkkkkkk..",
+];
+const DRAGON_EVEIL: [&str; 13] = [
+    ".h......h.................",
+    ".hk....kh.....k...........",
+    "..kkTTkk.....kWk..k.......",
+    ".kTTTTTTk...kWwWkkWk......",
+    "kTTtTTtTTk.kWwwwWWwWk.....",
+    "kTkeTTkeTTkTWWwwwwwWk.....",
+    "kTTTTTTTTTTTTWWWWWWTTk....",
+    ".kTnbbnTTTTTTTTTTTTTTTk...",
+    ".kTbbbbTkTTTtTTTTDTTTTTk..",
+    "..kkkkkkbbbbbbbbbTDDTTTTk.",
+    "....kTTkkkkkkkkkkkkkkTTTTk",
+    "...kTTTTTTTTTTTTTTTTTTTTk.",
+    "....kkkkkkkkkkkkkkkkkkkk..",
+];
+const TAS_OR: [&str; 5] = [
+    "......kkkOOYOOOOOkkk......",
+    "....kkOOOOoOOOYOOoOOkk....",
+    "..kkOOoOOYOOOOoOOOOOOOkk..",
+    ".kOOYOOOoOOOOYOOoOOOYOOOk.",
+    "kkkkkkkkkkkkkkkkkkkkkkkkkk",
+];
+const DRAGON_VOL_HAUT: [&str; 17] = [
+    "kk....................kk",
+    "kWk......h....h......kWk",
+    "kwWk.....hk..kh.....kWwk",
+    ".kwWk...kTTTTTTk...kWwk.",
+    "..kwWk.kTtTTTTtTk.kWwk..",
+    "...kwWkTkeTTTTekTkWwk...",
+    "....kwWkTTnbbnTTkWwk....",
+    ".....kWTkTbbbbTkTWk.....",
+    "......kTTTTTTTTTTk......",
+    "......kTTbbbbbbTTk......",
+    ".......kTbbbbbbTk.......",
+    "........kTTkkTTk........",
+    ".......kTk....kTk.......",
+    "........k..kTTk.k.......",
+    "..........kTk...........",
+    "...........kTTk.........",
+    "............kk..........",
+];
+const DRAGON_VOL_BAS: [&str; 17] = [
+    "........................",
+    ".........h....h.........",
+    ".........hk..kh.........",
+    "........kTTTTTTk........",
+    ".......kTtTTTTtTk.......",
+    ".......TkeTTTTekT.......",
+    "......kkTTnbbnTTkk......",
+    "...kkkWTkTbbbbTkTWkkk...",
+    "..kWwwwWTTTTTTTTWwwwWk..",
+    ".kWwwwWkTTbbbbTTkWwwwWk.",
+    "kWwwWk.kTbbbbbbTk.kWwwWk",
+    "kwwk....kTTkkTTk....kwwk",
+    "kwk....kTk....kTk....kwk",
+    "kk......k..kTTk.k.....kk",
+    "..........kTk...........",
+    "...........kTTk.........",
+    "............kk..........",
+];
+
+fn couleur_dragon(c: u8) -> Option<Rgb> {
+    Some(match c {
+        b'k' => hex(0x14202e),
+        b'D' => hex(0x1d5a66),
+        b'T' => hex(0x2f8f9c),
+        b't' => hex(0x6fd0d0),
+        b'b' => hex(0xf0d890),
+        b'h' => hex(0xeadfb8),
+        b'W' => hex(0x4b3f8f),
+        b'w' => hex(0x7f70d0),
+        b'e' => hex(0xffd84a),
+        b'n' => hex(0x0c1418),
+        b'O' => hex(0xe8c878),
+        b'o' => hex(0xb08a3e),
+        b'Y' => hex(0xfff3b0),
+        _ => return None,
+    })
+}
+
+/// Où le dragon dort : le coin gauche du belvédère, devant le lambris, loin d'elle et de la vasque.
+const DRAGON_U: f32 = 4.0;
+/// Un pixel de dragon fait PAS_DRAGON × PAS_DRAGON pixels de dessin.
+const PAS_DRAGON: f32 = 3.0;
+
+/// Le haut du tas d'or, et celui du dragon posé dessus, en pixels de dessin.
+fn dragon_haut() -> (f32, f32) {
+    let tas = SOL + 30.0 - TAS_OR.len() as f32 * PAS_DRAGON;
+    (tas, tas - (DRAGON_DORT.len() as f32 - 2.0) * PAS_DRAGON)
+}
+
+/// Le tas d'or, et le dragon qui y dort ou y veille, derrière elle.
+fn dragon_au_nid(p: &mut Pinceau, d: &Dragon, t: f32) {
+    let geste = d.geste(d.depuis.elapsed().as_secs_f32());
+    if geste == Geste::Absent {
+        return;
+    }
+    let (tas, haut) = dragon_haut();
+    let k = p.lumiere(DRAGON_U + 26.0, tas);
+    p.dessin(DRAGON_U, tas, &TAS_OR, couleur_dragon, PAS_DRAGON, false, k);
+    // un éclat sur l'or, de temps en temps
+    let n = (t / 7.0) as i32;
+    if (t as i32) % 7 < 2 {
+        let u = DRAGON_U + (4.0 + h2(n, 3) * 64.0).floor();
+        p.luire(u, tas + 2.0 + (h2(n, 5) * 8.0).floor(), hex(0xfff3b0), 0.8);
+    }
+    match geste {
+        Geste::Dort => {
+            p.dessin(DRAGON_U, haut, &DRAGON_DORT, couleur_dragon, PAS_DRAGON, false, k);
+            // un petit z qui monte, de temps en temps
+            let age = t as i32 % 36;
+            if age < 14 {
+                let f = age as f32 / 14.0;
+                for (j, r) in ["zzz", ".z.", "zzz"].iter().enumerate() {
+                    for (i, c) in r.bytes().enumerate() {
+                        if c == b'z' {
+                            p.poser(DRAGON_U + 26.0 + 6.0 * f + i as f32, haut - 4.0 - 10.0 * f + j as f32, hex(0xdfe8ff), 1.0 - f);
+                        }
+                    }
+                }
+            }
+        }
+        // éveillé, il cligne de temps en temps
+        Geste::Eveille => {
+            let cligne = (t as i32) % 30 == 0;
+            p.dessin(DRAGON_U, haut, if cligne { &DRAGON_DORT } else { &DRAGON_EVEIL }, couleur_dragon, PAS_DRAGON, false, k);
+        }
+        _ => {}
+    }
+}
+
+/// Le dragon en vol, devant elle : il quitte son or vers le haut du belvédère, ou il en revient et s'y pose.
+fn dragon_en_vol(p: &mut Pinceau, d: &Dragon, t: f32) {
+    let Geste::Vole { part, f } = d.geste(d.depuis.elapsed().as_secs_f32()) else { return };
+    let (_, haut) = dragon_haut();
+    // où il en est entre son or (0) et le haut (1) : il part en prenant de la vitesse, il se pose en freinant
+    let g = if part { f * f } else { (1.0 - f) * (1.0 - f) };
+    let (u0, v0) = (DRAGON_U + 1.0, haut - 6.0);
+    let (u1, v1) = (DRAGON_U + 90.0, -70.0);
+    let u = u0 + (u1 - u0) * g + (g * PI * 2.0).sin() * 6.0;
+    let v = v0 + (v1 - v0) * g;
+    let image = if (t as i64) % 2 == 0 { &DRAGON_VOL_HAUT } else { &DRAGON_VOL_BAS };
+    let k = p.lumiere(u + 24.0, v.max(0.0) + 17.0);
+    p.dessin(u, v, image, couleur_dragon, PAS_DRAGON, false, k);
+}
 
 fn couleur_panthere(c: u8) -> Option<Rgb> {
     Some(match c {
@@ -1181,6 +1633,60 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
         }
         u += 1.0;
     }
+    // les reflets de l'eau qui dansent sur le mur, au-dessus du bassin : un filet de lumière qui
+    // ondule, plus vif au travail
+    let force = vif * (0.55 + 0.45 * ciel.nuit) * if s.echec { 0.6 } else { 1.0 };
+    let reflet = if s.echec { hex(0xc8a0ff) } else { hex(0xa8f8ff) };
+    let mut y = BORD - 70.0;
+    while y < BORD - 7.0 {
+        let haut = ((BORD - 7.0 - y) / 63.0).clamp(0.0, 1.0);
+        let large = (BW + 8.0) * (1.0 - 0.35 * haut);
+        let mut u = BX - large;
+        while u < BX + large {
+            let n = (u * 0.19 + t * 0.11 + (y * 0.13 + t * 0.05).sin() * 1.7).sin() + (y * 0.31 - t * 0.09 + (u * 0.08 - t * 0.06).sin() * 1.9).sin();
+            let k = (1.0 - n.abs() / 0.32).max(0.0);
+            if k > 0.0 {
+                let bord = 1.0 - ((u - BX) / large).powi(2);
+                p.luire(u, y, reflet, 0.2 * k * k * bord * (1.0 - haut).powf(0.7) * force);
+            }
+            u += 1.0;
+        }
+        y += 1.0;
+    }
+    // la poussière qui flotte dans le rai
+    if ciel.rai > 0.12 {
+        let (dx, dy) = ciel.dir;
+        for i in 0..22 {
+            let along = 110.0 + 150.0 * (h2(i, 301) + t * (0.0012 + 0.001 * h2(i, 303))).fract();
+            // sur toute la largeur du rai, qui s'ouvre en descendant : les flancs se voient de part et d'autre d'elle
+            let travers = (h2(i, 305) - 0.5) * 2.0 * RIN * 0.86 * (1.0 + along / 260.0) * 0.95 + 5.0 * (t * 0.02 + 6.0 * h2(i, 307)).sin();
+            let (u, y) = (OCX + along * dx + travers * dy, OCY + along * dy - travers * dx);
+            if y >= SOL + 6.0 || dans_vitre(u, y) {
+                continue;
+            }
+            let on = (0.5 + 0.5 * (t * (0.05 + 0.05 * h2(i, 309)) + 6.0 * h2(i, 311)).sin()).powi(2);
+            let k = rai(u, y, ciel);
+            p.luire(u.floor(), y.floor(), mix(ciel.lumiere_astre, hex(0xffffff), 0.5), 0.9 * on * k);
+        }
+    }
+    // son ombre au sol, à l'opposé du rai
+    {
+        let cx = s.ex - ciel.dir.0 * 26.0 * ciel.rai.min(1.0);
+        let (rx, ry, cy) = (118.0, 8.0, SOL + 21.0);
+        let mut y = (cy - ry).floor();
+        while y <= cy + ry {
+            let mut u = (cx - rx).floor();
+            while u <= cx + rx {
+                let d = ((u + 0.5 - cx) / rx).powi(2) + ((y + 0.5 - cy) / ry).powi(2);
+                if d < 1.0 {
+                    p.poser(u, y, hex(0x080a18), 0.55 * (1.0 - d).powf(0.7) * (0.6 + 0.4 * ciel.rai.min(1.0)));
+                }
+                u += 1.0;
+            }
+            y += 1.0;
+        }
+    }
+
     // les lueurs des aides, qui dérivent sur l'eau
     for (i, ap) in w.apprentices.iter().filter(|a| a.leaving.is_none()).take(6).enumerate() {
         let c = super::accessoires::PALETTE.get(ap.colour.0 as usize).copied().flatten().map_or(hex(0xffd36a), hex);
@@ -1228,13 +1734,52 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
         }
     }
 
+    // les étoiles d'or du pochoir qui scintillent, une à une, lentement
+    for i in 0..9 {
+        let ph = 6.28 * h2(i, 501);
+        let g = (t * (0.045 + 0.03 * h2(i, 503)) + ph).sin();
+        if g < 0.86 {
+            continue;
+        }
+        // une nouvelle étoile à chaque éclat
+        let n = ((t * (0.045 + 0.03 * h2(i, 503)) + ph) / 6.283).floor() as i32;
+        let j = (h2(i * 31 + n, 505) * 10.0) as i32;
+        let decal = if j % 2 == 1 { 14.0 } else { 0.0 };
+        let (u, v) = (decal + 28.0 * (h2(i * 17 + n, 507) * 17.0).floor(), 26.0 + 16.0 * j as f32);
+        if v < LAMBRIS - 6.0 && u < PILIER - 6.0 && (u - OCX).hypot(v - OCY) > RFR + 4.0 {
+            let a = (g - 0.86) / 0.14;
+            p.eclat(u, v, hex(0xfff0b8), 0.9 * a, 1.0 + 2.0 * a);
+        }
+    }
+
+    // une étoile filante, de loin en loin, dans le haut de l'oculus
+    if ciel.nuit > 0.6 && !ciel.orage {
+        let n = w.clock.div_euclid(260);
+        let age = w.clock.rem_euclid(260);
+        if age < 7 {
+            let (u0, v0) = (OCX - 80.0 + 110.0 * h2(n as i32, 401), 18.0 + 30.0 * h2(n as i32, 403));
+            let (du, dv) = (13.0, 5.0 + 3.0 * h2(n as i32, 405));
+            let f = age as f32;
+            for k in 0..14 {
+                let q = f - k as f32 * 0.18;
+                if q < 0.0 {
+                    break;
+                }
+                let (u, y) = ((u0 + du * q).floor(), (v0 + dv * q).floor());
+                if dans_vitre(u, y) {
+                    p.luire(u, y, hex(0xfff6e0), (1.0 - k as f32 / 14.0) * (1.0 - f / 7.0) * 0.95);
+                }
+            }
+        }
+    }
+
     // les flammes des lanternes, qui vacillent
     for (i, l) in lanternes.iter().enumerate() {
         if let Some(c) = l {
             let (lx, ly) = LANTERNES[i];
             let f = 0.5 + 0.5 * (t * 0.7 + i as f32 * 2.1).sin() * (t * 0.23 + i as f32).cos();
             p.lueur(lx, ly + 11.0, 9.0, *c, 0.12 + 0.12 * f);
-            p.luire(lx - 1.0, ly + 10.0 + (f * 2.0).floor(), mix(*c, hex(0xffffff), 0.5), 0.3 + 0.3 * f);
+            p.luire(lx, ly + 10.0 + (f * 2.0).floor(), mix(*c, hex(0xffffff), 0.5), 0.3 + 0.3 * f);
             p.luire(lx, ly + 11.0, hex(0xfff6e0), 0.25 * f);
         }
     }
@@ -1391,6 +1936,11 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
         p.lueur(BX, BORD, 44.0, hex(0x8040c0), 0.2);
     }
 
+    // le dragon de Lara, sur son or
+    if let Some(d) = v.dragon {
+        dragon_au_nid(p, d, t);
+    }
+
     // le chat de la machine
     if let Some(chat) = &w.cat {
         if chat.mode == ModeChat::Roof {
@@ -1434,6 +1984,96 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
 /// Ce qui passe devant elle : la vision qui monte du bassin, les éclats autour d'elle, les
 /// z du sommeil, le papillon d'un envoi, la chouette messagère.
 fn anime_devant(p: &mut Pinceau, v: &Vue) {
+    let age = v.vision.and_then(Vision::age).filter(|a| *a < VISION_S);
+    anime_activite(p, v, age.is_some());
+    if let (Some(vi), Some(age)) = (v.vision, age) {
+        vision(p, vi, age, v.monde.clock as f32);
+    }
+    if let Some(d) = v.dragon {
+        dragon_en_vol(p, d, v.monde.clock as f32);
+    }
+}
+
+/// La vision de la vasque (`Vision`), `age` secondes après sa venue, au tic `t` : une colonne de lumière
+/// monte de l'eau, l'habitant s'y forme de bas en haut, pâle et cyan, ondule et flotte, puis se défait.
+fn vision(p: &mut Pinceau, vi: &Vision, age: f32, t: f32) {
+    if age >= VISION_S || vi.images.is_empty() || vi.w == 0 || vi.h == 0 {
+        return;
+    }
+    // un pixel d'habitant fait PAS × PAS pixels de dessin
+    const PAS: f32 = 4.0;
+    let monte = (age / 1.4).min(1.0);
+    let monte = monte * monte * (3.0 - 2.0 * monte);
+    let part = ((VISION_S - age) / 1.6).clamp(0.0, 1.0);
+    let a = monte.min(part);
+    let (lw, lh) = (vi.w as f32 * PAS, vi.h as f32 * PAS);
+    // ses pieds flottent au-dessus de l'eau ; il monte de plus bas
+    let bas = BORD - 22.0 - 2.5 * (t * 0.07).sin() + 30.0 * (1.0 - monte);
+    let (u0, v0) = (BX - lw / 2.0, bas - lh);
+    let pale = hex(0xb4f8ff);
+    // la colonne de lumière, de l'eau à ses pieds, qui ondule en montant
+    let mut y = (bas - 10.0).floor();
+    while y < BORD - 3.0 {
+        let onde = 0.7 + 0.3 * (y * 0.35 - t * 0.5).sin();
+        let mut du = -18.0;
+        while du <= 18.0 {
+            let k = 1.0 - (du / 18.0f32).powi(2);
+            p.luire((BX + du).floor(), y, CYAN, 0.11 * a * k * onde);
+            du += 1.0;
+        }
+        y += 1.0;
+    }
+    // le halo, qui respire
+    p.lueur(BX, bas - lh * 0.5, lw * 0.8, CYAN, (0.2 + 0.06 * (t * 0.3).sin()) * a);
+    let img = &vi.images[(age * 1000.0 / 150.0) as usize % vi.images.len()];
+    let (w, h) = (vi.w as usize, vi.h as usize);
+    let plein = |i: i32, j: i32| i >= 0 && j >= 0 && (i as usize) < w && (j as usize) < h && img[j as usize * w + i as usize] >> 24 != 0;
+    for j in 0..h {
+        let rang = (h - 1 - j) as f32;
+        // il se forme de bas en haut en montant, et se défait de haut en bas, rendu à l'eau, en partant
+        let forme = (monte * (h as f32 + 3.0) - rang).clamp(0.0, 1.0) * (part * (h as f32 + 3.0) - rang).clamp(0.0, 1.0);
+        if forme <= 0.0 {
+            continue;
+        }
+        // chaque rangée ondule un peu, comme vue à travers l'eau
+        let dx = (t * 0.33 + j as f32 * 0.8).sin() * 1.3;
+        let ligne = 0.84 + 0.16 * (t * 0.5 + j as f32 * 1.3).sin();
+        for i in 0..w {
+            let (u, v) = ((u0 + i as f32 * PAS + dx).floor(), (v0 + j as f32 * PAS).floor());
+            let c = img[j * w + i];
+            if c >> 24 == 0 {
+                // son contour luit
+                let (ii, jj) = (i as i32, j as i32);
+                if plein(ii - 1, jj) || plein(ii + 1, jj) || plein(ii, jj - 1) || plein(ii, jj + 1) {
+                    for dy in 0..PAS as i32 {
+                        for dxx in 0..PAS as i32 {
+                            p.luire(u + dxx as f32, v + dy as f32, CYAN, 0.16 * a * forme);
+                        }
+                    }
+                }
+                continue;
+            }
+            let fantome = mix(unpack(c & 0xFF_FFFF), pale, 0.5);
+            let al = 0.8 * a * forme * ligne;
+            for dy in 0..PAS as i32 {
+                // une raie plus pâle au bas de chaque rangée : une image faite de lumière
+                let k = if dy == PAS as i32 - 1 { 0.65 } else { 1.0 };
+                for dxx in 0..PAS as i32 {
+                    p.poser(u + dxx as f32, v + dy as f32, fantome, al * k);
+                }
+            }
+        }
+    }
+    // des éclats montent de l'eau le long de la colonne
+    for i in 0..10 {
+        let f = (t * (0.025 + 0.015 * h2(i, 71)) + h2(i, 73)).fract();
+        let (u, y) = (BX + (h2(i, 75) - 0.5) * 34.0 + 3.0 * (t * 0.1 + i as f32).sin(), BORD - 4.0 - f * (BORD - 4.0 - v0));
+        p.eclat(u.floor(), y.floor(), if i % 3 == 0 { hex(0xffffff) } else { pale }, a * (1.0 - f) * 0.9, 0.0);
+    }
+}
+
+/// Ce que fait Galadriel, devant elle ; `en_vision` : une vision tient la place de la sphère du travail.
+fn anime_activite(p: &mut Pinceau, v: &Vue, en_vision: bool) {
     let s = Scene::de(v);
     let (w, t, a, tick, ex) = (s.w, s.t, s.a, s.tick, s.ex);
     match a {
@@ -1460,26 +2100,29 @@ fn anime_devant(p: &mut Pinceau, v: &Vue) {
                     }
                 }
             }
-            // la sphère : un halo qui respire, un cœur blanc, un anneau d'éclats qui tourne
-            let souffle = 0.5 + 0.5 * (t * 0.4).sin();
-            p.lueur(ou, ov, 26.0, base, 0.35 + 0.15 * souffle);
-            // un globe de verre plein de lumière : clair au cœur, le reflet en haut à gauche
-            for dy in -8..=8 {
-                for dx in -8..=8 {
-                    let d = ((dx * dx + dy * dy) as f32).sqrt() / 8.5;
-                    if d <= 1.0 {
-                        let reflet = ((dx as f32 + 3.0).powi(2) + (dy as f32 + 3.0).powi(2)).sqrt() < 2.2;
-                        let c = if reflet { hex(0xffffff) } else { mix(mix(base, hex(0xffffff), 0.75), fois(base, 0.75), d) };
-                        p.poser(ou + dx as f32, ov + dy as f32, c, if d > 0.85 { 0.7 } else { 0.92 });
+            // la sphère : un halo qui respire, un cœur blanc, un anneau d'éclats qui tourne ; une vision
+            // tient sa place tant qu'elle est là
+            if !en_vision {
+                let souffle = 0.5 + 0.5 * (t * 0.4).sin();
+                p.lueur(ou, ov, 26.0, base, 0.35 + 0.15 * souffle);
+                // un globe de verre plein de lumière : clair au cœur, le reflet en haut à gauche
+                for dy in -8..=8 {
+                    for dx in -8..=8 {
+                        let d = ((dx * dx + dy * dy) as f32).sqrt() / 8.5;
+                        if d <= 1.0 {
+                            let reflet = ((dx as f32 + 3.0).powi(2) + (dy as f32 + 3.0).powi(2)).sqrt() < 2.2;
+                            let c = if reflet { hex(0xffffff) } else { mix(mix(base, hex(0xffffff), 0.75), fois(base, 0.75), d) };
+                            p.poser(ou + dx as f32, ov + dy as f32, c, if d > 0.85 { 0.7 } else { 0.92 });
+                        }
                     }
                 }
-            }
-            for i in 0..8 {
-                let ang = t * 0.12 + i as f32 * 2.0 * PI / 8.0;
-                // l'anneau penché : les éclats de derrière plus pâles
-                let (u, y) = (ou + 26.0 * ang.cos(), ov + 8.0 * ang.sin() - 5.0 * ang.cos());
-                let c = if i % 3 == 0 { OR } else { base };
-                etincelle(p, u.floor(), y.floor(), c, if ang.sin() < 0.0 { 0.45 } else { 1.0 }, false);
+                for i in 0..8 {
+                    let ang = t * 0.12 + i as f32 * 2.0 * PI / 8.0;
+                    // l'anneau penché : les éclats de derrière plus pâles
+                    let (u, y) = (ou + 26.0 * ang.cos(), ov + 8.0 * ang.sin() - 5.0 * ang.cos());
+                    let c = if i % 3 == 0 { OR } else { base };
+                    etincelle(p, u.floor(), y.floor(), c, if ang.sin() < 0.0 { 0.45 } else { 1.0 }, false);
+                }
             }
         }
         Activite::Waiting => {
@@ -1599,6 +2242,78 @@ mod tests {
         assert!(phase_lune(2, 17) < 0.05 || phase_lune(2, 17) > 0.95, "{}", phase_lune(2, 17));
     }
 
+    /// La tache du soleil au sol suit le soleil : le matin (il est à gauche dans l'oculus) elle part à droite
+    /// d'elle, l'après-midi à gauche ; la nuit sans lune, il n'y en a pas.
+    #[test]
+    fn la_tache_du_soleil_au_sol_suit_le_soleil() {
+        let w = Monde { perso: Some(super::super::monde::Perso::Galadriel), ..Monde::default() };
+        let (rw, rh) = ((FIN * 9) as usize, (19 * SH / 2) as usize);
+        let sol = |heure: f32, phase: f32, u: f32| {
+            let c = ciel(heure, false, phase);
+            let f = fond(rw, rh, 1.0, 1.0, &c, &w, &[None; 4], false);
+            let px = unpack(f[(SOL + 10.0) as usize * rw + u as usize]);
+            px[0] + px[1] + px[2]
+        };
+        let (gauche, droite) = (OCX - 150.0, OCX + 120.0);
+        let (matin_d, matin_g) = (sol(9.2, 0.5, droite), sol(9.2, 0.5, gauche));
+        let (soir_d, soir_g) = (sol(16.8, 0.5, droite), sol(16.8, 0.5, gauche));
+        println!("matin : gauche {matin_g}, droite {matin_d} ; après-midi : gauche {soir_g}, droite {soir_d}");
+        assert!(matin_d > soir_d * 1.15, "le matin, le sol à sa droite est au soleil : {matin_d} contre {soir_d}");
+        assert!(soir_g > matin_g * 1.15, "l'après-midi, le sol à sa gauche est au soleil : {soir_g} contre {matin_g}");
+        let (sans_lune, pleine) = (sol(0.5, 0.0, OCX + 100.0), sol(0.5, 0.5, OCX + 100.0));
+        assert!(pleine > sans_lune * 1.1, "la pleine lune jette son rai, la nouvelle non : {pleine} contre {sans_lune}");
+    }
+
+    /// La vasque se tient sur le sol, devant le mur : son pied descend dans les dalles, sa coupe passe devant la
+    /// cimaise du lambris (user, 02-11 : « on dirait que c'est collé contre le mur »).
+    #[test]
+    fn la_vasque_se_tient_sur_le_sol() {
+        assert!(bassin(BX, SOL + 12.0).is_some(), "le pied dans les dalles");
+        assert!(bassin(BX, PIED + 1.0).is_none(), "et pas plus bas");
+        assert!(BORD > LAMBRIS + 4.0 && bassin(BX + BW - 6.0, BORD + 3.0).is_some(), "la coupe devant le lambris, pas sur le mur");
+    }
+
+    /// La vision : l'habitant d'une session monte au-dessus de la vasque, à sa place, quelques secondes, puis
+    /// s'en va ; au travail, elle prend la place de la sphère.
+    #[test]
+    fn la_vision_monte_de_la_vasque() {
+        let (cw, ch) = (9, 19);
+        let (pw, ph) = ((72 * cw) as usize, (16 * ch) as usize);
+        // un petit habitant plein, rouge vif : ce qu'on cherche au-dessus de l'eau
+        let vi = |age: f32| Vision {
+            images: vec![vec![0xffff2020; 16 * 16]],
+            w: 16,
+            h: 16,
+            posee: std::time::Instant::now(),
+            nee: std::time::Instant::now().checked_sub(std::time::Duration::from_secs_f32(age)),
+        };
+        // le rouge sur la boîte de la vision (u autour de BX, v au-dessus du bord), moins le fond
+        let rouge = |activite: Activite, v: Option<&Vision>| {
+            let w = Monde { perso: Some(super::super::monde::Perso::Galadriel), hour: 23.0, clock: 40, ..Monde::default() };
+            let mut b = Belvedere::default();
+            let mut px = vec![0u32; pw * ph];
+            let vue = Vue { monde: &w, activite, tick: 40, x0: 0, cols: 72, cw, ch, elle: Some(38.0), vision: v, dragon: None };
+            b.peindre(&mut px, pw, ph, &vue, true);
+            b.devant(&mut px, &vue);
+            let mut r = 0.0;
+            for y in (BORD - 90.0) as usize..(BORD - 20.0) as usize {
+                for x in (BX - 30.0) as usize..(BX + 30.0) as usize {
+                    let c = unpack(px[y * pw + x]);
+                    r += (c[0] - c[1].max(c[2])).max(0.0);
+                }
+            }
+            r
+        };
+        let sans = rouge(Activite::Idle, None);
+        let (montee, pleine, finie) = (rouge(Activite::Idle, Some(&vi(0.3))), rouge(Activite::Idle, Some(&vi(4.0))), rouge(Activite::Idle, Some(&vi(VISION_S + 0.5))));
+        let au_travail = rouge(Activite::Running, Some(&vi(4.0)));
+        println!("rouge : sans {sans:.0}, à 0,3 s {montee:.0}, à 4 s {pleine:.0}, finie {finie:.0}, au travail {au_travail:.0}");
+        assert!(pleine > sans + 20_000.0, "la vision se voit au-dessus de l'eau : {pleine} contre {sans}");
+        assert!(montee < pleine * 0.7, "elle monte, d'abord à peine là : {montee} contre {pleine}");
+        assert!((finie - sans).abs() < 1.0, "partie, elle ne laisse rien : {finie} contre {sans}");
+        assert!(au_travail > pleine * 0.8, "au travail, elle prend la place de la sphère : {au_travail} contre {pleine}");
+    }
+
     #[test]
     fn le_fond_se_peint_et_se_garde() {
         let mut b = Belvedere::default();
@@ -1606,7 +2321,7 @@ mod tests {
         let (cw, ch) = (9, 19);
         let (pw, ph) = ((72 * cw) as usize, (16 * ch) as usize);
         let mut px = vec![0u32; pw * ph];
-        let vue = Vue { monde: &w, activite: Activite::Idle, tick: 0, x0: 0, cols: 72, cw, ch, elle: Some(38.0) };
+        let vue = Vue { monde: &w, activite: Activite::Idle, tick: 0, x0: 0, cols: 72, cw, ch, elle: Some(38.0), vision: None, dragon: None };
         let (z, _) = b.peindre(&mut px, pw, ph, &vue, true);
         assert_eq!(z.map(|z| (z.0, z.2)), Some((0, FIN * cw)));
         // le fond est opaque partout dans la région

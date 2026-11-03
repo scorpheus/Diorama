@@ -27,6 +27,10 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   | `attente` | la session attend le user | agite un drapeau |
   | `echec` | erreur, échec | assis dans la fumée |
   | `parle` | la ligne « Dit : » est prononcée | 2 images : bouche fermée, ouverte ; ClaudeTerminal peut les alterner au rythme de la voix plutôt qu'à `every` |
+- **État facultatif `marche`** (ClaudeTerminal, 02-11) : quand le personnage d'une session rend visite à une
+  autre dans le Diorama, l'habitant de son onglet va jusqu'à l'onglet de l'hôte et en revient. S'il a un état
+  `marche` (de face, un dandinement, images en boucle), ClaudeTerminal le joue en chemin ; sinon il prend
+  l'image bouche fermée de `parle`, à petits sauts. Chez l'hôte, il joue `parle`.
 - **Placement** : l'image se pose par le milieu de son bord bas (les pieds sur la dernière ligne). Agrandissement
   **entier** au plus proche (× 1, × 2…), choisi par ClaudeTerminal selon la hauteur de la barre, sans lissage. Ce qui
   accompagne l'état (Z, drapeau, fumée, clavier) est **dans** les images : le lecteur n'ajoute rien.
@@ -39,8 +43,8 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   Les habitants, de face, trapus, à la manière des créatures de Dwarf Fortress, et pas forcément humains :
   `galadriel` (Orchestratrice, comme son pet du Diorama), `forgeron` (Endurance, un nain), `marin` (Diorama, Route du
   Rhum), `mecano` (vehigraph), `tailleur` (LaPierreDesMots, un golem de pierre), `europa` (Europa, une voiture de
-  rallye), `claudeterminal` (ClaudeTerminal, une pieuvre qui tape de tous ses bras), `voyageur` (tous les autres, dont « Claude » : un
-  escargot qui porte sa maison). Tous dans `tools/habitants/gabarits.py` (le dessin debout, puis ce qui change d'un
+  rallye), `claudeterminal` (ClaudeTerminal, une pieuvre qui tape de tous ses bras), `voyageur` (tous les autres, dont « Claude » : un petit
+  marcheur des contes, capuche et cape à la couleur du profil, bâton ; il a remplacé l'escargot le 02-11). Tous dans `tools/habitants/gabarits.py` (le dessin debout, puis ce qui change d'un
   état à l'autre) : un nouvel habitant y est une entrée.
 - **Accessoires** : `habitants/accessoires.json`, une palette pour tous (complète, `"#rrggbb"`, `O`/`o` à la couleur
   du profil comme chez les habitants), et chaque accessoire nommé :

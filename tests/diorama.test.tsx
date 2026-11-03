@@ -1153,6 +1153,27 @@ test('without DIORAMA_PERSO the app draws the smith', { options: { rendu: 'oui' 
   expect(JSON.parse(world.split(' ').slice(7).join(' ')).perso).toBeUndefined()
 })
 
+// a visitor keeps her body (user, 02-11: Galadriel on a visit was drawn as the smith)
+test('Galadriel on a visit says her body in her visit and her presence', { options: { lumiere: 'non', rendu: 'non' }, timeoutMs: 120_000 }, async ($, on) => {
+  persoEnv = 'galadriel'
+  const neighbour = { project: 'Dev', cape: 'nuit', accessory: 'lunettes', seen: START }
+  const { clock } = await start($, on, answerTools, { presence: { 'sess-dev': neighbour } })
+  for (let s = 0; s < 57 && !shelf.has('visit:sess-1'); s++) {
+    await clock.advance(10_000)
+    shelf.set('presence', { ...(shelf.get('presence') as object), 'sess-dev': { ...neighbour, seen: clock.now() } })
+  }
+  expect(shelf.get('visit:sess-1')).toMatchObject({ host: 'sess-dev', perso: 'galadriel' })
+  expect((shelf.get('presence') as Record<string, { perso?: string }>)['sess-1']?.perso).toBe('galadriel')
+})
+
+test('a guest keeps her body in the yard; one who writes none is the smith', { options: { rendu: 'oui' } }, async ($, on) => {
+  const guest = { host: 'sess-1', until: START + 60_000, project: 'Dev', cape: 'nuit', accessory: 'lunettes', phase: 'there' }
+  const { clock } = await start($, on, answerTools, { 'visit:sess-gala': { ...guest, perso: 'galadriel' }, 'visit:sess-dev': guest })
+  await clock.advance(9000)
+  const guests = (worldsPosted().at(-1) as { guests?: { perso?: string }[] } | undefined)?.guests ?? []
+  expect(guests.map(g => g.perso ?? 'scorpheus').sort()).toEqual(['galadriel', 'scorpheus'])
+})
+
 test('the two halves of a mark cell differ, else the app never finds the band', { options: { rendu: 'oui' } }, async ($, on) => {
   // its first cell came out one colour, top and bottom: the app never saw where the top ended
   mock.clock(on, { now: Date.UTC(2026, 9, 2, 12, 0) })
