@@ -247,6 +247,7 @@ impl Interieur {
             }
             peindre_lanterne_murale(&mut c, monde.lantern_lit, monde.clock);
             peindre_cloche_bronze(&mut c, monde.bell_age);
+            peindre_machine_vapeur(&mut c, monde, pose, tick);
             peindre_foyer_et_soufflet(&mut c, monde, pose, tick);
             peindre_enclume_et_accessoires(&mut c, monde, pose, tick);
             peindre_chandelles_poudlard(&mut c, monde.clock);
@@ -676,12 +677,35 @@ fn batir_billot_et_enclume(c: &mut Canevas) {
     // le trou carré de la tranche, près du talon
     c.poser(talon - 5, y0 + 1, rgb(0x2a2c38), Mode::Plein);
 
-    // Rune naine d'or incrustée au flanc de l'enclume (losange Khuzdul)
+    // Trois runes naines gravées au flanc (des Cirth) : sombres au repos, elles s'allument quand il forge
+    // (`peindre_enclume_et_accessoires`)
+    for (x, y) in runes_enclume(c) {
+        c.poser(x, y, rgb(0x3a4050), Mode::Plein);
+    }
+}
+
+/// Les runes de l'enclume : trois Cirth de 3 × 4 au milieu du flanc, là où la taille se creuse.
+const RUNES_ENCLUME: [[&str; 4]; 3] = [["x..", "xx.", "x.x", "x.."], [".x.", "x.x", ".x.", ".x."], ["x.x", "xxx", "x.x", "x.x"]];
+
+/// Les pixels des runes de l'enclume (ceux de `batir_billot_et_enclume`).
+fn runes_enclume(c: &Canevas) -> Vec<(i32, i32)> {
+    let (ax_g, ay_h) = (ANVIL_AT.0 as f32, ANVIL_AT.1 as f32);
+    let y0 = c.ay(ay_h);
+    let (corps0, corps1) = (c.ax(ax_g + 3.8), c.ax(ax_g + 10.4));
+    let rangs = (c.ay(ay_h + 3.0) - y0).max(8);
     let (rx, ry) = ((corps0 + corps1) / 2, y0 + rangs * 3 / 5);
-    c.poser(rx, ry - 1, rgb(0xe4b448), Mode::Plein);
-    c.poser(rx - 1, ry, rgb(0xf4cc64), Mode::Plein);
-    c.poser(rx + 1, ry, rgb(0xc89632), Mode::Plein);
-    c.poser(rx, ry + 1, rgb(0xe4b448), Mode::Plein);
+    let mut out = Vec::new();
+    for (n, rune) in RUNES_ENCLUME.iter().enumerate() {
+        let x0 = rx - 5 + n as i32 * 4;
+        for (j, ligne) in rune.iter().enumerate() {
+            for (i, ch) in ligne.bytes().enumerate() {
+                if ch == b'x' {
+                    out.push((x0 + i as i32, ry - 1 + j as i32));
+                }
+            }
+        }
+    }
+    out
 }
 
 // ============================================================================
@@ -1217,6 +1241,158 @@ fn peindre_cloche_bronze(c: &mut Canevas, bell_age: Option<i64>) {
 }
 
 // ============================================================================
+// Machine à vapeur murale (touche steampunk) : conduite de cuivre, manomètre, sifflet et deux engrenages
+// ============================================================================
+
+/// Dans le coin droit, sous la bannière (`u = 48.5..54, v = 18..29`) : une conduite de cuivre monte du sol jusqu'à un
+/// sifflet de laiton, un manomètre y est vissé, et deux engrenages engrenés tournent au mur. La pression suit le feu
+/// et le soufflet : l'aiguille monte, les roues accélèrent, et le sifflet crache des bouffées de vapeur.
+fn peindre_machine_vapeur(c: &mut Canevas, w: &Monde, p: &Pose, tick: i64) {
+    let feu = if w.exhausted { 0 } else { p.fire.clamp(0, 4) };
+    let pression = (feu as f32 / 4.0 * 0.7 + if p.bellows { 0.15 } else { 0.0 } + if w.forging { 0.12 } else { 0.0 }).min(0.97);
+    let t = tick as f32;
+    let pi = std::f32::consts::PI;
+
+    // 1. La conduite de cuivre, du sol au sifflet, cerclée de brides rivées
+    let px = c.ax(52.6);
+    let (haut, sol) = (c.ay(17.8), c.ay(29.2));
+    for y in haut..sol {
+        for (i, col) in [CONTOUR, rgb(0xeeac70), rgb(0xc4743e), rgb(0x84442a), CONTOUR].iter().enumerate() {
+            c.poser(px - 2 + i as i32, y, *col, Mode::Sol);
+        }
+    }
+    let pas = c.ay(2.4).max(6);
+    let mut y = sol - pas / 2;
+    while y > haut + 3 {
+        c.boite(px - 3, y, px + 4, y + 3, rgb(0x9a6430), CONTOUR, Mode::Sol);
+        c.poser(px - 2, y + 1, rgb(0xf0c468), Mode::Sol);
+        y -= pas;
+    }
+
+    // 2. Le sifflet de laiton au bout de la conduite
+    c.boite(px - 3, haut - 5, px + 4, haut + 1, rgb(0xd4a446), CONTOUR, Mode::Sol);
+    c.rect(px - 2, haut - 4, px - 1, haut, rgb(0xf8dc84), Mode::Sol);
+    c.boite(px - 1, haut - 8, px + 2, haut - 4, rgb(0xb88a36), CONTOUR, Mode::Sol);
+
+    // 3. Le volant de la vanne, rouge, à cinq rayons, vissé sur la conduite
+    let (vx, vy) = (px, c.ay(24.6));
+    c.disque(vx, vy, 3, CONTOUR, Mode::Sol);
+    c.disque(vx, vy, 2, rgb(0xc03028), Mode::Sol);
+    c.disque(vx, vy, 1, rgb(0x5a1414), Mode::Sol);
+    c.poser(vx - 1, vy - 2, rgb(0xff7a5a), Mode::Sol);
+    c.poser(vx, vy, rgb(0xe8c060), Mode::Sol);
+
+    // 4. Le manomètre vissé à la conduite : cadran crème, zone rouge, aiguille qui tremble sous la pression
+    let (gx, gy) = (px, c.ay(20.2));
+    let gr = c.ay(1.0).max(4);
+    c.disque(gx, gy, gr + 1, CONTOUR, Mode::Sol);
+    c.disque(gx, gy, gr, rgb(0xc89838), Mode::Sol);
+    c.disque(gx, gy, gr - 1, rgb(0xf0e6cc), Mode::Sol);
+    c.poser(gx - gr + 1, gy - 1, rgb(0xfff8e8), Mode::Sol);
+    c.poser(gx + gr - 2, gy - gr + 2, rgb(0xd03030), Mode::Sol);
+    c.poser(gx + gr - 1, gy - 1, rgb(0xd03030), Mode::Sol);
+    let frisson = 0.04 * (t * 1.9).sin() * (0.3 + pression);
+    let a = pi * 0.75 + (pression + frisson).clamp(0.0, 1.0) * pi * 1.5;
+    let l = (gr - 1) as f32;
+    c.ligne(gx, gy, gx + (a.cos() * l).round() as i32, gy + (a.sin() * l).round() as i32, rgb(0xb01818), Mode::Sol);
+    c.poser(gx, gy, CONTOUR, Mode::Sol);
+
+    // 5. Deux engrenages engrenés, laiton et cuivre ; la vitesse suit la pression (immobiles feu éteint)
+    let rb = c.ay(1.9).max(6);
+    let rs = ((rb as f32) * 0.62).round() as i32;
+    let (nb, ns) = (8.0f32, 5.0f32);
+    let (bx, by) = (c.ax(49.3), c.ay(21.9));
+    let theta = 1.3f32; // l'axe des centres, vers le bas, un peu à droite
+    let d = rb as f32 + rs as f32 + 1.6;
+    let (sx, sy) = (bx + (theta.cos() * d).round() as i32, by + (theta.sin() * d).round() as i32);
+    let vitesse = if feu == 0 && !w.forging { 0.0 } else { 0.012 + 0.06 * pression };
+    let rot_b = t * vitesse;
+    let phase_b = (theta - rot_b) * nb / TAU;
+    let rot_s = theta + pi - (1.0 - phase_b) * TAU / ns;
+    engrenage(c, sx, sy, rs, ns, rot_s, rgb(0xc8804a), 0);
+    engrenage(c, bx, by, rb, nb, rot_b, rgb(0xd8a84c), 4);
+
+    // 6. Bouffées de vapeur au sifflet quand la pression monte : elles s'élèvent, s'élargissent et s'effacent
+    if pression > 0.3 {
+        let periode = (44.0 - 26.0 * pression) as i64;
+        for k in 0..3i64 {
+            let age = (tick + k * periode / 3).rem_euclid(periode) as f32;
+            let vie = age / periode as f32;
+            let yy = haut - 9 - (age * 0.5) as i32;
+            let xx = px - (vie * 6.0 + (age * 0.25 + k as f32 * 2.0).sin() * 1.3).round() as i32;
+            let r = 1.2 + vie * 2.4;
+            let ri = r.ceil() as i32;
+            for dy in -ri..=ri {
+                for dx in -ri..=ri {
+                    let q = ((dx * dx + dy * dy) as f32).sqrt() / r;
+                    if q > 1.0 || (vie > 0.7 && hash_f(k * 977 + dx as i64 * 31 + dy as i64 * 7 + tick / 3) < (vie - 0.7) * 3.0) {
+                        continue;
+                    }
+                    let col = melange(rgb(0xfafcff), rgb(0x9aa0b0), vie * 0.8 + q * 0.25 + if dy > 0 { 0.12 } else { 0.0 });
+                    c.poser(xx + dx, yy + dy, col, Mode::Sol);
+                }
+            }
+        }
+    }
+}
+
+/// Un engrenage de `n` dents carrées au rayon `r` tourné de `rot`, éclairé d'en haut à gauche, à `trous` ajours ronds.
+#[allow(clippy::too_many_arguments)]
+fn engrenage(c: &mut Canevas, cx: i32, cy: i32, r: i32, n: f32, rot: f32, metal: [u8; 3], trous: i32) {
+    let rf = r as f32;
+    let largeur = (pi_r(rf) / n * 0.5).max(1.0); // la demi-largeur d'une dent
+    for dy in -(r + 4)..=(r + 4) {
+        for dx in -(r + 4)..=(r + 4) {
+            let (fx, fy) = (dx as f32, dy as f32);
+            let dist = (fx * fx + fy * fy).sqrt();
+            // la dent la plus proche, un rectangle dressé sur la jante
+            let a = fy.atan2(fx) - rot;
+            let k = (a * n / TAU - 0.25).round();
+            let ac = rot + (k + 0.25) * TAU / n;
+            let (le_long, en_travers) = (fx * ac.cos() + fy * ac.sin(), -fx * ac.sin() + fy * ac.cos());
+            let dent = le_long > rf - 1.0 && le_long <= rf + 2.0 && en_travers.abs() <= largeur;
+            let dent_bord = le_long > rf - 1.0 && le_long <= rf + 3.0 && en_travers.abs() <= largeur + 1.0;
+            let corps = dist <= rf + 0.3;
+            if !(corps || dent) {
+                if dent_bord || dist <= rf + 1.3 {
+                    c.poser(cx + dx, cy + dy, CONTOUR, Mode::Sol);
+                }
+                continue;
+            }
+            let lum = 1.0 + 0.3 * (-(fx + fy) / (rf * 1.4)).clamp(-1.0, 1.0);
+            let mut col = echelle(metal, lum);
+            if corps && dist > rf - 1.2 && !dent {
+                col = echelle(metal, 0.72 * lum); // la jante
+            }
+            if dent && le_long > rf + 1.2 && en_travers < 0.0 {
+                col = echelle(metal, 1.2 * lum); // l'arête éclairée des dents
+            }
+            if dist < 1.3 {
+                col = rgb(0x2a2630); // l'axe
+            } else if dist < 2.6 {
+                col = echelle(metal, 1.28); // le moyeu
+            }
+            for j in 0..trous {
+                let at = rot + (j as f32 + 0.5) * TAU / trous as f32;
+                let (hx, hy) = (at.cos() * rf * 0.56, at.sin() * rf * 0.56);
+                let dh = ((fx - hx).powi(2) + (fy - hy).powi(2)).sqrt();
+                if dh < rf * 0.24 {
+                    col = echelle(metal, 0.28);
+                } else if dh < rf * 0.24 + 0.9 && (fy - hy) > 0.0 {
+                    col = echelle(metal, 1.15 * lum); // le bord éclairé de l'ajour, en bas
+                }
+            }
+            c.poser(cx + dx, cy + dy, col, Mode::Sol);
+        }
+    }
+}
+
+/// `π r`, la demi-circonférence.
+fn pi_r(r: f32) -> f32 {
+    std::f32::consts::PI * r
+}
+
+// ============================================================================
 // F3 (dynamique) — Runes naines, bûches, flammes, fumée, bouilloire & soufflet
 // ============================================================================
 
@@ -1574,6 +1750,19 @@ fn peindre_enclume_et_accessoires(c: &mut Canevas, w: &Monde, p: &Pose, tick: i6
         };
         c.boite(ix0, table_y - 3, ix1, table_y + 1, fond_l, CONTOUR, Mode::Lueur);
         c.rect(ix0 + 1, table_y - 2, ix1 - 1, table_y - 1, coeur_l, Mode::Lueur);
+    }
+
+    // Les runes de l'enclume s'éveillent quand il forge, d'un blanc de lune comme l'ithildin ; chaque coup les fait
+    // flamboyer, puis elles retombent à une lueur qui respire
+    let coup = p.sparks_age.filter(|&a| a < 6);
+    if matches!(p.ingot, Lingot::Hot | Lingot::Flash) || coup.is_some() {
+        let eclat = coup.map_or(0.0, |a| 1.0 - a as f32 / 6.0);
+        let souffle = 0.5 + 0.5 * ((tick as f32) * 0.35).sin();
+        let k = (0.35 + 0.25 * souffle + 0.4 * eclat).min(1.0);
+        let col = melange([0x46, 0x6c, 0x9a], [0xe8, 0xfa, 0xff], k);
+        for (x, y) in runes_enclume(c) {
+            c.poser(x, y, col, Mode::Lueur);
+        }
     }
 
     // Marteau posé sur l'enclume pendant que Scorpheus actionne le soufflet (`Gauche::Pull`)

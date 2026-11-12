@@ -250,6 +250,24 @@ pub fn galadriel(dossier: &str, extra: i32, perso: Option<Perso>, filtre: &[Stri
             w.guests = vec![invite.clone(), Invite { x: GUEST_SPOT - 14, cape: [Lettre(b'C'), Lettre(b'D')], accessory: Accessoire::Bandeau, tick: 40, waving: false, ..invite }];
             w.x = 4;
         })),
+        // le dragon qui passe au-dessus des monts, de jour puis de nuit
+        ("dragon-jour", Activite::Idle, 0, gala(&|w| {
+            w.hour = 11.0;
+            w.rhum = None;
+            w.rare = Some(super::monde::Rare { kind: super::monde::Rarete::Dragon, age: 0 });
+        })),
+        ("dragon-nuit", Activite::Idle, 0, gala(&|w| {
+            w.hour = 23.0;
+            w.rhum = None;
+            w.rare = Some(super::monde::Rare { kind: super::monde::Rarete::Dragon, age: 0 });
+        })),
+        // les louveteaux au grand jour, à leurs corvées dans la cour
+        ("aides-jour", Activite::Running, 0, gala(&|w| {
+            w.hour = 11.0;
+            w.rhum = None;
+            w.flavor = Saveur::Build;
+            w.apprentices = vec![petit(3, 20, b'P'), petit(7, 33, b'b'), petit(11, 52, b'G')];
+        })),
     ];
     let cols = (super::atelier::SW + extra.clamp(0, super::atelier::GROW)) as usize;
     let (fw, fh) = (cols as i32 * CW, ROWS * CH);
@@ -281,7 +299,7 @@ pub fn galadriel(dossier: &str, extra: i32, perso: Option<Perso>, filtre: &[Stri
 }
 
 /// Un PNG sans compression : des blocs « stockés » de deflate, assez pour regarder une planche.
-fn png(pixels: &[u32], w: u32, h: u32) -> Vec<u8> {
+pub(crate) fn png(pixels: &[u32], w: u32, h: u32) -> Vec<u8> {
     let mut brut = Vec::with_capacity(((w * 3 + 1) * h) as usize);
     for y in 0..h {
         brut.push(0);

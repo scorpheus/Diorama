@@ -14,6 +14,7 @@ pub mod gerbe;
 pub mod interieur;
 pub mod jauges;
 pub mod lumiere;
+pub mod louveteau;
 pub mod paysage;
 pub mod monde;
 pub mod pet;
@@ -52,6 +53,10 @@ pub struct Forge {
     /// la panthère de la dernière image et la lumière sur elle, que SceneForge peint au pixel d'art (chat.rs) quand
     /// les personnages se peignent au pixel ; chez Galadriel, son belvédère la peint
     pub chat: Option<(monde::Chat, Option<pet::Eclairage>)>,
+    /// les louveteaux de la dernière image et la lumière sur eux, peints au pixel d'art comme elle (louveteau.rs)
+    pub louveteaux: Vec<(louveteau::Vu, Option<pet::Eclairage>)>,
+    /// leur coin de cour (le milieu de l'enclume) et la lumière dessus
+    pub coin: Option<(i32, Option<pet::Eclairage>)>,
     /// carte d'éclairage continu de la pièce pour `interieur.rs`
     pub grille_lumiere: Option<lumiere::GrilleLumiere>,
     /// dernière pose calculée pour `interieur.rs`
@@ -85,7 +90,10 @@ impl Forge {
         let width = if x1 == SW { SW + extra.clamp(0, GROW) } else { SW };
         let p = poses::pose_of(activity, tick, world);
         self.pose = Some(p);
+        self.ctx.louveteaux.borrow_mut().clear();
         let scene = compose(&mut self.ctx, &mut self.cour, &p, world, tick, false, width);
+        self.louveteaux = self.ctx.louveteaux.borrow_mut().drain(..).map(|c| (c, None)).collect();
+        self.coin = self.ctx.coin.get().map(|s| (s, None));
         let fin = if x1 == SW { width } else { x1 };
         let coup = if pet && p.sparks_age == Some(0) { p.spark_count.map(|n| n as usize) } else { None };
         // au milieu de la place du personnage en lettres (16 de large), les pattes au sol ; ses
@@ -151,6 +159,18 @@ impl Forge {
             let mut e = lumiere.eclairage(a.x as i32 - 15, 0, 30, SH);
             dehors_au_ciel(&mut e, ciel, porte, a.perso);
             a.eclairage = Some(e);
+        }
+        if let Some((s, e)) = self.coin.as_mut() {
+            let (x, y, w, h) = louveteau::emprise_coin(*s, SH);
+            let mut l = lumiere.eclairage(x, y, w, h);
+            dehors_au_ciel(&mut l, ciel, porte, Perso::Scorpheus);
+            *e = Some(l);
+        }
+        for (c, e) in self.louveteaux.iter_mut() {
+            let (x, y, w, h) = louveteau::emprise(c);
+            let mut l = lumiere.eclairage(x, y, w, h);
+            dehors_au_ciel(&mut l, ciel, porte, Perso::Scorpheus);
+            *e = Some(l);
         }
         if let Some((cat, e)) = self.chat.as_mut() {
             let (x, y, w, h) = chat::emprise(cat);
@@ -506,6 +526,13 @@ impl crate::scene::Scene for SceneForge {
         // la panthère, au pixel d'art, derrière lui et ses invités
         if let Some((cat, e)) = &self.forge.chat {
             peints.extend(chat::peindre(cat, e.as_ref(), image.pixels, w, h, x0, cw, ch));
+        }
+        // les louveteaux, au pixel d'art comme elle, et leur coin de cour derrière eux
+        if let Some((s, e)) = &self.forge.coin {
+            peints.extend(louveteau::peindre_coin(*s, SH, monde.clock, e.as_ref(), image.pixels, w, h, x0, cw, ch));
+        }
+        for (c, e) in &self.forge.louveteaux {
+            peints.extend(louveteau::peindre(c, e.as_ref(), image.pixels, w, h, x0, cw, ch));
         }
         peints.extend(acteurs.iter().filter_map(|a| pet::peindre(a, image.pixels, w, h, x0, cw, ch)));
         let fete = monde.fete();

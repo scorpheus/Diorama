@@ -33,6 +33,10 @@ pub struct Contexte {
     cape: [u8; 2],
     /// les invités de ce dessin, que pet.rs peint par-dessus quand la scène ne les dessine pas
     pub invites: Vec<InviteVu>,
+    /// les louveteaux de ce dessin, que louveteau.rs peint au pixel d'art quand `pet` (la scène ne les dessine pas)
+    pub louveteaux: std::cell::RefCell<Vec<super::louveteau::Vu>>,
+    /// le coin des louveteaux dans la cour (le milieu de leur enclume), quand ils s'y tiennent
+    pub coin: std::cell::Cell<Option<i32>>,
 }
 
 /// Un invité peint d'après le pet : où il se tient (la colonne de la scène où commence sa
@@ -47,7 +51,7 @@ pub struct InviteVu {
 
 impl Default for Contexte {
     fn default() -> Self {
-        Contexte { edge: SW, pet: false, interieur_fin: false, tete: &HAMMER_NORMAL, cape: *b"oO", invites: Vec::new() }
+        Contexte { edge: SW, pet: false, interieur_fin: false, tete: &HAMMER_NORMAL, cape: *b"oO", invites: Vec::new(), louveteaux: Default::default(), coin: Default::default() }
     }
 }
 
@@ -699,6 +703,33 @@ fn cub_place(c: &Petit, slot: i64) -> Place {
     }
 }
 
+/// Un louveteau du marteau à son coin de cour (`s` : le milieu de l'enclume) : le premier à gauche tourné vers elle,
+/// le second à droite ; il s'en écarte de quelques pas, va et revient, puis s'assied et frappe.
+fn pres_du_coin(c: &Petit, slot: i64, s: i32) -> PetitIci {
+    let (base, cote) = if slot == 0 { (s - 9, 1) } else { (s - 3, -1) };
+    let t = c.age.rem_euclid(CUB_CYCLE);
+    let cycles = c.age.div_euclid(CUB_CYCLE) as f64;
+    // celui de droite ne va pas jusqu'au brasero (`s + 12`)
+    let ecart = if slot == 0 { 4.0 + hasard(c.seed * 5) * 3.0 } else { 2.5 + hasard(c.seed * 5) * 1.5 };
+    if t < CUB_WALK {
+        let f = t as f64 / CUB_WALK as f64;
+        let e = (f * std::f64::consts::PI).sin() * ecart;
+        let aller = f < 0.5;
+        PetitIci {
+            x: base - cote * arr(e),
+            y: LANE.2,
+            dir: if aller { -cote } else { cote },
+            travel: cycles * 2.0 * ecart + if aller { e } else { 2.0 * ecart - e },
+            doing: None,
+            since: None,
+            carry: None,
+            trips: None,
+        }
+    } else {
+        PetitIci { x: base, y: LANE.2, dir: cote, travel: (cycles + 1.0) * 2.0 * ecart, doing: Some(Fait::Hammer), since: None, carry: None, trips: None }
+    }
+}
+
 // Le chat de la machine : une panthère tachetée, or aux rosettes sombres, un œil vert.
 const PANTHER_WALK: [[&str; 7]; 4] = [
     [".11...........", "1111.........1", "14111.......1.", "3311121121111.", ".111211121111.", ".1.5.....1.5..", "1...5...1...5."],
@@ -964,9 +995,24 @@ impl Contexte {
         }
     }
 
+    /// Au pixel, dans une cour assez large, ceux du marteau ont leur coin entre le menhir et le puits (user, 12-11 :
+    /// « ils font de la forge au niveau de la porte, on pourrait leur trouver un meilleur coin ») : le milieu de
+    /// l'enclume, que deux louveteaux frappent face à face, le brasero à côté.
+    fn coin_des_louveteaux(&self, cour: &mut Cour) -> Option<i32> {
+        if !self.pet || self.edge - YARD < WIDE_YARD {
+            return None;
+        }
+        let l = cour.layout(YARD, self.edge);
+        let s = YARD + 28;
+        let borne = [l.well, Some(l.tree.0 - 4), l.wheel.map(|w| w - 2), Some(self.edge)].into_iter().flatten().min().unwrap_or(self.edge);
+        (s + 15 <= borne).then_some(s)
+    }
+
     fn draw_cubs(&self, cour: &mut Cour, g: &mut Grille, cubs: &[Petit], puddle: bool) {
         // trois au plus dans une cour étroite, chacun à sa place ; dans une large, un par corvée
         let chores = self.chores_of(cour);
+        let coin = self.coin_des_louveteaux(cour);
+        let mut au_coin = false;
         let live: Vec<&Petit> = cubs.iter().filter(|c| c.leaving.is_none()).take(SLOTS.len().max(chores.len())).collect();
         let going: Vec<&Petit> = cubs.iter().filter(|c| c.leaving.is_some()).take(2).collect();
         let mut hammers = 0i64;
@@ -980,7 +1026,14 @@ impl Contexte {
             } else {
                 i as i64
             };
-            placed.push((c, Some(i), self.chore_at(cour, c, chore, slot)));
+            let ici = match coin {
+                Some(s) if chore == Corvee::Hammer && slot < 2 => {
+                    au_coin = true;
+                    pres_du_coin(c, slot, s)
+                }
+                _ => self.chore_at(cour, c, chore, slot),
+            };
+            placed.push((c, Some(i), ici));
         }
         for c in &going {
             let n = chores.len().max(1) as i64;
@@ -1014,11 +1067,27 @@ impl Contexte {
             let y = at.y - if puddle && !sitting && c.age % 6 < 2 { 1 } else { 0 }; // il patauge dans la flaque
             // un pas par pixel marché : une patte posée reste où elle est
             let step = if sitting { CUB_SIT } else { (at.travel.floor() as i64) % 4 };
-            draw_wolf(g, x, y, dir, step, c.colour.0);
+            if self.pet {
+                // au pixel, louveteau.rs le peint d'après son dessin en lettres
+                self.louveteaux.borrow_mut().push(super::louveteau::Vu {
+                    x,
+                    y,
+                    dir,
+                    phase: (!sitting).then(|| (at.travel / 4.0) as f32),
+                    assis: sitting,
+                    marteau: at.doing == Some(Fait::Hammer),
+                    age: c.age,
+                    seed: c.seed,
+                    couleur: c.colour.0,
+                });
+            } else {
+                draw_wolf(g, x, y, dir, step, c.colour.0);
+            }
             let nose = if dir > 0 { x + CUB_W - 1 } else { x };
             let mouth = if dir > 0 { nose + 1 } else { nose - 2 };
             let since = at.since.unwrap_or(0.0);
             match at.doing {
+                Some(Fait::Hammer) if self.pet => {}
                 Some(Fait::Hammer) => {
                     // assis, son petit marteau monte et descend, des étincelles à sa couleur
                     let up = c.age % 4 < 2;
@@ -1077,6 +1146,7 @@ impl Contexte {
                 g.stamp(x + 3, y + 1, PUFF[(c.age >> 2).min(2) as usize]);
             }
         }
+        self.coin.set(if au_coin { coin } else { None });
         // ce que le louveteau du minerai a rapporté, en tas près de la porte
         let ore = chores.iter().take(live.len()).position(|&c| c == Corvee::Ore);
         let brought = ore.and_then(|i| placed.iter().find(|p| p.1 == Some(i))).and_then(|p| p.2.trips).unwrap_or(0).min(3);
