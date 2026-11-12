@@ -2,12 +2,12 @@
 //! moment, les invités, les louveteaux dans la cour.
 
 use super::accessoires::{
-    corbeau, draw_dream, draw_sky, draw_sparks, draw_zzz, etincelles, Vitres, BUBBLE, CLAWS, PUFF, SAYING, THOUGHT,
+    oiseau_messager, pensee, draw_dream, draw_sky, draw_sparks, draw_zzz, etincelles, Vitres, BUBBLE, CLAWS, PUFF, SAYING,
 };
 use super::cour::{draw_yard_weather, Cour};
 use super::monde::{
     Accessoire, Activite, Arme, Banniere, Cadeau, Chat, Don, Fete, Humeur, Marteau, Messager, ModeChat, Monde, Nouvelle,
-    Petit, Saison, Saveur, Temps,
+    Petit, Saison, Saveur,
 };
 use super::pixels::{arr, hasard, Grille};
 use super::poses::{pose_of, Caisse, Droite, Gauche, Lame, Lingot, Pose, Yeux};
@@ -27,6 +27,8 @@ pub struct Contexte {
     pub edge: i32,
     /// Scorpheus est peint d'après son pet (pet.rs) : la scène ne dessine que ce qui l'entoure
     pub pet: bool,
+    /// La pièce (`0..YARD`) est peinte au pixel fin par `interieur.rs` sous les cellules vides
+    pub interieur_fin: bool,
     tete: &'static [&'static str],
     cape: [u8; 2],
     /// les invités de ce dessin, que pet.rs peint par-dessus quand la scène ne les dessine pas
@@ -45,7 +47,7 @@ pub struct InviteVu {
 
 impl Default for Contexte {
     fn default() -> Self {
-        Contexte { edge: SW, pet: false, tete: &HAMMER_NORMAL, cape: *b"oO", invites: Vec::new() }
+        Contexte { edge: SW, pet: false, interieur_fin: false, tete: &HAMMER_NORMAL, cape: *b"oO", invites: Vec::new() }
     }
 }
 
@@ -158,19 +160,19 @@ const FURNACE: [&str; 23] = [
     "kQqqzqqqzqqqQk.",
     "kkkkkkkkkkkkkk.",
 ];
-const FURNACE_AT: (i32, i32) = (0, 8);
+pub(super) const FURNACE_AT: (i32, i32) = (0, 8);
 pub(super) const MOUTH: (i32, i32, i32, i32) = (3, 18, 8, 8); // la chambre du feu : x, y, w, h
-const LOGS_Y: i32 = 26; // le sol du foyer : une bûche par 12,5 % de la fenêtre de 5 h qui reste
+pub(super) const LOGS_Y: i32 = 26; // le sol du foyer : une bûche par 12,5 % de la fenêtre de 5 h qui reste
 // Le tas de bois sur le toit, du bas : une bûche par 10 % de la semaine qui reste.
-const WOODPILE: [(i32, i32); 10] = [(0, 12), (1, 12), (2, 12), (3, 12), (0, 11), (1, 11), (2, 11), (3, 11), (1, 10), (2, 10)];
+pub(super) const WOODPILE: [(i32, i32); 10] = [(0, 12), (1, 12), (2, 12), (3, 12), (0, 11), (1, 11), (2, 11), (3, 11), (1, 10), (2, 10)];
 // Fixé au mur droit du four, sa buse dans le foyer, son levier en haut à droite.
-const BELLOWS: (i32, i32) = (13, 20);
+pub(super) const BELLOWS: (i32, i32) = (13, 20);
 const BELLOWS_SPOT: i32 = -8; // où se tient Scorpheus : à bout de bras, le soufflet en vue
 
 const ANVIL: [&str; 7] =
     ["kkkkkkkkkkkkk", "kAAAAAAAAAAAk", ".kkaaaaaaakk.", "...kaaaaak...", "...kaaaaak...", "..kaaaaaaak..", ".kkkkkkkkkkk."];
 pub(super) const ANVIL_AT: (i32, i32) = (16, 25);
-const INGOT: (i32, i32, i32) = (21, 24, 4);
+pub(super) const INGOT: (i32, i32, i32) = (21, 24, 4);
 pub(super) const IMPACT: (i32, i32) = (22, 23);
 
 pub(super) const C: (i32, i32) = (30, 6); // la tête de Scorpheus, en haut à gauche
@@ -178,18 +180,18 @@ pub(super) const C: (i32, i32) = (30, 6); // la tête de Scorpheus, en haut à g
 const SCROLL: [&str; 5] = ["kWWWWWWk", "kWVVVVWk", "kWWWWWWk", "kWVVVWWk", ".kkkkkk."];
 const BUCKET: [&str; 5] = ["kcccccck", "kAAAAAAk", "krRrRrRk", "krRrRrRk", ".kkkkkk."];
 pub(super) const BUCKET_AT: (i32, i32) = (18, 27);
-// La caisse du jour sur l'enclume, en planches claires aux coins d'acier, son couvercle dessus.
-const CRATE_BOX: [&str; 3] = ["kArrRrrrAk", "kVrrrrRrVk", "kkkkkkkkkk"];
-const LID_OPEN: [&str; 8] = ["kk", "kV", "kV", "kV", "kV", "kV", "kV", "kV"];
-const LID_CLOSING: [&str; 3] = ["....kkkkkk", "kkkkVVVVVk", "kVVVkkkkkk"];
-const LID_SHUT: [&str; 2] = ["kkkkkkkkkk", "kVVVVVVVVk"];
-pub(super) const CRATE_AT: (i32, i32) = (17, 19); // le bord, en haut à gauche ; la caisse pose sur l'enclume
-const SEAL: (i32, i32) = (CRATE_AT.0 + 3, CRATE_AT.1 + 1); // la cire d'or sur la jointure du couvercle
-const HOURGLASS_X: [i32; 3] = [17, 21, 25]; // sur l'enclume, de gauche à droite
-const BELL_AT: (i32, i32) = (25, 0);
+// Le coffre runique de chêne ferré d'acier et d'or sur l'enclume, son couvercle dessus.
+const CRATE_BOX: [&str; 3] = ["kArryyrrAk", "kVrryyrrVk", "kkkkkkkkkk"];
+const LID_OPEN: [&str; 8] = ["kk", "kV", "ky", "kV", "kV", "ky", "kV", "kV"];
+const LID_CLOSING: [&str; 3] = ["....kkkkkk", "kkkkVVyVVk", "kVVVkkkkkk"];
+const LID_SHUT: [&str; 2] = ["kkkkkkkkkk", "kVVryyrVVk"];
+pub(super) const CRATE_AT: (i32, i32) = (17, 19); // le bord, en haut à gauche ; le coffre pose sur l'enclume
+pub(super) const SEAL: (i32, i32) = (CRATE_AT.0 + 3, CRATE_AT.1 + 1); // le sceau de cire rouge et or sur la jointure
+pub(super) const HOURGLASS_X: [i32; 3] = [17, 21, 25]; // sur l'enclume, de gauche à droite
+pub(super) const BELL_AT: (i32, i32) = (25, 0);
 
 // Les débris qui s'entassent au sol à mesure que le contexte se remplit, dans l'ordre où ils tombent.
-const SCRAPS: [(i32, i32, u8); 12] = [
+pub(super) const SCRAPS: [(i32, i32, u8); 12] = [
     (15, 31, b'a'),
     (29, 31, b'A'),
     (16, 31, b'r'),
@@ -223,20 +225,21 @@ const COINS: [(i32, i32); 30] = {
     }
     c
 };
-const COIN_STEPS: i32 = 11;
+pub(super) const COIN_STEPS: i32 = 11;
 
 // La fenêtre de l'atelier sur le monde, entre la cloche et le four.
 pub(super) const WINDOW: (i32, i32, i32, i32) = (13, 0, 12, 10); // cadre compris : x, y, w, h
 pub(super) const LANTERN: (i32, i32) = (10, 0);
-const HAT_PARTY: [&str; 5] = ["..Y..", "..M..", ".MyM.", ".yMy.", "MMyMM"];
-const HAT_SANTA: [&str; 5] = ["...w.", "..FF.", ".FFF.", "FFFFE", "wwwww"];
+// Chapeau pointu de sorcier étoilé (anniversaire) et chaperon d'hiver rouge, or et houx (Noël).
+const HAT_PARTY: [&str; 5] = ["..Y..", "..B..", ".ByB.", ".bBb.", "yyByy"];
+const HAT_SANTA: [&str; 5] = ["...w.", "..FF.", ".FyF.", "FFEFw", "wwOww"];
 const HAMMER_SMALL: [&str; 2] = ["AA", "aa"];
 const HAMMER_NORMAL: [&str; 2] = ["AAA", "aaa"];
 const HAMMER_SLEDGE: [&str; 3] = ["AAAA", "aaaa", "aaaa"];
 
 // Le râtelier de la semaine sous la fenêtre : une barre et sept chevilles, une arme par jour travaillé.
-const RACK: (i32, i32) = (13, 11);
-const RACK_SLOTS: [i32; 7] = [15, 17, 19, 21, 23, 25, 27];
+pub(super) const RACK: (i32, i32) = (13, 11);
+pub(super) const RACK_SLOTS: [i32; 7] = [15, 17, 19, 21, 23, 25, 27];
 
 fn arme(a: Arme) -> (&'static str, &'static [(i32, i32, u8)]) {
     match a {
@@ -248,10 +251,10 @@ fn arme(a: Arme) -> (&'static str, &'static [(i32, i32, u8)]) {
 }
 
 // La bannière du projet, à droite de Scorpheus.
-const BANNER: (i32, i32) = (47, 8);
+pub(super) const BANNER: (i32, i32) = (47, 8);
 const DUCK: [&str; 4] = [".yy..", "Fky..", ".yyyy", "..yyy"];
-const DUCK_AT: (i32, i32) = (25, 21);
-const SLATE_AT: (i32, i32) = (18, 17);
+pub(super) const DUCK_AT: (i32, i32) = (25, 21);
+pub(super) const SLATE_AT: (i32, i32) = (18, 17);
 
 // Un louveteau de profil, tourné à droite : pelage gris, ventre clair, long museau, la houppe
 // bleue de son père, une écharpe à la couleur de sa sorte ('C' ici).
@@ -526,12 +529,11 @@ fn draw_banner(g: &mut Grille, b: &Banniere, tick: i64) {
 
 fn draw_slate(g: &mut Grille, tick: i64) {
     let (x, y) = SLATE_AT;
-    g.stamp(x, y, &["rrrrrrr", "rzzzzzr", "rzwwwzr", "rzwzwzr", "rzwwwzr", "rzzzzzr", "rrrrrrr"]);
-    // l'aiguille de l'horloge à la craie tourne : il attend le charbon
-    let hands = [(3, 2), (4, 3), (3, 4), (2, 3)];
-    let (hx, hy) = hands[(tick.div_euclid(6) % 4) as usize];
-    g.put(x + 3, y + 3, b'w');
-    g.put(x + hx, y + hy, b'Y');
+    // sablier ancien de laiton et chêne au repos : tout le sable d'or attend au fond
+    g.stamp(x + 1, y, &["yyyyy", "rAwAr", ".ACA.", "..y..", ".ACA.", "ryYyr", "yyyyy"]);
+    if tick.div_euclid(6) % 2 == 0 {
+        g.put(x + 3, y + 3, b'Y');
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -553,7 +555,8 @@ fn draw_visitor(ctx: &Contexte, g: &mut Grille, w: &Monde, clock: i64) {
     let age = clock % VISIT_EVERY;
     if kind == Visiteur::Corbeau {
         let (x, y) = (ctx.edge - arr(age as f64 * 1.3), 1 + arr((age as f64 / 3.0).sin()));
-        g.stamp(x, y, corbeau(age));
+        let chouette = w.heure_ciel() >= 17.5 || hasard(clock.div_euclid(VISIT_EVERY) * 11 + 3) >= 0.5;
+        g.stamp(x, y, oiseau_messager(age, chouette));
     } else {
         // une phalène autour de la lanterne
         let a = age as f64 * 0.6;
@@ -745,21 +748,24 @@ fn draw_gift(g: &mut Grille, gift: &Don) {
     }
 }
 
-fn draw_messenger(ctx: &Contexte, g: &mut Grille, m: &Messager) {
-    // de l'autre forge, de droite à gauche au-dessus de la pièce, la nouvelle dans ses serres
+fn draw_messenger(ctx: &Contexte, g: &mut Grille, m: &Messager, clock: i64) {
+    // d'une autre forge, de droite à gauche au-dessus de la pièce : grand corbeau ou chouette blanche,
+    // portant dans ses serres un rouleau de parchemin scellé à la cire rouge et or
     let (x, y) = (ctx.edge - arr(m.age as f64 * 1.6), arr((m.age as f64 / 3.0).sin()));
-    g.stamp(x, y, corbeau(m.age));
-    g.stamp(x + CLAWS.0, y + CLAWS.1, if m.kind == Nouvelle::Waiting { &["WFW", ".F."][..] } else { &["WWV"][..] });
+    let chouette = hasard((clock - m.age) * 17 + 5) >= 0.5;
+    g.stamp(x, y, oiseau_messager(m.age, chouette));
+    g.stamp(
+        x + CLAWS.0 - 1,
+        y + CLAWS.1,
+        if m.kind == Nouvelle::Waiting { &["WWFWW", ".FyF."][..] } else { &["VWEWV", "..F.."][..] },
+    );
 }
 
-/// La cour selon le temps : une flaque après l'orage, un bonhomme de neige l'hiver, des feuilles
+/// La cour selon le temps : un bonhomme de neige l'hiver, des feuilles
 /// l'automne. Rien quand la baie de la Route du Rhum en tient la place.
 fn draw_yard(g: &mut Grille, w: &Monde) {
     if w.rhum.is_some() {
         return;
-    }
-    if w.weather == Some(Temps::Storm) {
-        g.stamp(YARD + 2, SH - 1, &[".cbbbc."]);
     }
     if w.saison() == Saison::Hiver {
         g.stamp(SW - 5, SH - 8, &[".kFk", ".ww.", "wwww", ".ww.", "wwww", "wwww", ".ww."]);
@@ -1157,12 +1163,12 @@ fn draw_crate(g: &mut Grille, state: Caisse, seal_age: i64) {
         g.stamp(x, y - if state == Caisse::Closing { 1 } else { 0 }, if state == Caisse::Closing { &LID_CLOSING[..] } else { &LID_SHUT[..] });
     }
     if state == Caisse::Sealed {
-        // la cire sur la jointure, un éclat qui en fait le tour de temps en temps
-        g.stamp(SEAL.0, SEAL.1, &["yYy", "yEy"]);
+        // le sceau de cire rouge et or sur la jointure, un éclat qui en fait le tour de temps en temps
+        g.stamp(SEAL.0, SEAL.1, &["FyF", "EyE"]);
         if seal_age < 2 {
-            g.stamp(SEAL.0 - 1, SEAL.1, &["y...y"]); // la cire s'étale encore
+            g.stamp(SEAL.0 - 1, SEAL.1, &["F...F"]); // la cire s'étale encore
         } else if seal_age % 6 == 0 {
-            g.put(SEAL.0 + 2, SEAL.1 + 1, b'Y');
+            g.put(SEAL.0 + 1, SEAL.1, b'Y');
         }
     }
 }
@@ -1197,8 +1203,8 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
     let night = world.nuit();
     let mut p = *p;
 
-    if !actor_only {
-        // la pièce
+    if !actor_only && !ctx.interieur_fin {
+        // la pièce en cellules (quand l'intérieur fin `interieur.rs` n'est pas actif)
         draw_window(&mut g, world, clock);
         draw_lantern(&mut g, world.lantern_lit, clock);
         draw_rack(&mut g, world);
@@ -1322,7 +1328,7 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
         }
         let x = C.0 + world.x;
         let y = C.1 + p.dy + if p.seated { 2 } else { 0 };
-        if p.stool {
+        if p.stool && !ctx.interieur_fin {
             g.stamp(x + 1, C.1 + 23, &["RRRRRRRRRRRRRR", ".R..........R.", ".R..........R."]);
         }
         let hy = y + p.head_dy;
@@ -1493,7 +1499,9 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
                 // le levier du soufflet : sa patte l'accompagne en bas, le soufflet se serre
                 let (lx, ly) = (BELLOWS.0 + 5, BELLOWS.1 + if p.bellows { 2 } else { 0 }); // le bout du levier
                 ctx.arm(&mut g, ls.0, ls.1, lx + 1, ly);
-                g.stamp(IMPACT.0 - 1, IMPACT.1, &[".r.AA", "rr.aa"]); // le marteau posé sur l'enclume
+                if !ctx.interieur_fin {
+                    g.stamp(IMPACT.0 - 1, IMPACT.1, &[".r.AA", "rr.aa"]); // le marteau posé sur l'enclume
+                }
             }
             Gauche::Blade => {
                 ctx.arm(&mut g, ls.0, ls.1, x - 2, y + 11);
@@ -1561,7 +1569,8 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
         if p.thought {
             g.put(x + 15, hy + 3, b'w');
             g.put(x + 16, hy + 1, b'w');
-            g.stamp(x + 17, (hy - 6).max(0), &THOUGHT[(tick.div_euclid(3) % 2) as usize]);
+            let episode = if world.turn_ticks > 0 { clock - world.turn_ticks } else { clock.div_euclid(64) };
+            g.stamp(x + 17, (hy - 6).max(0), pensee(tick, episode));
         }
         if p.glints {
             for i in 0..3i64 {
@@ -1579,20 +1588,27 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
 
         // les effets du moment
         if !actor_only {
-            if p.bucket {
-                g.stamp(BUCKET_AT.0, BUCKET_AT.1, &BUCKET);
-            }
-            if let Some(steam) = p.steam {
-                draw_steam(&mut g, steam, BUCKET_AT.0 + 4, BUCKET_AT.1 - 1);
+            if !ctx.interieur_fin {
+                if p.bucket {
+                    g.stamp(BUCKET_AT.0, BUCKET_AT.1, &BUCKET);
+                }
+                if let Some(steam) = p.steam {
+                    draw_steam(&mut g, steam, BUCKET_AT.0 + 4, BUCKET_AT.1 - 1);
+                }
             }
             if let Some(a) = p.raven.filter(|&a| a < 16) {
-                // il tombe d'en haut (âge négatif), loin de sa tête, prend la caisse, et repart en haut à gauche
+                // il tombe d'en haut (âge négatif), loin de sa tête, emporte le coffre runique ou le parchemin scellé, et repart
                 let af = a as f64;
                 let rx = CRATE_AT.0 + 1 - arr(af * if a < 0 { 0.7 } else { 1.4 });
                 let ry = CRATE_AT.1 - 6 - arr(af.abs() * if a < 0 { 3.0 } else { 1.3 });
-                g.stamp(rx, ry, super::accessoires::RAVEN[a.rem_euclid(4) as usize]);
+                let chouette = hasard((clock - a) * 13 + 7) >= 0.5;
+                g.stamp(rx, ry, oiseau_messager(a, chouette));
                 if a >= 0 {
-                    g.stamp(rx + CLAWS.0 - 2, ry + CLAWS.1, &["kVVVVk", "kryyrk", "kkkkkk"]); // la caisse scellée dans ses serres
+                    if chouette {
+                        g.stamp(rx + CLAWS.0 - 2, ry + CLAWS.1, &["kWWFWWk", ".kFyFk."]); // rouleau de parchemin scellé à la cire
+                    } else {
+                        g.stamp(rx + CLAWS.0 - 2, ry + CLAWS.1, &["kVrryVk", "krFyFrk", "kkkkkkk"]); // coffre runique scellé
+                    }
                 }
             }
             if let Some(s) = p.seal_age.filter(|&s| (0..6).contains(&s)) {
@@ -1651,7 +1667,9 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
         return g;
     }
 
-    draw_yard(&mut g, world);
+    if !cour.fin {
+        draw_yard(&mut g, world);
+    }
     // au pixel, la panthère se peint en pixel art (chat.rs)
     if let Some(cat) = world.cat.as_ref().filter(|_| !ctx.pet) {
         draw_cat(&mut g, cat);
@@ -1710,19 +1728,21 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
             }
         }
     }
-    if world.banquet {
+    if world.banquet && !cour.fin {
         draw_banquet(&mut g, clock);
     }
     if let Some(m) = &world.messenger {
-        draw_messenger(ctx, &mut g, m);
+        draw_messenger(ctx, &mut g, m, clock);
     }
 
     // ce qui passe au-dessus de tout ce qu'il fait
     draw_visitor(ctx, &mut g, world, clock);
-    if let Some(age) = world.bell_age.filter(|&a| a < 40) {
-        draw_bell(&mut g, age);
+    if !ctx.interieur_fin {
+        if let Some(age) = world.bell_age.filter(|&a| a < 40) {
+            draw_bell(&mut g, age);
+        }
     }
-    ctx.draw_cubs(cour, &mut g, &world.apprentices, world.weather == Some(Temps::Storm));
+    ctx.draw_cubs(cour, &mut g, &world.apprentices, false);
     draw_yard_weather(cour, &mut g, world, YARD, ctx.edge);
     g
 }

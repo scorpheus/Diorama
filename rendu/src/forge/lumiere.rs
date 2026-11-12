@@ -8,10 +8,51 @@ use std::collections::HashMap;
 
 use super::atelier::{ANVIL_AT, BUCKET_AT, C, CRATE_AT, IMPACT, LANTERN, MOUTH, SH, SW, WINDOW, YARD};
 use super::cour::{pack, Dehors};
-use super::monde::{Monde, Temps};
+use super::monde::Monde;
 use super::pet::Eclairage;
 use super::pixels::{arrondi, hasard, Grille, Lumiere};
-use super::poses::Pose;
+use super::poses::{Caisse, Pose};
+
+/// Positions (en coordonnées de forge `0..54 × 0..32`) des quatre chandelles flottantes façon Poudlard.
+/// Toutes restent strictement à gauche de `x = 45` (`39.0 + 5.2 = 44.2 < 45.0`) pour préserver l'ombre
+/// de la voûte haute droite loin du foyer.
+pub const CHANDELLES_FORGE: [(f32, f32); 4] = [(11.5, 5.8), (26.8, 4.2), (32.6, 2.8), (39.0, 3.6)];
+
+/// Carte d'éclairage continu (`YARD × SH`) destinée à l'intérieur peint au pixel fin (`interieur.rs`).
+#[derive(Clone)]
+pub struct GrilleLumiere {
+    /// Éclairage du mur et de la voûte (`MUR * amb + gather_ombre`).
+    pub mur: Vec<[f32; 3]>,
+    /// Éclairage du sol et du mobilier recevant les ombres portées (`amb + gather_ombre`).
+    pub sol: Vec<[f32; 3]>,
+    /// Éclairage plein des objets qui portent eux-mêmes une ombre (`amb + gather`).
+    pub plein: Vec<[f32; 3]>,
+}
+
+impl GrilleLumiere {
+    /// Lecture bilinéaire douce en coordonnées de forge `(u, v)`.
+    #[inline]
+    pub fn lire(carte: &[[f32; 3]], u: f32, v: f32) -> [f32; 3] {
+        let fx = (u - 0.5).clamp(0.0, (YARD - 1) as f32);
+        let fy = (v - 0.5).clamp(0.0, (SH - 1) as f32);
+        let x0 = (fx.floor() as i32).clamp(0, YARD - 2) as usize;
+        let y0 = (fy.floor() as i32).clamp(0, SH - 2) as usize;
+        let tx = (fx - x0 as f32).clamp(0.0, 1.0);
+        let ty = (fy - y0 as f32).clamp(0.0, 1.0);
+        let w = YARD as usize;
+        let c00 = carte[y0 * w + x0];
+        let c10 = carte[y0 * w + x0 + 1];
+        let c01 = carte[(y0 + 1) * w + x0];
+        let c11 = carte[(y0 + 1) * w + x0 + 1];
+        let mut out = [0.0f32; 3];
+        for k in 0..3 {
+            let haut = c00[k] + (c10[k] - c00[k]) * tx;
+            let bas = c01[k] + (c11[k] - c01[k]) * tx;
+            out[k] = haut + (bas - haut) * ty;
+        }
+        out
+    }
+}
 
 /// Ce qui luit de soi-même : flammes, braises, étincelles, métal chaud.
 const GLOWS: &[u8] = b"YfFEsSH";
@@ -123,6 +164,8 @@ pub struct LumiereForge<'a> {
     relief: Vec<f32>,
     /// le jour qui entre par la fenêtre : sa couleur et sa force (`rai`)
     jour: Option<([f64; 3], f64)>,
+    /// la pièce est peinte au pixel fin par `interieur.rs` sous les cellules vides
+    interieur_fin: bool,
 }
 
 /// La part de sa lumière qu'une lampe garde derrière ce qui l'arrête : l'ombre n'est jamais noire, la pièce
@@ -170,19 +213,41 @@ fn relief(ombre: &[bool]) -> Vec<f32> {
 /// pose dessus, le seau ; Scorpheus en lettres (`actor`) ; et chacun de ceux que pet.rs peint au vrai pixel
 /// (`corps` : le milieu de leurs pieds, en pixels de forge), par une ellipse de sa taille. Les étincelles et le
 /// métal chaud luisent : ils n'arrêtent rien.
-pub fn ombres(scene: &Grille, actor: &Grille, corps: &[f32]) -> Vec<bool> {
+pub fn ombres(scene: &Grille, actor: &Grille, corps: &[f32], p: &Pose, interieur_fin: bool) -> Vec<bool> {
     let mut m = vec![false; (YARD * SH) as usize];
     let mut poser = |x: i32, y: i32| {
         if (0..YARD).contains(&x) && (0..SH).contains(&y) {
             m[(y * YARD + x) as usize] = true;
         }
     };
-    for (bx, by, bw, bh) in [(ANVIL_AT.0, ANVIL_AT.1, 13, 7), (BUCKET_AT.0, BUCKET_AT.1, 8, 5), (CRATE_AT.0, CRATE_AT.1 - 7, 10, 10)] {
-        for y in by..by + bh {
-            for x in bx..bx + bw {
-                let c = scene.at(x, y);
-                if c != b'.' && !GLOWS.contains(&c) {
+    if interieur_fin {
+        for y in ANVIL_AT.1..SH {
+            for x in ANVIL_AT.0 + 1..ANVIL_AT.0 + 12 {
+                poser(x, y);
+            }
+        }
+        if p.bucket {
+            for y in BUCKET_AT.1..SH {
+                for x in BUCKET_AT.0..BUCKET_AT.0 + 8 {
                     poser(x, y);
+                }
+            }
+        }
+        if p.crate_.is_some_and(|c| c != Caisse::Gone) {
+            for y in CRATE_AT.1..CRATE_AT.1 + 5 {
+                for x in CRATE_AT.0..CRATE_AT.0 + 10 {
+                    poser(x, y);
+                }
+            }
+        }
+    } else {
+        for (bx, by, bw, bh) in [(ANVIL_AT.0, ANVIL_AT.1, 13, 7), (BUCKET_AT.0, BUCKET_AT.1, 8, 5), (CRATE_AT.0, CRATE_AT.1 - 7, 10, 10)] {
+            for y in by..by + bh {
+                for x in bx..bx + bw {
+                    let c = scene.at(x, y);
+                    if c != b'.' && !GLOWS.contains(&c) {
+                        poser(x, y);
+                    }
                 }
             }
         }
@@ -209,13 +274,20 @@ pub fn ombres(scene: &Grille, actor: &Grille, corps: &[f32]) -> Vec<bool> {
 
 impl<'a> LumiereForge<'a> {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(chutes: &'a mut Chutes, p: &Pose, w: &Monde, tick: i64, actor: &'a Grille, dehors: &'a Dehors, ombre: Vec<bool>) -> Self {
+    pub fn new(
+        chutes: &'a mut Chutes,
+        p: &Pose,
+        w: &Monde,
+        tick: i64,
+        actor: &'a Grille,
+        dehors: &'a Dehors,
+        ombre: Vec<bool>,
+        interieur_fin: bool,
+    ) -> Self {
         let night = w.nuit();
         let ciel = w.heure_ciel();
         // les volets fermés pour la nuit (la routine de la maison, à la pendule) : plus de jour ni de lune
         let closed = w.hour >= 23.0 || w.hour < 6.0;
-        // le jour monte et descend sans paliers (user, 02-11 : « la luminosité qui change en fonction de
-        // l'heure ») : 0 la nuit, 0,6 à la fin du crépuscule du matin et au début de celui du soir, 1 au midi solaire
         let j = jour(ciel);
         let par = |nuit: [f64; 3], soir: [f64; 3], midi: [f64; 3]| -> [f64; 3] {
             let (a, b, t) = if j < 0.6 { (nuit, soir, j / 0.6) } else { (soir, midi, (j - 0.6) / 0.4) };
@@ -231,8 +303,6 @@ impl<'a> LumiereForge<'a> {
             up: 2.2,
             down: 1.0,
             rgb: [1.0, 0.55, 0.25],
-            // un feu, même bas, éclaire la pièce : 0,22 par niveau seulement suffisait sur le fond
-            // noir du mod, pas sur une pièce peinte (02-11)
             power: if fire > 0 { 0.3 + 0.22 * fire as f64 } else { 0.0 } * (0.85 + 0.15 * drift(tick, 3, 3)),
             halo: (16.0, 1.5),
         }];
@@ -248,6 +318,21 @@ impl<'a> LumiereForge<'a> {
                 halo: (7.0, 0.45),
             });
         }
+        if interieur_fin {
+            // quatre chandelles flottantes sous les voûtes (strictement à gauche de x = 45)
+            for (idx, &(cx, cy)) in CHANDELLES_FORGE.iter().enumerate() {
+                lamps.push(Lampe {
+                    x: cx as f64,
+                    y: cy as f64,
+                    reach: 5.2,
+                    up: 1.15,
+                    down: 1.0,
+                    rgb: [1.0, 0.78, 0.42],
+                    power: 0.22 * (0.9 + 0.1 * drift(tick, 4, 21 + idx as i64 * 5)),
+                    halo: (2.6, 0.22),
+                });
+            }
+        }
         if let Some(age) = p.sparks_age.filter(|&a| a < 3) {
             lamps.push(Lampe {
                 x: IMPACT.0 as f64,
@@ -260,7 +345,7 @@ impl<'a> LumiereForge<'a> {
                 halo: (9.0, 0.45),
             });
         }
-        let storm = w.weather == Some(Temps::Storm);
+        let storm = false;
         let sky = if storm { [0.55, 0.6, 0.7] } else { par([0.45, 0.55, 0.95], [1.0, 0.7, 0.45], [1.0, 0.97, 0.88]) };
         let daylight = if closed {
             0.0
@@ -296,7 +381,26 @@ impl<'a> LumiereForge<'a> {
             .collect();
         let jour = (daylight > 0.0).then_some((sky, daylight));
         let relief = relief(&ombre);
-        LumiereForge { lamps, amb, actor, shade: model_of(actor, w, p), dehors, ombre, relief, jour }
+        LumiereForge { lamps, amb, actor, shade: model_of(actor, w, p), dehors, ombre, relief, jour, interieur_fin }
+    }
+
+    /// Carte d'éclairage complète (`YARD × SH`) pour `interieur.rs`.
+    pub fn grille(&self) -> GrilleLumiere {
+        let cap = (YARD * SH) as usize;
+        let mut mur = Vec::with_capacity(cap);
+        let mut sol = Vec::with_capacity(cap);
+        let mut plein = Vec::with_capacity(cap);
+        let a = self.amb;
+        for y in 0..SH {
+            for x in 0..YARD {
+                let ko = self.gather_ombre(x, y);
+                let kp = self.gather(x, y);
+                mur.push([(MUR * a[0] + ko[0]) as f32, (MUR * a[1] + ko[1]) as f32, (MUR * a[2] + ko[2]) as f32]);
+                sol.push([(a[0] + ko[0]) as f32, (a[1] + ko[1]) as f32, (a[2] + ko[2]) as f32]);
+                plein.push([(a[0] + kp[0]) as f32, (a[1] + kp[1]) as f32, (a[2] + kp[2]) as f32]);
+            }
+        }
+        GrilleLumiere { mur, sol, plein }
     }
 
     /// L'ambiance et les lampes sur chaque pixel de forge d'un rectangle (borné à la pièce) :
@@ -392,10 +496,11 @@ impl Lumiere for LumiereForge<'_> {
             return Some(pack(self.dehors.light(rgb, x, y)));
         }
         let Some(c) = c else {
+            if self.interieur_fin {
+                // l'intérieur est peint au pixel fin sous les cellules transparentes par `interieur.rs`
+                return None;
+            }
             // le mur du fond, partout dans la pièce : sombre à l'ambiance, montré par chaque lampe.
-            // Peint là seulement où une lumière tombait, il laissait voir ailleurs le fond du
-            // terminal ; gris dans ClaudeTerminal, ce fond rendait la lueur du feu plus sombre que
-            // la pièce (user, 02-11 : « là où il y a de la lumière, c'est noir »)
             let k = self.gather_ombre(x, y);
             let p = pierre(x, y);
             let a = self.amb;
@@ -497,25 +602,32 @@ pub fn rai(px: &mut [u32], w: usize, h: usize, jour: ([f32; 3], f32), heure: f64
     if force <= 0.0 {
         return None;
     }
-    // l'ouverture, au dedans du cadre ; la pente, en pixels de forge vers la droite par pixel vers le bas
+    // l'ouverture en ogive gothique, au dedans du cadre ; la pente, en pixels de forge vers la droite par pixel vers le bas
     let (gauche, droite) = ((WINDOW.0 + 1) as f32, (WINDOW.0 + WINDOW.2 - 1) as f32);
-    let (haut, sol) = ((WINDOW.1 + WINDOW.3) as f32, SH as f32);
+    let (haut, appui, sol) = ((WINDOW.1 + 3) as f32, (WINDOW.1 + WINDOW.3) as f32, SH as f32);
     let pente = (((13.0 - heure) / 6.0).clamp(-1.0, 1.0) * 0.75) as f32;
     let (sx, sy) = (cw as f32, ch as f32 / 2.0);
-    let (ex0, ex1) = (gauche.min(gauche + pente * (sol - haut)), droite.max(droite + pente * (sol - haut)));
+    let (ex0, ex1) = (gauche.min(gauche + pente * (sol - appui)), droite.max(droite + pente * (sol - appui)));
     let l = (((ex0 - x0 as f32) * sx).floor() as i32 - cw).max(0);
     let r = (((ex1 - x0 as f32) * sx).ceil() as i32 + cw).min(bord.min(w as i32));
     let (t, b) = ((haut * sy) as i32, ((sol * sy) as i32).min(h as i32));
     if l >= r || t >= b {
         return None;
     }
-    let plume = cw as f32 * 1.5;
+    let plume = cw as f32 * 1.4;
     for y in t..b {
-        // la profondeur dans le rai, de 0 à la fenêtre à 1 au sol : il pâlit en descendant
-        let v = (y as f32 + 0.5) / sy - haut;
-        let p = v / (sol - haut);
-        let (a0, a1) = ((gauche + pente * v - x0 as f32) * sx, (droite + pente * v - x0 as f32) * sx);
-        let k = force * 0.3 * (1.0 - 0.55 * p) * 255.0;
+        let vy = (y as f32 + 0.5) / sy;
+        let v_bas = (vy - appui).max(0.0);
+        let p = (vy - haut) / (sol - haut);
+        // dans le haut de la baie (au-dessus de l'appui), les bords suivent l'arc brisé gothique
+        let ogive = if vy < appui {
+            let f = ((appui - vy) / (appui - haut).max(1.0)).clamp(0.0, 1.0);
+            f * f * (droite - gauche) * 0.42
+        } else {
+            0.0
+        };
+        let (a0, a1) = ((gauche + ogive + pente * v_bas - x0 as f32) * sx, (droite - ogive + pente * v_bas - x0 as f32) * sx);
+        let k = force * (if vy < appui { 0.16 } else { 0.3 }) * (1.0 - 0.55 * p) * 255.0;
         for x in l..r {
             let xf = x as f32 + 0.5;
             let bordure = ((xf - a0) / plume).min((a1 - xf) / plume).clamp(0.0, 1.0);
@@ -537,10 +649,10 @@ pub fn rai(px: &mut [u32], w: usize, h: usize, jour: ([f32; 3], f32), heure: f64
     for g in 0..9i64 {
         let periode = 260 + (hasard(g * 31 + 7) * 200.0) as i64;
         let age = (horloge + (hasard(g * 13 + 3) * periode as f64) as i64).rem_euclid(periode) as f32 / periode as f32;
-        let v = age * (sol - haut - 1.0);
+        let v = age * (sol - appui - 1.0);
         let u = hasard(g * 17 + 11) as f32 + 0.08 * (age * 6.283 * 2.0 + g as f32).sin();
         let gx = ((gauche + 1.0 + u * (droite - gauche - 2.0) + pente * v - x0 as f32) * sx) as i32;
-        let gy = ((haut + v) * sy) as i32;
+        let gy = ((appui + v) * sy) as i32;
         // il paraît et s'efface au bout de son chemin
         let eclat = (age * 5.0).min((1.0 - age) * 5.0).min(1.0) * force * 0.9 * 255.0;
         for y in gy..gy + grain {

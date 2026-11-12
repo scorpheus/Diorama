@@ -108,35 +108,15 @@ pub fn lumiere_dehors(w: &Monde) -> ([f32; 3], f32) {
 fn sky_of(w: &Monde) -> Ciel {
     let night = w.nuit();
     let dusk = !night && !(8.0..18.0).contains(&w.heure_ciel());
-    let storm = w.weather == Some(Temps::Storm);
-    // l'éclair, au rythme de la fenêtre
-    let flash = storm && w.clock % 23 < 2;
-    let (top, low, amb, spill) = if storm {
-        if night {
-            (hex(0x0d0f16), hex(0x262a36), [0.26, 0.29, 0.38], 0.5)
-        } else {
-            (hex(0x3a3f4c), hex(0x7a808c), [0.58, 0.61, 0.68], 0.25)
-        }
-    } else if night {
+    let storm = false;
+    let flash = false;
+    let (top, low, amb, spill) = if night {
         (hex(0x070b22), hex(0x1d2c58), [0.3, 0.36, 0.6], 0.55)
     } else if dusk {
         (hex(0x34407e), hex(0xf3a35e), [0.92, 0.72, 0.62], 0.25)
     } else {
         (hex(0x4f9fe6), hex(0xc4e6f6), [1.0, 1.0, 0.97], 0.0)
     };
-    if flash {
-        return Ciel {
-            top: mix(top, hex(0xc8ccdc), 0.5),
-            low: mix(low, hex(0xe0e4f0), 0.5),
-            amb: mix(amb, [1.0, 1.0, 1.1], 0.5),
-            spill,
-            night,
-            dusk,
-            storm,
-            flash,
-            arc: false,
-        };
-    }
     let arc = w.weather == Some(Temps::Rainbow) && !night;
     Ciel { top, low, amb, spill, night, dusk, storm, flash, arc }
 }
@@ -992,7 +972,7 @@ impl Peintre {
 }
 
 /// Ce qui tombe sur la cour, en glyphes plus fins qu'un pixel et sur ses cellules claires
-/// seulement : la pluie en quarts, la neige, les feuilles et les pétales en braille.
+/// seulement : la neige, les feuilles et les pétales en braille (ni pluie ni orage).
 pub fn draw_yard_weather(cour: &mut Cour, g: &mut Grille, w: &Monde, from: i32, to: i32) {
     let t = w.clock as f64;
     let room = to - from - 2;
@@ -1002,15 +982,6 @@ pub fn draw_yard_weather(cour: &mut Cour, g: &mut Grille, w: &Monde, from: i32, 
     }
     let (fromf, roomf) = (from as f64, room as f64);
     let clair: &[u8] = b".";
-    if w.weather == Some(Temps::Storm) {
-        for i in 0..arrondi(roomf * 0.45) as i64 {
-            // un trait d'un demi-pixel de large, deux de long, penché par le vent
-            let qy = (t * 1.5 + (i * 5) as f64) % 30.0;
-            let qx = 2.0 * (fromf + 2.0 + hasard(i * 13) * roomf) - qy * 0.3;
-            g.quad(qx, qy, b'c', Some(clair));
-            g.quad(qx, qy - 1.0, b'c', Some(clair));
-        }
-    }
     if se == Saison::Hiver {
         for i in 0..arrondi(roomf * 0.2) as i64 {
             let fx = fromf + 2.0 + hasard(i * 13) * roomf + ((t + (i * 7) as f64) / 3.0).sin() * 0.7;

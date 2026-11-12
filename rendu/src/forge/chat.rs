@@ -265,20 +265,39 @@ pub fn peindre(cat: &Chat, e: Option<&Eclairage>, pixels: &mut [u32], w: usize, 
                 _ => or,
             };
             if f != CREME && !ventre && !dessus {
-                // des rosettes semées : une par case de 4 × 3 (une sur cinq manque), placée au hasard dans sa case ;
-                // sur le corps un anneau ouvert au cœur plus foncé, ailleurs (tête, pattes, queue) un point
+                // des rosettes semées : taille calée sur l'écran (8 × 6 à GRAIN 2, 4 × 3 à GRAIN 4), une sur cinq manque ;
+                // sur le corps un anneau ouvert au cœur ambré, ailleurs (tête, pattes, queue) une petite tache
                 let petite = f == LOIN || f == QUEUE || f == PATTE || (!dort && (sx as f32 + 0.5) * g / cwf < 3.8);
-                let (cx, cy) = (sx.div_euclid(4), ay.div_euclid(3));
+                let fin = GRAIN <= 2;
+                let (gx, gy) = if fin { (8, 6) } else { (4, 3) };
+                let (cx, cy) = (sx.div_euclid(gx), ay.div_euclid(gy));
                 for (kx, ky) in [(cx, cy), (cx - 1, cy), (cx, cy - 1), (cx - 1, cy - 1)] {
                     let n = (kx * 7919 + ky * 104729) as i64;
                     if hache(n) < 0.2 {
                         continue;
                     }
-                    let (ox, oy) = (kx * 4 + (hache(n + 1) * 4.0) as i32, ky * 3 + (hache(n + 2) * 3.0) as i32);
+                    let (ox, oy) = (kx * gx + (hache(n + 1) * gx as f32) as i32, ky * gy + (hache(n + 2) * gy as f32) as i32);
                     let (dx, dy) = (sx - ox, ay - oy);
                     if petite {
-                        if dx == 0 && dy == 0 {
+                        if dx == 0 && dy == 0 || (fin && dx == 1 && dy == 0) {
                             c = tache;
+                        }
+                    } else if fin {
+                        // en 2×2 : un cœur ambré de 2×2 cerné d'un croissant brun ouvert d'un côté
+                        let ouverture = (hache(n + 3) * 4.0) as i32;
+                        if (0..=1).contains(&dx) && (0..=1).contains(&dy) {
+                            c = coeur;
+                        } else if (-1..=2).contains(&dx) && (-1..=2).contains(&dy) {
+                            let coin = (dx == -1 || dx == 2) && (dy == -1 || dy == 2);
+                            let ouvert = match ouverture {
+                                0 => dy == -1,
+                                1 => dx == 2,
+                                2 => dy == 2,
+                                _ => dx == -1,
+                            };
+                            if !coin && !ouvert {
+                                c = tache;
+                            }
                         }
                     } else {
                         // l'anneau : quatre à six pixels autour du cœur, un ou deux qui manquent
@@ -318,28 +337,65 @@ pub fn peindre(cat: &Chat, e: Option<&Eclairage>, pixels: &mut [u32], w: usize, 
         }
     };
     let devant = if droite { 1 } else { -1 };
+    let fin = GRAIN <= 2;
     if dort {
         let o = pixel(1.75, 5.85);
-        pose(o, cerne);
-        pose((o.0 - devant, o.1), cerne);
-        pose(pixel(0.35, 6.45), hex(0x3a1c12));
+        for d in 0..=if fin { 2 } else { 1 } {
+            pose((o.0 - d * devant, o.1), cerne);
+        }
+        let nez = pixel(0.35, 6.45);
+        pose(nez, hex(0x3a1c12));
+        if fin {
+            pose((nez.0 - devant, nez.1), hex(0x3a1c12));
+        }
         if cat.age % 40 < 12 {
             let k = (cat.age % 40) as f32 / 12.0;
             let z = pixel(8.8 + k * 0.6, 3.6 - k * 2.2);
-            for (dx, dy) in [(0, 0), (1, 0), (2, 0), (1, 1), (0, 2), (1, 2), (2, 2)] {
-                pose((z.0 + dx, z.1 + dy), hex(0xe8eef8));
+            if fin {
+                for (dx, dy) in [
+                    (0, 0), (1, 0), (2, 0), (3, 0),
+                    (2, 1),
+                    (1, 2),
+                    (0, 3), (1, 3), (2, 3), (3, 3),
+                ] {
+                    pose((z.0 + dx, z.1 + dy), hex(0xe8eef8));
+                }
+            } else {
+                for (dx, dy) in [(0, 0), (1, 0), (2, 0), (1, 1), (0, 2), (1, 2), (2, 2)] {
+                    pose((z.0 + dx, z.1 + dy), hex(0xe8eef8));
+                }
             }
         }
     } else {
         let hoche = phase.map_or(0.0, |p| (p * 4.0 * PI).sin() * 0.08);
         let o = pixel(1.85, 2.35 + hoche);
-        pose(o, hex(0x8ae04a));
-        pose((o.0 - devant, o.1), hex(0x101010));
-        pose((o.0, o.1 - 1), cerne);
-        pose((o.0 - devant, o.1 - 1), cerne);
-        pose(pixel(0.3, 2.9 + hoche), hex(0x3a1c12));
-        pose(pixel(2.15, 1.25 + hoche), hex(0xd08a6a));
-        pose(pixel(3.3, 1.3 + hoche), hex(0xd08a6a));
+        if fin {
+            // œil félin en 2×2 : iris émeraude, pupille fendue vers l'avant, cil sombre dessus
+            pose(o, hex(0x8ae04a));
+            pose((o.0 - devant, o.1), hex(0xd4ff8a));
+            pose((o.0, o.1 + 1), hex(0x6ac838));
+            pose((o.0 + devant, o.1), hex(0x101010));
+            pose((o.0 + devant, o.1 + 1), hex(0x101010));
+            for d in -1..=1 {
+                pose((o.0 + d, o.1 - 1), cerne);
+            }
+            let nez = pixel(0.35, 2.9 + hoche);
+            pose(nez, hex(0x3a1c12));
+            pose((nez.0 - devant, nez.1), hex(0x3a1c12));
+            for &(eu, ev) in &[(2.15, 1.25), (3.3, 1.3)] {
+                let ep = pixel(eu, ev + hoche);
+                pose(ep, hex(0xd08a6a));
+                pose((ep.0, ep.1 + 1), hex(0xb87256));
+            }
+        } else {
+            pose(o, hex(0x8ae04a));
+            pose((o.0 - devant, o.1), hex(0x101010));
+            pose((o.0, o.1 - 1), cerne);
+            pose((o.0 - devant, o.1 - 1), cerne);
+            pose(pixel(0.3, 2.9 + hoche), hex(0x3a1c12));
+            pose(pixel(2.15, 1.25 + hoche), hex(0xd08a6a));
+            pose(pixel(3.3, 1.3 + hoche), hex(0xd08a6a));
+        }
     }
     // posée en pixels d'écran sous la lumière de la forge, lue au pixel de forge
     let gauche = (ex - x0) * cw;

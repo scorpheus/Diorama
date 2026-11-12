@@ -11,6 +11,7 @@ pub mod cellules;
 pub mod chat;
 pub mod cour;
 pub mod gerbe;
+pub mod interieur;
 pub mod jauges;
 pub mod lumiere;
 pub mod paysage;
@@ -51,6 +52,10 @@ pub struct Forge {
     /// la panthère de la dernière image et la lumière sur elle, que SceneForge peint au pixel d'art (chat.rs) quand
     /// les personnages se peignent au pixel ; chez Galadriel, son belvédère la peint
     pub chat: Option<(monde::Chat, Option<pet::Eclairage>)>,
+    /// carte d'éclairage continu de la pièce pour `interieur.rs`
+    pub grille_lumiere: Option<lumiere::GrilleLumiere>,
+    /// dernière pose calculée pour `interieur.rs`
+    pub pose: Option<poses::Pose>,
 }
 
 impl Forge {
@@ -68,13 +73,18 @@ impl Forge {
     /// d'étincelles).
     #[allow(clippy::too_many_arguments)]
     pub fn image(&mut self, c: Recadrage, activity: Activite, tick: i64, world: &Monde, lit: bool, extra: i32, pet: bool) -> (Vec<u32>, Vec<pet::Acteur>, Option<usize>) {
+        let gala = world.galadriel();
+        let interieur_fin = lit && self.cour.fin && !(gala && pet) && pet;
         self.ctx.pet = pet;
+        self.ctx.interieur_fin = interieur_fin;
         self.lueurs.clear();
         self.jour = None;
-        self.chat = if pet && !world.galadriel() { world.cat.clone().map(|c| (c, None)) } else { None };
+        self.grille_lumiere = None;
+        self.chat = if pet && !gala { world.cat.clone().map(|c| (c, None)) } else { None };
         let (x0, x1) = crop(c);
         let width = if x1 == SW { SW + extra.clamp(0, GROW) } else { SW };
         let p = poses::pose_of(activity, tick, world);
+        self.pose = Some(p);
         let scene = compose(&mut self.ctx, &mut self.cour, &p, world, tick, false, width);
         let fin = if x1 == SW { width } else { x1 };
         let coup = if pet && p.sparks_age == Some(0) { p.spark_count.map(|n| n as usize) } else { None };
@@ -92,7 +102,6 @@ impl Forge {
             let (rangee, image) = pet::moment(a, t, w);
             pet::Acteur { rangee, image, x: (x + 8) as f32 + pet::decalage(a, w), y: SH as f32, eclairage: None, cape: w.cape[1].0, accessoire: w.accessory, perso: Perso::Scorpheus }
         };
-        let gala = world.galadriel();
         let mut acteurs: Vec<pet::Acteur> = Vec::new();
         if pet {
             // la session qui montre la Route du Rhum : lui en ciré jaune, ses invités dans leurs capes
@@ -127,12 +136,15 @@ impl Forge {
         let dehors = self.cour.outdoors(world, activity == Activite::Running, YARD, width);
         // ce qui porte une ombre : l'enclume et ce qui pose dessus, et ceux qui se tiennent dans la pièce
         let corps: Vec<f32> = acteurs.iter().map(|a| a.x).collect();
-        let ombre = lumiere::ombres(&scene, &actor, &corps);
-        let mut lumiere = lumiere::LumiereForge::new(&mut self.chutes, &p, world, tick, &actor, &dehors, ombre);
+        let ombre = lumiere::ombres(&scene, &actor, &corps, &p, interieur_fin);
+        let mut lumiere = lumiere::LumiereForge::new(&mut self.chutes, &p, world, tick, &actor, &dehors, ombre, interieur_fin);
         // chez Galadriel, son belvédère couvre la forge : pas de foyer à faire luire
         if !(gala && pet) {
             self.lueurs = lumiere.lueurs();
             self.jour = lumiere.jour();
+            if interieur_fin {
+                self.grille_lumiere = Some(lumiere.grille());
+            }
         }
         let (ciel, porte) = cour::lumiere_dehors(world);
         for a in &mut acteurs {
@@ -308,6 +320,8 @@ pub struct SceneForge {
     baie: baie::Baie,
     /// la cour au vrai pixel, hors Route du Rhum (paysage.rs)
     paysage: paysage::Paysage,
+    /// l'intérieur de la forge au pixel d'art `2×2` (interieur.rs)
+    interieur: interieur::Interieur,
     belvedere: belvedere::Belvedere,
     /// la vision qui monte de la vasque de Galadriel (belvedere::Vision), posée par l'appli
     pub vision: Option<belvedere::Vision>,
@@ -325,7 +339,7 @@ impl SceneForge {
     }
 
     pub fn new() -> Self {
-        SceneForge { forge: Forge { cour: cour::Cour::fine(), ..Forge::default() }, paysage: paysage::Paysage::default(), etat: None, temps: 0.0, lisse: None, montree: None, saute: None, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), baie: baie::Baie::default(), belvedere: belvedere::Belvedere::default(), vision: None, dragon: belvedere::Dragon::default(), frappe: i64::MIN, images: 0 }
+        SceneForge { forge: Forge { cour: cour::Cour::fine(), ..Forge::default() }, paysage: paysage::Paysage::default(), interieur: interieur::Interieur::default(), etat: None, temps: 0.0, lisse: None, montree: None, saute: None, avant: Vec::new(), gerbe: gerbe::Gerbe::default(), baie: baie::Baie::default(), belvedere: belvedere::Belvedere::default(), vision: None, dragon: belvedere::Dragon::default(), frappe: i64::MIN, images: 0 }
     }
 
     pub fn recevoir(&mut self, etat: Etat) {
@@ -411,6 +425,20 @@ impl crate::scene::Scene for SceneForge {
         let mut cible = cellules::Cible { pixels: image.pixels, w, h };
         let mut zone = cellules::peindre(&mut cible, &cells, if neuve { None } else { Some(&self.avant) }, cols, 0, 0, cw, ch);
         let mut cells = cells;
+        // l'intérieur fin, au pixel d'art `2×2`, sous les cellules transparentes de `0..YARD`
+        if self.forge.ctx.interieur_fin {
+            if let (Some(pose), Some(grille)) = (&self.forge.pose, &self.forge.grille_lumiere) {
+                if let Some(z) = self.interieur.peindre(image.pixels, w, h, x0, cols, cw, ch, &monde, etat.activite, pose, tick, grille) {
+                    zone = Some(zone.map_or(z, |a| (a.0.min(z.0), a.1.min(z.1), a.2.max(z.2), a.3.max(z.3))));
+                }
+                let fin_int = (YARD - x0).clamp(0, cols as i32) as usize;
+                for rangee in cells.chunks_mut(cols * 3) {
+                    for cell in rangee.chunks_mut(3).take(fin_int) {
+                        cell[0] = u32::MAX;
+                    }
+                }
+            }
+        }
         // la Route du Rhum : la baie, au vrai pixel, sous les cellules que la cour laisse
         // transparentes ; elle bouge à chaque image, ces cellules se repeignent donc toujours
         if let Some(cadre) = cadre_baie(&monde, x0, cols, cw, ch, h) {
@@ -480,6 +508,8 @@ impl crate::scene::Scene for SceneForge {
             peints.extend(chat::peindre(cat, e.as_ref(), image.pixels, w, h, x0, cw, ch));
         }
         peints.extend(acteurs.iter().filter_map(|a| pet::peindre(a, image.pixels, w, h, x0, cw, ch)));
+        let fete = monde.fete();
+        peints.extend(acteurs.iter().filter_map(|a| interieur::peindre_chapeau_acteur(a, fete, image.pixels, w, h, x0, cw, ch)));
         peints.extend(self.gerbe.peindre(image.pixels, w, h));
         // chez Galadriel, ce qui passe devant elle
         if gala {

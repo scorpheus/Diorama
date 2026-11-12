@@ -11,7 +11,7 @@
 
 use std::f32::consts::PI;
 
-use super::monde::{FeteRhum, Monde, PhaseRhum, Temps};
+use super::monde::{FeteRhum, Monde, PhaseRhum};
 use super::pixels::hasard;
 use super::bateaux::{bateau, gabarit, Bateau, Sorte, Vignette, Vignettes};
 use super::trace::{fois, hex, mix, mul, pack, smooth, unpack, Rgb, Toile};
@@ -296,8 +296,8 @@ impl Baie {
             self.sinus = (0..N_SIN).map(|i| (i as f32 * 2.0 * PI / N_SIN as f32).sin()).collect();
         }
         let et = etape(w);
-        let orage = w.weather == Some(Temps::Storm);
-        let eclair = orage && w.clock % 23 < 2;
+        let orage = false;
+        let eclair = false;
         let sky = ciel(w.hour as f32, orage, eclair);
         let cle = (c.w, c.h, (c.cw * 100.0) as i32, (c.demi * 100.0) as i32, c.from as i32, c.to as i32, et, (w.hour * 10.0) as i32, orage, eclair, w.galadriel());
         if self.cle != Some(cle) {
@@ -928,37 +928,19 @@ fn comite(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, t_: f32
     }
 }
 
-/// Un grain des tropiques : un gros nuage sombre qui traverse lentement, son rideau de pluie jusqu'à la mer.
+/// Un gros cumulus des alizés qui traverse lentement les tropiques (sans pluie).
 fn grain(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, t_: f32) {
     let room = c.room();
     let tour = room + 50.0;
     let u = room + 20.0 - (t_ * 0.02 + 30.0).rem_euclid(tour);
     let taille = 3.2;
     let base = SEA - 6.0;
-    // la pluie : des traits penchés par le vent, qui tombent
-    let gris = mix(mul(hex(0x6a7480), sky.amb), sky.bas, 0.3);
-    for k in 0..36 {
-        let f = hasard(k * 7 + 3) as f32;
-        let x = (u + (f - 0.5) * taille * 3.0) * c.cw;
-        let chute = ((t_ * 0.9 + k as f32 * 13.0) % 30.0) / 30.0;
-        let (ya, yb) = (c.y(base + 1.0 + chute * 6.0), c.y(base + 3.0 + chute * 6.0 + hasard(k) as f32 * 4.0));
-        t.trait_((x, ya), (x - (yb - ya) * 0.25, yb), 1.0, gris, 0.35);
-    }
-    let rideau: Vec<(f32, f32)> = vec![
-        ((u - taille * 1.4) * c.cw, c.y(base + 0.5)),
-        ((u + taille * 1.4) * c.cw, c.y(base + 0.5)),
-        ((u + taille * 0.9) * c.cw, c.y(SEA + 2.5)),
-        ((u - taille * 1.9) * c.cw, c.y(SEA + 2.5)),
-    ];
-    t.poly(&rideau, gris, 0.18);
     let cle = (-400, (c.cw * 100.0) as i32, (sky.amb[0] * 100.0) as i32, (sky.bas[2] * 10.0) as i32, 0);
     let nuage = gardees.entry(cle).or_insert_with(|| {
         let (w, h) = ((taille * 5.0 * c.cw) as usize, (taille * 3.0 * c.demi) as usize);
         let (ox, oy) = (w as f32 / 2.0, h as f32 * 0.8);
-        let (c, mut sombre) = (*c, *sky);
-        sombre.orage = true;
-        sombre.amb = mul(sombre.amb, [0.9, 0.9, 0.95]);
-        Vignette::faire(w, h, ox, oy, &move |t: &mut Toile, ox: f32, oy: f32| cumulus(t, &c, &sombre, ox / c.cw, oy / c.demi, taille, 404, 1.0))
+        let (c, clair) = (*c, *sky);
+        Vignette::faire(w, h, ox, oy, &move |t: &mut Toile, ox: f32, oy: f32| cumulus(t, &c, &clair, ox / c.cw, oy / c.demi, taille, 404, 1.0))
     });
     nuage.poser(t, u * c.cw, c.y(base));
 }
@@ -1229,7 +1211,7 @@ fn premier_plan(t: &mut Toile, gardees: &mut Vignettes, c: &Cadre, sky: &Ciel, e
         }
         Etape::Guadeloupe => {
             let palmiers: Vec<f32> = if room >= 40.0 { vec![room - 6.0, room - 15.0] } else { vec![room - 4.0] };
-            let orage = w.weather == Some(Temps::Storm);
+            let orage = false;
             for (i, &u) in palmiers.iter().enumerate() {
                 // le vent par pas : une vignette chacun
                 let graine = i as f32 * 2.3;

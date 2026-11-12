@@ -166,6 +166,21 @@ pub const THOUGHT: [[&str; 7]; 2] = [
     [".wwwww.", "wwwwwww", "ww.a.ww", "wwaAaww", "ww.a.ww", "wwwwwww", ".wwwww."],
     [".wwwww.", "wwwwwww", "wwa.aww", "ww.A.ww", "wwa.aww", "wwwwwww", ".wwwww."],
 ];
+/// Une rune d'or étoilée qui scintille dans la bulle de réflexion : choisie au hasard une fois sur deux.
+pub const THOUGHT_RUNE: [[&str; 7]; 2] = [
+    [".wwwww.", "wwnnnww", "wn.y.nw", "wnyYynw", "wn.y.nw", "wwnnnww", ".wwwww."],
+    [".wwwww.", "wwnnnww", "wns.snw", "wn.Y.nw", "wns.snw", "wwnnnww", ".wwwww."],
+];
+
+/// Le motif de la bulle de réflexion pour cet épisode : engrenage d'usine ou rune étoilée.
+pub fn pensee(tick: i64, graine: i64) -> &'static [&'static str; 7] {
+    let f = (tick.div_euclid(3).rem_euclid(2)) as usize;
+    if hasard(graine * 37 + 11) < 0.5 {
+        &THOUGHT[f]
+    } else {
+        &THOUGHT_RUNE[f]
+    }
+}
 const Z_GRAND: [&str; 4] = ["uuuu", "..u.", ".u..", "uuuu"];
 
 /// Les z du sommeil, deux à la fois, qui montent de (x, y) en rapetissant : un Z en pixels,
@@ -205,6 +220,24 @@ pub fn corbeau(age: i64) -> &'static [&'static str] {
         &[]
     } else {
         RAVEN[(age % 4) as usize]
+    }
+}
+
+/// Une chouette harfang messagère (façon Hedwige) : plumage blanc et gris perle, œil d'ambre.
+pub const OWL: [&[&str]; 4] = [
+    &[".....ll..", "......lw.", ".yw....w.", "kwwwwwww.", "..wwlwwll"],
+    &[".........", ".........", ".yw.llll.", "kwwwwwwwl", "..wwwwwl."],
+    &[".........", ".........", ".yw......", "kwwwwwww.", "..wwwlwll", "....ll...", "...g....."],
+    &[".........", ".........", ".yw......", "kwwwlllwg", "..wwwwwl."],
+];
+
+/// Corbeau d'Erebor ou chouette messagère selon `chouette`, y compris en piqué (`age < 0`).
+pub fn oiseau_messager(age: i64, chouette: bool) -> &'static [&'static str] {
+    let f = age.rem_euclid(4) as usize;
+    if chouette {
+        OWL[f]
+    } else {
+        RAVEN[f]
     }
 }
 /// Où pend ce que porte un corbeau, depuis son coin haut gauche.
@@ -258,7 +291,7 @@ pub fn draw_sky(g: &mut Grille, w: &Monde, tick: i64, v: &Vitres, volets: bool) 
     let night = w.nuit();
     let ciel = w.heure_ciel();
     let twilight = !night && !(8.0..18.0).contains(&ciel);
-    let storm = w.weather == Some(Temps::Storm);
+    let storm = false;
     for j in 0..ih {
         for i in 0..iw {
             let sky = if storm {

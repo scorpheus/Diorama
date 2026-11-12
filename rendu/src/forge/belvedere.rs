@@ -40,6 +40,8 @@ const PIED: f32 = SOL + 22.0;
 const PILIER: f32 = 478.0;
 /// Les lanternes : où pend chacune (le haut de sa cage).
 const LANTERNES: [(f32, f32); 4] = [(26.0, 58.0), (74.0, 42.0), (200.0, 70.0), (468.0, 52.0)];
+/// Quatre fins cierges flottants d'ivoire et d'argent sous la voûte du belvédère.
+const CHANDELLES_BELVEDERE: [(f32, f32); 4] = [(134.0, 44.0), (176.0, 34.0), (220.0, 50.0), (436.0, 36.0)];
 /// Où dort le chat : sur le rebord du lambris, près du bassin.
 const CHAT_DORT: (f32, f32) = (184.0, LAMBRIS - 24.0);
 
@@ -409,7 +411,7 @@ impl Belvedere {
         let ox = -v.x0 * v.cw;
         let mut entier = neuve;
         if self.cle != Some(cle) {
-            let ciel = ciel(w.heure_ciel() as f32, w.weather == Some(Temps::Storm), phase_lune(w.month, w.day));
+            let ciel = ciel(w.heure_ciel() as f32, false, phase_lune(w.month, w.day));
             self.fond = fond(rw, rh, sx, sy, &ciel, w, &lanternes, sommeil);
             self.grille = grille(&ciel, &lanternes, sommeil);
             self.ciel = Some(ciel);
@@ -569,6 +571,11 @@ fn lumiere(u: f32, v: f32, ciel: &Ciel, lanternes: &Lanternes, sommeil: bool) ->
             point(&mut l, x, y + 12.0, *c, 0.9, 34.0);
         }
     }
+    if v < SOL {
+        // fiole d'Eärendil dans l'alcôve de bibliothèque, et lueur dorée du grimoire sous la sphère
+        point(&mut l, 53.0, 148.0, hex(0xa8f4ff), if sommeil { 0.35 } else { 0.55 }, 24.0);
+        point(&mut l, 452.0, 198.0, OR, if sommeil { 0.25 } else { 0.42 }, 24.0);
+    }
     l
 }
 
@@ -672,15 +679,49 @@ fn doux(c: Rgb) -> Rgb {
 /// le bassin, le pilier.
 fn pixel_fond(u: f32, v: f32, ciel: &Ciel, saison: Saison, phase: f32, arc: bool) -> (Rgb, Rgb) {
     let rien = [0.0; 3];
-    // le pilier, à la porte
+    // le pilier sculpté style Fondcombe, à la porte : base attique, fût cannelé et chapiteau feuillagé
     if u >= PILIER {
-        let t = (u - PILIER) / (LARGE - PILIER);
-        let mut c = fois(PIERRE, 0.5 + 0.6 * (PI * (0.15 + 0.8 * t)).sin());
-        if (22.0..28.0).contains(&v) || v >= SOL - 8.0 && v < SOL {
-            c = fois(PIERRE, 1.05);
-        }
-        if v >= SOL {
-            c = fois(PIERRE, 0.62);
+        let t = ((u - PILIER) / (LARGE - PILIER)).clamp(0.0, 1.0);
+        let cyl = 0.52 + 0.58 * (PI * (0.12 + 0.82 * t)).sin();
+        let mut c = fois(PIERRE, cyl);
+        if v < 14.0 {
+            c = fois(PIERRE, 0.85 * cyl + 0.2);
+        } else if v < 17.0 {
+            // tailloir mouluré et filet d'or
+            c = if (15.0..16.0).contains(&v) { OR } else { fois(PIERRE, 1.12) };
+        } else if v < 30.0 {
+            // chapiteau à feuilles de mallorn sculptées en relief
+            let feuille = ((u - PILIER) * PI / 6.5).cos();
+            let galbe = 1.0 - ((v - 23.0) / 7.5).powi(2).min(1.0) * 0.25;
+            c = if feuille > 0.55 && (19.0..28.0).contains(&v) {
+                mix(fois(PIERRE, 1.15 * galbe), OR, 0.35)
+            } else {
+                fois(PIERRE, (0.78 + 0.26 * feuille) * galbe)
+            };
+        } else if v < 32.0 {
+            // astragale doré
+            c = if v < 31.0 { OR } else { OR_TERNI };
+        } else if v < SOL - 12.0 {
+            // fût à cinq cannelures concaves et listels clairs
+            if (0.10..0.90).contains(&t) {
+                let fp = ((t - 0.10) / 0.80 * 5.0).fract();
+                if fp < 0.14 || fp > 0.86 {
+                    c = fois(c, 1.12);
+                } else {
+                    let creux = ((fp - 0.14) / 0.72 * PI).sin();
+                    c = fois(c, 1.0 - 0.24 * creux);
+                }
+            }
+        } else if v < SOL - 10.0 {
+            c = if v < SOL - 11.0 { OR_TERNI } else { fois(PIERRE, 1.12) };
+        } else if v < SOL - 6.0 {
+            c = fois(PIERRE, 0.48 + 0.15 * cyl);
+        } else if v < SOL - 2.0 {
+            c = fois(PIERRE, 1.16);
+        } else if v < SOL {
+            c = fois(PIERRE, 0.75);
+        } else {
+            c = fois(PIERRE, if (v - SOL - 10.0).abs() < 0.6 { 0.48 } else { 0.64 });
         }
         return (c, rien);
     }
@@ -926,8 +967,31 @@ fn ciel_px(u: f32, v: f32, ciel: &Ciel, saison: Saison, phase: f32, arc: bool) -
             c = mix(c, teinte, (nuage * 2.2).min(1.0) * (0.85 - 0.25 * ciel.nuit));
         }
     }
-    // la forêt d'argent au loin, puis la brume
+    // la forêt d'argent au loin, une fine flèche elfique blanche qui émerge des cimes, puis la brume
     let cime = 176.0 + 6.0 * (u / 6.0).sin() + 4.0 * (u / 2.7 + 1.0).sin() + 6.0 * (u / 19.0).sin();
+    if v < cime && (275.0..=287.0).contains(&u) && v >= 142.0 {
+        let dx = u - 281.0;
+        let adx = dx.abs();
+        let marbre_clair = mix(hex(0xdce6fc), hex(0xf6f8ff), 1.0 - 0.45 * ciel.nuit);
+        let marbre_ombre = mix(hex(0x6674a8), hex(0x9aa8d4), 1.0 - 0.55 * ciel.nuit);
+        let cote = if (ciel.astre.0 - 281.0) * dx >= 0.0 { marbre_clair } else { marbre_ombre };
+        if (142.0..145.0).contains(&v) && adx < 0.8 {
+            c = hex(0xffe898);
+        } else if (145.0..158.0).contains(&v) {
+            let hw = ((v - 145.0) / 13.0) * 3.4;
+            if adx <= hw {
+                c = if adx > hw - 0.8 { mix(cote, OR, 0.35) } else { mix(hex(0x4c5c96), cote, 0.55) };
+            }
+        } else if (158.0..161.0).contains(&v) && adx <= 4.2 {
+            c = if v < 159.0 { OR } else { cote };
+        } else if v >= 161.0 && adx <= 3.2 {
+            if adx < 0.9 && (163.5..169.5).contains(&v) {
+                c = mix(hex(0xffe08a), hex(0xfff8d8), ciel.nuit);
+            } else {
+                c = cote;
+            }
+        }
+    }
     if v >= cime {
         let foret = match saison {
             Saison::Automne => mix(hex(0x3a2a20), hex(0x6a4a2a), 1.0 - ciel.nuit),
@@ -1028,7 +1092,11 @@ fn decor(t: &mut Trace, lanternes: &Lanternes) {
         }
         v -= 1.0;
     }
-    // la branche, sa part au-dessus du pilier
+    // l'alcôve de bibliothèque elfique à gauche et le lutrin au grimoire enluminé à droite
+    bibliotheque_elfique(t);
+    lutrin_elfique(t);
+    // l'arche d'argent ajourée et la branche, leur part jusqu'au bord du pilier
+    arche_elfique(0.0, LARGE, &mut |u, v, c| t.tache(u, v, 1.0, 1.0, c, false));
     branche(0.0, LARGE, &mut |u, v, c| t.tache(u, v, 1.0, 1.0, c, false));
     // les lanternes et leurs chaînes d'or, maillon après maillon ; le verre luit de sa couleur quand l'aide
     // est là, éteint il garde un reflet
@@ -1078,6 +1146,181 @@ fn decor(t: &mut Trace, lanternes: &Lanternes) {
                     _ => {}
                 }
             }
+        }
+    }
+}
+
+/// Alcôve de bibliothèque elfique (style Fondcombe) sur le mur gauche (`u = 10..66, v = 92..192`),
+/// divisée en deux lancettes d'argent coiffées d'un fleuron d'or, garnie de grimoires reliés, de
+/// rouleaux de parchemin et de la fiole étoilée d'Eärendil.
+fn bibliotheque_elfique(t: &mut Trace) {
+    let (u0, u1, v0, v1) = (10.0f32, 66.0f32, 92.0f32, 192.0f32);
+    let mid = 38.0f32;
+    let fond_niche = hex(0x11132c);
+    let bois_sombre = hex(0x28223e);
+    // niche jumelée en ogive elfique et encadrement de pierre de lune
+    let mut v = v0;
+    while v < v1 {
+        let mut u = u0;
+        while u < u1 {
+            // deux arcs brisés jumeaux : centres à 24 et 52
+            let (cx, r_arc) = if u < mid { (24.0, 13.0) } else { (52.0, 13.0) };
+            let dv = (112.0 - v).max(0.0);
+            let demi = (r_arc * (1.0 - (dv / 18.0).powi(2)).max(0.0).sqrt()).max(0.0);
+            let dans_baie = if v >= 112.0 {
+                (u - cx).abs() <= r_arc - 1.0
+            } else {
+                v >= 94.0 && (u - cx).abs() <= demi
+            };
+            let dans_cadre = if v >= 112.0 {
+                (u - cx).abs() <= r_arc + 1.5
+            } else {
+                let demi_ext = ((r_arc + 2.0) * (1.0 - (dv / 20.0).powi(2)).max(0.0).sqrt()).max(0.0);
+                v >= 92.0 && (u - cx).abs() <= demi_ext
+            };
+            if dans_baie {
+                let c = if ((v - 112.0) as i32).rem_euclid(16) == 0 { bois_sombre } else { fond_niche };
+                t.tache(u, v, 1.0, 1.0, c, false);
+            } else if dans_cadre {
+                let or_bord = (u - cx).abs() <= demi + 1.0 && v < 112.0 || ((u - cx).abs() - r_arc).abs() < 0.7 && v >= 112.0;
+                t.tache(u, v, 1.0, 1.0, if or_bord { OR_TERNI } else { fois(PIERRE, 0.85) }, false);
+            }
+            u += 1.0;
+        }
+        v += 1.0;
+    }
+    // colonnette centrale d'argent et fleuron d'or au sommet
+    t.tache(mid - 1.0, 102.0, 2.0, v1 - 102.0, fois(PIERRE, 0.95), false);
+    t.tache(mid - 2.0, 102.0, 4.0, 2.0, OR, false);
+    t.tache(mid - 1.0, 88.0, 2.0, 6.0, OR, false);
+    t.tache(mid - 3.0, 90.0, 6.0, 2.0, OR, false);
+    // appui mouluré et trois tablettes de pierre de lune
+    for &sv in &[128.0, 160.0, 190.0] {
+        t.tache(u0 + 1.0, sv, u1 - u0 - 2.0, 2.0, fois(PIERRE, 0.95), false);
+        t.tache(u0 + 2.0, sv + 2.0, u1 - u0 - 4.0, 1.0, OR_TERNI, false);
+    }
+    t.tache(u0 - 2.0, 192.0, u1 - u0 + 4.0, 2.0, fois(PIERRE, 1.08), false);
+
+    // reliures en pixel art 2×2 sur les trois tablettes
+    let livre = |t: &mut Trace, u: f32, bas: f32, w: f32, h: f32, cuir: Rgb, tranche: Rgb| {
+        t.tache(u, bas - h, w, h, cuir, false);
+        t.tache(u, bas - h + 2.0, w, 1.0, tranche, false);
+        t.tache(u, bas - 3.0, w, 1.0, tranche, false);
+        if w >= 4.0 {
+            t.tache(u + 1.0, bas - h * 0.55, w - 2.0, 2.0, tranche, false);
+        }
+    };
+    // Tablette haute (bas = 128)
+    livre(t, 14.0, 128.0, 4.0, 16.0, hex(0x2d4a8a), OR);
+    livre(t, 18.0, 128.0, 4.0, 18.0, hex(0x6e2438), OR);
+    livre(t, 22.0, 128.0, 3.0, 14.0, hex(0x245e4a), hex(0xcad4f2));
+    // rouleaux de parchemin empilés à droite de la colonnette
+    for &(ru, rv) in &[(42.0, 124.0), (47.0, 124.0), (44.0, 120.0)] {
+        t.tache(ru, rv, 4.0, 4.0, hex(0xe8dec4), false);
+        t.tache(ru + 1.0, rv + 1.0, 2.0, 2.0, hex(0xb89a68), false);
+    }
+    livre(t, 54.0, 128.0, 4.0, 17.0, hex(0x48306e), OR);
+    livre(t, 58.0, 128.0, 4.0, 15.0, hex(0x7a4e24), OR);
+
+    // Tablette médiane (bas = 160) : grands in-folio + la Fiole étoilée d'Eärendil
+    livre(t, 13.0, 160.0, 5.0, 22.0, hex(0x3a2860), OR);
+    livre(t, 18.0, 160.0, 4.0, 20.0, hex(0x1f525c), hex(0xdde6ff));
+    livre(t, 22.0, 160.0, 4.0, 24.0, hex(0x7a2230), OR);
+    livre(t, 26.0, 160.0, 4.0, 18.0, hex(0x30583c), OR);
+    livre(t, 41.0, 160.0, 5.0, 21.0, hex(0x263c74), OR);
+    // Fiole d'Eärendil (u = 50..56, v = 143..160) : cristal étoilé luminescent
+    t.tache(51.0, 158.0, 4.0, 2.0, OR, false);
+    t.tache(50.0, 149.0, 6.0, 9.0, hex(0x7ae8ff), true);
+    t.tache(51.0, 146.0, 4.0, 11.0, hex(0xd8fcff), true);
+    t.tache(52.0, 148.0, 2.0, 6.0, hex(0xffffff), true);
+    t.tache(52.0, 143.0, 2.0, 3.0, OR, false);
+
+    // Tablette basse (bas = 190) : grimoires anciens, tome incliné et élixirs
+    livre(t, 13.0, 190.0, 5.0, 23.0, hex(0x5c2434), OR);
+    livre(t, 18.0, 190.0, 5.0, 25.0, hex(0x223868), hex(0xdde6ff));
+    livre(t, 23.0, 190.0, 4.0, 21.0, hex(0x4e3a20), OR);
+    // petit flacon d'ambre
+    t.tache(29.0, 182.0, 4.0, 8.0, hex(0xf0a838), false);
+    t.tache(30.0, 179.0, 2.0, 3.0, OR, false);
+    // rangée droite
+    livre(t, 41.0, 190.0, 5.0, 24.0, hex(0x244e44), OR);
+    livre(t, 46.0, 190.0, 4.0, 22.0, hex(0x642c58), OR);
+    livre(t, 50.0, 190.0, 5.0, 25.0, hex(0x2c3468), OR);
+    livre(t, 55.0, 190.0, 4.0, 19.0, hex(0x7c3228), hex(0xdde6ff));
+}
+
+/// Lutrin d'argent ciselé portant un grimoire enluminé ouvert (`u = 434..468, v = 202..266`,
+/// strictement au-dessus de `SOL = 268.0`), sous la sphère armillaire dorée.
+fn lutrin_elfique(t: &mut Trace) {
+    let cx = 451.0;
+    // pied feuillagé et fût d'argent bagué d'or
+    t.tache(cx - 10.0, 263.0, 20.0, 3.0, fois(PIERRE, 0.9), false);
+    t.tache(cx - 7.0, 260.0, 14.0, 3.0, fois(PIERRE, 1.08), false);
+    t.tache(cx - 4.0, 258.0, 8.0, 2.0, OR, false);
+    t.tache(cx - 2.0, 224.0, 4.0, 34.0, fois(PIERRE, 1.02), false);
+    t.tache(cx - 3.0, 239.0, 6.0, 2.0, OR, false);
+    t.tache(cx - 5.0, 222.0, 10.0, 3.0, OR, false);
+    // pupitre en ailes de cygne d'argent
+    t.tache(434.0, 217.0, 34.0, 5.0, fois(PIERRE, 0.95), false);
+    t.tache(433.0, 215.0, 36.0, 2.0, OR, false);
+    // signet d'or pendant sous le pupitre
+    t.tache(cx - 1.0, 217.0, 2.0, 9.0, hex(0xc8343c), false);
+    t.tache(cx - 1.0, 225.0, 2.0, 2.0, OR, false);
+    // reliure ouverte et doubles pages de vélin enluminées
+    t.tache(435.0, 203.0, 32.0, 13.0, hex(0x4a1e30), false);
+    // page gauche et page droite légèrement bombées
+    t.tache(437.0, 202.0, 13.0, 13.0, hex(0xf4ead2), false);
+    t.tache(452.0, 202.0, 13.0, 13.0, hex(0xeadec2), false);
+    t.tache(450.0, 203.0, 2.0, 12.0, hex(0xb8a484), false);
+    // lettrine cramoisie et or + lignes de runes elfiques
+    t.tache(439.0, 204.0, 4.0, 4.0, hex(0xc8343c), false);
+    t.tache(440.0, 205.0, 2.0, 2.0, OR, false);
+    for &lv in &[205.0, 208.0, 211.0] {
+        let g0 = if lv < 209.0 { 444.0 } else { 439.0 };
+        t.tache(g0, lv, 449.0 - g0, 1.0, hex(0x5c4c42), false);
+        t.tache(454.0, lv, 9.0, 1.0, hex(0x5c4c42), false);
+    }
+    // diagramme stellaire doré sur la page de droite
+    t.tache(457.0, 206.0, 4.0, 4.0, OR, false);
+}
+
+/// Arche d'argent ajourée (style Fondcombe) qui s'élance du chapiteau du pilier vers le haut de la
+/// cour (`v = 0..52`) : écoinçon d'entrelacs d'argent et nervure festonnée sertie d'or.
+fn arche_elfique(de: f32, a: f32, poser: &mut dyn FnMut(f32, f32, Rgb)) {
+    let debut = LARGE - 2.0;
+    let fin = LARGE + 58.0;
+    let mut u = debut.max(de.floor());
+    while u < a.min(fin) {
+        let q = (u - debut) / (fin - debut);
+        let y_haut = (14.0 * (1.0 - q).powf(1.2)).floor();
+        let y_bas = (52.0 * (1.0 - q).powf(1.55)).floor();
+        if y_haut >= 0.0 {
+            poser(u, y_haut, PIERRE);
+            poser(u, y_haut + 1.0, OR_TERNI);
+        }
+        if y_bas > y_haut + 2.0 {
+            let feston = ((q * 4.0 * PI).sin().abs() * 2.0).floor();
+            let yb = y_bas + feston;
+            poser(u, yb - 1.0, PIERRE);
+            poser(u, yb, hex(0xc6d0ee));
+            if ((u - debut) as i32) % 14 == 6 {
+                poser(u, yb + 1.0, OR);
+            }
+        }
+        u += 1.0;
+    }
+    // deux rosaces d'entrelacs d'argent ajourées dans l'écoinçon de l'arche
+    for &(cu, cv, r) in &[(LARGE + 10.0, 22.0, 5.5), (LARGE + 24.0, 11.0, 4.0)] {
+        if cu + r < de || cu - r > a {
+            continue;
+        }
+        let mut ang = 0.0f32;
+        while ang < 2.0 * PI {
+            let (ru, rv) = ((cu + r * ang.cos()).round(), (cv + r * ang.sin()).round());
+            if ru >= de && ru < a && rv >= 0.0 {
+                poser(ru, rv, if (ang * 2.0).sin() > 0.45 { OR } else { PIERRE });
+            }
+            ang += 0.22;
         }
     }
 }
@@ -1141,110 +1384,165 @@ const LANTERNE: [&str; 27] = [
     "......G......",
 ];
 
-// Le chat de la machine : une panthère tachetée, or aux rosettes sombres, l'œil vert ; tournée
-// vers la gauche, trois pixels de dessin par pixel.
-const PANTHERE: [&str; 8] = [
-    ".k.k......................",
-    "kOkOk...................k.",
-    "kOOOOk.................kOk",
-    "kgOOOOkkkkkkkkkkkkkk...kOk",
-    "kOOwOOOOdOOOdOOOOdOOk.kOk.",
-    ".kpwOOdOOOOOOOdOOOOOOkOk..",
-    "..kwwOOOOdOOOdOOOOdOOOk...",
-    "...kwwwwwwwwwwwwwwwOOk....",
+// Le chat de la machine : une panthère tachetée en pixel art fin (2×2), or aux rosettes ouvertes,
+// l'œil émeraude ; tournée vers la gauche.
+const PANTHERE: [&str; 11] = [
+    "..kk..kk............................",
+    ".kOOkOOk..........................kk",
+    ".kOOOOOOk........................kOk",
+    "kOgOOOOOOkk.....................kOOk",
+    "kOOwOOOOOOOkkkkkkkkkkkkkkkk....kOOk.",
+    ".kpwwOOOOdodoOOOOdodoOOOOOOkk.kOOk..",
+    "..kwwwOOOdoodOOOOdoodOOOOOOOOkOOk...",
+    "...kwwwOOOOOOdodoOOOOdodoOOOOOOk....",
+    "....kwwwOOOOOdoodOOOOdoodOOOOOk.....",
+    ".....kwwwwwwwwwwwwwwwwwwwOOOOOk.....",
+    ".....kOOOOOk.........kOOOOOOOk......",
 ];
-const PATTES: [[&str; 3]; 4] = [
-    ["...kOk.kOk.....kOk.kOk....", "...kOk.kOk.....kOk.kOk....", "...kwk.kwk.....kwk.kwk...."],
-    ["...kOkkOk......kOkkOk.....", "..kOk..kOk....kOk..kOk....", ".kwk....kwk..kwk....kwk..."],
-    ["....kOkOk.......kOkOk.....", "....kOkOk.......kOkOk.....", "....kwkwk.......kwkwk....."],
-    ["....kOkkOk......kOkkOk....", "...kOk..kOk....kOk..kOk...", "..kwk....kwk..kwk....kwk.."],
+const PATTES: [[&str; 5]; 4] = [
+    [
+        ".....kOOkOOk.........kOOk.kOOk......",
+        ".....kOOkOOk.........kOOk.kOOk......",
+        ".....kOOkOOk.........kOOk.kOOk......",
+        ".....kwwkwwk.........kwwk.kwwk......",
+        ".....kkkkkkk.........kkkk.kkkk......",
+    ],
+    [
+        "....kOOk.kOOk.......kOOk..kOOk......",
+        "...kOOk...kOOk.....kOOk....kOOk.....",
+        "..kOOk.....kOOk...kOOk......kOOk....",
+        "..kwwk.....kwwk...kwwk......kwwk....",
+        "..kkkk.....kkkk...kkkk......kkkk....",
+    ],
+    [
+        "......kOOOOOk.........kOOOOOk.......",
+        "......kOOkOOk.........kOOkOOk.......",
+        "......kOOkOOk.........kOOkOOk.......",
+        "......kwwkwwk.........kwwkwwk.......",
+        "......kkkkkkk.........kkkkkkk.......",
+    ],
+    [
+        ".....kOOk..kOOk......kOOk.kOOk......",
+        "....kOOk....kOOk....kOOk...kOOk.....",
+        "...kOOk......kOOk..kOOk.....kOOk....",
+        "...kwwk......kwwk..kwwk.....kwwk....",
+        "...kkkk......kkkk..kkkk.....kkkk....",
+    ],
 ];
-const PANTHERE_DORT: [&str; 8] = [
-    "....k.k...........",
-    "...kOkOk..........",
-    "..kOOOOOkkkkkk....",
-    ".kOkkOOOdOOOdOk...",
-    "kOOOOOdOOOOOOOdk..",
-    "kdOOOOOOOdOOOOOOk.",
-    "kOwwwwwwwwwwwOOOOk",
-    ".kkkkkkkkkkkkkkkk.",
+const PANTHERE_DORT: [&str; 12] = [
+    "......kk...kk.............",
+    ".....kOOk.kOOk............",
+    "....kOOOOOOOOOkkkkkkkk....",
+    "...kOOkkOOOOdodoOOOOOOk...",
+    "..kOOOOOOdoodOOOdodoOOOk..",
+    ".kOOOOdodoOOOOOOdoodOOOOk.",
+    "kOOOOOdoodOOOdodoOOOOOOOOk",
+    "kOOwwwwwwwwwwdoodOOOOOOOOk",
+    "kOwwwwwwwwwwwwwwwwOOOOOOkk",
+    ".kkkkkkkkkkkkkkkkkkkkOOk..",
+    "....................kOOk..",
+    ".....................kk...",
 ];
 
-// Le dragon de Lara : sarcelle, ventre d'or pâle, ailes violettes, cornes d'ivoire ; roulé sur son or, ou en vol.
-const DRAGON_DORT: [&str; 13] = [
-    ".h......h.................",
-    ".hk....kh.....k...........",
-    "..kkTTkk.....kWk..k.......",
-    ".kTTTTTTk...kWwWkkWk......",
-    "kTTtTTtTTk.kWwwwWWwWk.....",
-    "kTkkTTkkTTkTWWwwwwwWk.....",
-    "kTTTTTTTTTTTTWWWWWWTTk....",
-    ".kTnbbnTTTTTTTTTTTTTTTk...",
-    ".kTbbbbTkTTTtTTTTDTTTTTk..",
-    "..kkkkkkbbbbbbbbbTDDTTTTk.",
-    "....kTTkkkkkkkkkkkkkkTTTTk",
-    "...kTTTTTTTTTTTTTTTTTTTTk.",
-    "....kkkkkkkkkkkkkkkkkkkk..",
+// Le dragon de Lara en pixel art fin (2×2) : écailles sarcelle, ventre d'or pâle, ailes violettes
+// à griffe d'ivoire, cornes recourbées ; roulé sur son trésor de pièces, calice et gemmes, ou en vol.
+const DRAGON_DORT: [&str; 18] = [
+    "..hh........hh........................",
+    "..hhk......khh........kk..............",
+    "...kkkTTTTkkk........kWWk...kk........",
+    "..kTTTTTTTTTTk......kWwwWkkkWWk.......",
+    ".kTTTttTTttTTTk....kWwwwwWWWwwWk......",
+    "kTTTtTTTTTTtTTTk..kWWwwwwwwWwwwWk.....",
+    "kTTkkkTTTTkkkTTkkhTWWWwwwwwwwwWWk.....",
+    "kTTTTTTTTTTTTTTTTTTWWWWWWWWWWWTTTk....",
+    "kTTnbbbbnTTTTTTTTTTTTTTTTTTTTDTTTk....",
+    ".kTTbbbbbbTkkTTTTtTTTTtTTTTTDDTTTTk...",
+    "..kTbbbbbbTTkTTTTTTTTTTTTTTDDDTTTTTk..",
+    "...kkkkkkkkkkbbbbbbbbbbbbbTDDDTTTTTTk.",
+    "......kTTTTkkkkkkkkkkkkkkkkkkTTTTTTTk.",
+    ".....kTTTTTTTTTTTtTTTTTTtTTTTTTTTTTTk.",
+    "....kTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTk..",
+    ".....kTTTTTTTTTTTTTTTTTTTTTTTTTTTTh...",
+    "......kkkkkkkkkkkkkkkkkkkkkkkkkkkk....",
+    "......................................",
 ];
-const DRAGON_EVEIL: [&str; 13] = [
-    ".h......h.................",
-    ".hk....kh.....k...........",
-    "..kkTTkk.....kWk..k.......",
-    ".kTTTTTTk...kWwWkkWk......",
-    "kTTtTTtTTk.kWwwwWWwWk.....",
-    "kTkeTTkeTTkTWWwwwwwWk.....",
-    "kTTTTTTTTTTTTWWWWWWTTk....",
-    ".kTnbbnTTTTTTTTTTTTTTTk...",
-    ".kTbbbbTkTTTtTTTTDTTTTTk..",
-    "..kkkkkkbbbbbbbbbTDDTTTTk.",
-    "....kTTkkkkkkkkkkkkkkTTTTk",
-    "...kTTTTTTTTTTTTTTTTTTTTk.",
-    "....kkkkkkkkkkkkkkkkkkkk..",
+const DRAGON_EVEIL: [&str; 18] = [
+    "..hh........hh........................",
+    "..hhk......khh........kk..............",
+    "...kkkTTTTkkk........kWWk...kk........",
+    "..kTTTTTTTTTTk......kWwwWkkkWWk.......",
+    ".kTTTttTTttTTTk....kWwwwwWWWwwWk......",
+    "kTTTkeTTTTkeTTTk..kWWwwwwwwWwwwWk.....",
+    "kTTkknTTTTkknTTkkhTWWWwwwwwwwwWWk.....",
+    "kTTTTTTTTTTTTTTTTTTWWWWWWWWWWWTTTk....",
+    "kTTnbbbbnTTTTTTTTTTTTTTTTTTTTDTTTk....",
+    ".kTTbbbbbbTkkTTTTtTTTTtTTTTTDDTTTTk...",
+    "..kTbbbbbbTTkTTTTTTTTTTTTTTDDDTTTTTk..",
+    "...kkkkkkkkkkbbbbbbbbbbbbbTDDDTTTTTTk.",
+    "......kTTTTkkkkkkkkkkkkkkkkkkTTTTTTTk.",
+    ".....kTTTTTTTTTTTtTTTTTTtTTTTTTTTTTTk.",
+    "....kTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTk..",
+    ".....kTTTTTTTTTTTTTTTTTTTTTTTTTTTTh...",
+    "......kkkkkkkkkkkkkkkkkkkkkkkkkkkk....",
+    "......................................",
 ];
-const TAS_OR: [&str; 5] = [
-    "......kkkOOYOOOOOkkk......",
-    "....kkOOOOoOOOYOOoOOkk....",
-    "..kkOOoOOYOOOOoOOOOOOOkk..",
-    ".kOOYOOOoOOOOYOOoOOOYOOOk.",
-    "kkkkkkkkkkkkkkkkkkkkkkkkkk",
+const TAS_OR: [&str; 8] = [
+    "............kkkkOOYOOOkkkk............",
+    ".........kkkOOoOOCCCOOYOOOkkk.........",
+    ".......kkOOYOOorOOCCOOgOOoOOOkk.......",
+    ".....kkOOoOOOOrrOOCCOOggOOOYOOOkk.....",
+    "...kkOOYOOosOOOYOOCCCCOOoOOsOOoOOkk...",
+    "..kOOOOoOOssOOOOoOOOOOYOOOOssOOOYOOk..",
+    ".kOOYOOOOOOoOOYOOOOoOOOOYOOOoOOOOOOOk.",
+    "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
 ];
-const DRAGON_VOL_HAUT: [&str; 17] = [
-    "kk....................kk",
-    "kWk......h....h......kWk",
-    "kwWk.....hk..kh.....kWwk",
-    ".kwWk...kTTTTTTk...kWwk.",
-    "..kwWk.kTtTTTTtTk.kWwk..",
-    "...kwWkTkeTTTTekTkWwk...",
-    "....kwWkTTnbbnTTkWwk....",
-    ".....kWTkTbbbbTkTWk.....",
-    "......kTTTTTTTTTTk......",
-    "......kTTbbbbbbTTk......",
-    ".......kTbbbbbbTk.......",
-    "........kTTkkTTk........",
-    ".......kTk....kTk.......",
-    "........k..kTTk.k.......",
-    "..........kTk...........",
-    "...........kTTk.........",
-    "............kk..........",
+const DRAGON_VOL_HAUT: [&str; 22] = [
+    "kkk............................kkk",
+    "kWWk........hh......hh........kWWk",
+    "kwwWk.......hhk....khh.......kWwwk",
+    ".kwwWk.....kTTTTTTTTTTk.....kWwwk.",
+    "..kwwWk...kTTttTTTTttTTk...kWwwk..",
+    "...kwwWk.kTTkeTTTTTTekTTk.kWwwk...",
+    "....kwwWkTTTkknTTTTnkkTTTkWwwk....",
+    ".....kwwWkTTTTnbbbbnTTTTkWwwk.....",
+    "......kWWTkTTTbbbbbbTTTkTWWk......",
+    ".......kWTkTTTbbbbbbTTTkTWk.......",
+    "........kTTTTTTTTTTTTTTTTk........",
+    "........kTTTTbbbbbbbbTTTTk........",
+    ".........kTTTbbbbbbbbTTTk.........",
+    "..........kTTbbbbbbbbTTk..........",
+    "...........kTTTTkkTTTTk...........",
+    "..........kTTk......kTTk..........",
+    "...........kk...kTTk..kk..........",
+    "...............kTTk...............",
+    "..............kTTk................",
+    "...............kTTTk..............",
+    "................kTTh..............",
+    ".................kk...............",
 ];
-const DRAGON_VOL_BAS: [&str; 17] = [
-    "........................",
-    ".........h....h.........",
-    ".........hk..kh.........",
-    "........kTTTTTTk........",
-    ".......kTtTTTTtTk.......",
-    ".......TkeTTTTekT.......",
-    "......kkTTnbbnTTkk......",
-    "...kkkWTkTbbbbTkTWkkk...",
-    "..kWwwwWTTTTTTTTWwwwWk..",
-    ".kWwwwWkTTbbbbTTkWwwwWk.",
-    "kWwwWk.kTbbbbbbTk.kWwwWk",
-    "kwwk....kTTkkTTk....kwwk",
-    "kwk....kTk....kTk....kwk",
-    "kk......k..kTTk.k.....kk",
-    "..........kTk...........",
-    "...........kTTk.........",
-    "............kk..........",
+const DRAGON_VOL_BAS: [&str; 22] = [
+    "..................................",
+    "............hh......hh............",
+    "............hhk....khh............",
+    "...........kTTTTTTTTTTk...........",
+    "..........kTTttTTTTttTTk..........",
+    ".........kTTkeTTTTTTekTTk.........",
+    ".........TTTkknTTTTnkkTTT.........",
+    "........kkTTTTnbbbbnTTTTkk........",
+    "....kkkkWWTkTTbbbbbbTTkTWWkkkk....",
+    "..kkWWwwwwWTTTTTTTTTTTTWwwwwWWkk..",
+    ".kWWwwwwwWkTTTTbbbbTTTTkWwwwwwWWk.",
+    "kWWwwwwWWk.kTTbbbbbbTTk.kWWwwwwWWk",
+    "kWwwwwWk....kTTbbbbTTk....kWwwwwWk",
+    "kwwwwk......kTTTkkTTTk......kwwwwk",
+    "kwwk.......kTTk....kTTk.......kwwk",
+    "kkk.........kk..kTTk.kk........kkk",
+    "...............kTTk...............",
+    "..............kTTk................",
+    "...............kTTTk..............",
+    "................kTTh..............",
+    ".................kk...............",
+    "..................................",
 ];
 
 fn couleur_dragon(c: u8) -> Option<Rgb> {
@@ -1262,19 +1560,23 @@ fn couleur_dragon(c: u8) -> Option<Rgb> {
         b'O' => hex(0xe8c878),
         b'o' => hex(0xb08a3e),
         b'Y' => hex(0xfff3b0),
+        b'C' => hex(0xffe07d),
+        b'r' => hex(0xe83b46),
+        b'g' => hex(0x3ad67a),
+        b's' => hex(0x4aa8ff),
         _ => return None,
     })
 }
 
 /// Où le dragon dort : le coin gauche du belvédère, devant le lambris, loin d'elle et de la vasque.
 const DRAGON_U: f32 = 4.0;
-/// Un pixel de dragon fait PAS_DRAGON × PAS_DRAGON pixels de dessin.
-const PAS_DRAGON: f32 = 3.0;
+/// Un pixel de dragon fait PAS_DRAGON × PAS_DRAGON pixels de dessin (`2×2`).
+const PAS_DRAGON: f32 = 2.0;
 
 /// Le haut du tas d'or, et celui du dragon posé dessus, en pixels de dessin.
 fn dragon_haut() -> (f32, f32) {
     let tas = SOL + 30.0 - TAS_OR.len() as f32 * PAS_DRAGON;
-    (tas, tas - (DRAGON_DORT.len() as f32 - 2.0) * PAS_DRAGON)
+    (tas, tas - (DRAGON_DORT.len() as f32 - 3.0) * PAS_DRAGON)
 }
 
 /// Le tas d'or, et le dragon qui y dort ou y veille, derrière elle.
@@ -1286,23 +1588,26 @@ fn dragon_au_nid(p: &mut Pinceau, d: &Dragon, t: f32) {
     let (tas, haut) = dragon_haut();
     let k = p.lumiere(DRAGON_U + 26.0, tas);
     p.dessin(DRAGON_U, tas, &TAS_OR, couleur_dragon, PAS_DRAGON, false, k);
-    // un éclat sur l'or, de temps en temps
+    // un éclat sur l'or et les gemmes, de temps en temps
     let n = (t / 7.0) as i32;
     if (t as i32) % 7 < 2 {
-        let u = DRAGON_U + (4.0 + h2(n, 3) * 64.0).floor();
-        p.luire(u, tas + 2.0 + (h2(n, 5) * 8.0).floor(), hex(0xfff3b0), 0.8);
+        let u = DRAGON_U + (6.0 + h2(n, 3) * 62.0).floor();
+        p.eclat(u, tas + 2.0 + (h2(n, 5) * 10.0).floor(), hex(0xfff3b0), 0.85, 1.0);
     }
     match geste {
         Geste::Dort => {
             p.dessin(DRAGON_U, haut, &DRAGON_DORT, couleur_dragon, PAS_DRAGON, false, k);
-            // un petit z qui monte, de temps en temps
+            // un petit z net en 2×2 qui monte, de temps en temps
             let age = t as i32 % 36;
             if age < 14 {
                 let f = age as f32 / 14.0;
-                for (j, r) in ["zzz", ".z.", "zzz"].iter().enumerate() {
+                for (j, r) in ["zzzz", "..z.", ".z..", "zzzz"].iter().enumerate() {
                     for (i, c) in r.bytes().enumerate() {
                         if c == b'z' {
-                            p.poser(DRAGON_U + 26.0 + 6.0 * f + i as f32, haut - 4.0 - 10.0 * f + j as f32, hex(0xdfe8ff), 1.0 - f);
+                            let (zu, zv) = ((DRAGON_U + 24.0 + 6.0 * f).floor() + 2.0 * i as f32, (haut - 6.0 - 10.0 * f).floor() + 2.0 * j as f32);
+                            for (du, dv) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+                                p.poser(zu + du, zv + dv, hex(0xdfe8ff), 1.0 - f);
+                            }
                         }
                     }
                 }
@@ -1323,7 +1628,7 @@ fn dragon_en_vol(p: &mut Pinceau, d: &Dragon, t: f32) {
     let (_, haut) = dragon_haut();
     // où il en est entre son or (0) et le haut (1) : il part en prenant de la vitesse, il se pose en freinant
     let g = if part { f * f } else { (1.0 - f) * (1.0 - f) };
-    let (u0, v0) = (DRAGON_U + 1.0, haut - 6.0);
+    let (u0, v0) = (DRAGON_U + 2.0, haut - 6.0);
     let (u1, v1) = (DRAGON_U + 90.0, -70.0);
     let u = u0 + (u1 - u0) * g + (g * PI * 2.0).sin() * 6.0;
     let v = v0 + (v1 - v0) * g;
@@ -1345,29 +1650,37 @@ fn couleur_panthere(c: u8) -> Option<Rgb> {
     })
 }
 
-// La chouette messagère, d'argent aux yeux d'or : ailes basses, puis hautes.
-const CHOUETTE: [[&str; 9]; 2] = [
+// La chouette messagère en pixel art fin (2×2), d'argent et de neige aux grands yeux d'or : ailes basses, puis hautes.
+const CHOUETTE: [[&str; 13]; 2] = [
     [
-        "...k.....k...",
-        "..kWk...kWk..",
-        ".kWyykWkyyWk.",
-        ".kWykkWkkyWk.",
-        "kWWWWWbWWWWWk",
-        "kSWWWWWWWWWSk",
-        "kSSWWwWwWWSSk",
-        ".kSSWWWWWSSk.",
-        "...kk...kk...",
+        "....kk.......kk.....",
+        "...kWWk.....kWWk....",
+        "..kWWWWkkkkkWWWWk...",
+        "..kWyyyWkWkyyyWWk...",
+        "..kWyykkWkkyykWWk...",
+        ".kWWWWWWbbbWWWWWWk..",
+        "kSWWWWWWWbWWWWWWWSk.",
+        "kSSWWWWwWwWwWWWWSSk.",
+        "kSSSWWWWWWWWWWWSSSk.",
+        ".kSSSWWwWwWwWWSSSk..",
+        "..kSSWWWWWWWWWSSk...",
+        "....kbbk...kbbk.....",
+        "....kkk.....kkk.....",
     ],
     [
-        "Sk.k.....k.kS",
-        "SSkWk...kWkSS",
-        ".kWyykWkyyWk.",
-        ".kWykkWkkyWk.",
-        "..kWWWbWWWk..",
-        "..kWWWWWWWk..",
-        "..kWwWwWwWk..",
-        "...kWWWWWk...",
-        "...kk...kk...",
+        "SSk.kk.......kk.kSS.",
+        "SSSkWWk.....kWWkSSS.",
+        ".SSkWWWWkkkWWWWkSS..",
+        "..kWyyyWkWkyyyWWk...",
+        "..kWyykkWkkyykWWk...",
+        "...kWWWWbbbWWWWk....",
+        "...kWWWWWbWWWWWk....",
+        "...kWWWwWwWwWWWk....",
+        "....kWWWWWWWWWk.....",
+        "....kWWwWwWwWWk.....",
+        ".....kWWWWWWWk......",
+        ".....kbbk.kbbk......",
+        ".....kkk...kkk......",
     ],
 ];
 
@@ -1383,8 +1696,31 @@ fn couleur_chouette(c: u8) -> Option<Rgb> {
     })
 }
 
-// Le papillon de lune qui porte un envoi : ailes hautes, puis basses.
-const PAPILLON: [[&str; 5]; 2] = [["S.......S", ".SS.c.SS.", "..SScSS..", "...ScS...", "....c...."], [".........", "SSS.c.SSS", ".SSScSSS.", "...ScS...", "....c...."]];
+// Le papillon de lune en pixel art fin (2×2) qui porte un envoi : ailes hautes, puis basses.
+const PAPILLON: [[&str; 9]; 2] = [
+    [
+        "SS.........SS",
+        "SsS.......SsS",
+        ".SSs..c..sSS.",
+        "..SSscscsSS..",
+        "...SScccSS...",
+        "....sScSs....",
+        "...sS.c.Ss...",
+        "..s...c...s..",
+        ".............",
+    ],
+    [
+        ".............",
+        "SSSS..c..SSSS",
+        ".SSsscscssSS.",
+        "..SSscccSSS..",
+        "...sSScSSs...",
+        "....sScSs....",
+        "...s..c..s...",
+        "......c......",
+        ".............",
+    ],
+];
 
 /// Peint par-dessus le fond, en notant chaque pixel touché.
 struct Pinceau<'a> {
@@ -1795,32 +2131,8 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
         }
     }
 
-    // la pluie sur l'oculus sous l'orage, et l'éclair ; la neige l'hiver
-    if ciel.orage {
-        for i in 0..50 {
-            let u = OCX - RIN + 2.0 * RIN * h2(i, 101);
-            let y = (OCY - RIN) + ((t * 9.0 + 400.0 * h2(i, 103)) % (2.0 * RIN));
-            for k in 0..5 {
-                let (uu, yy) = ((u - k as f32 * 0.5).floor(), y - k as f32);
-                if dans_vitre(uu, yy) {
-                    p.poser(uu, yy, hex(0xb8d0f0), 0.45 - 0.07 * k as f32);
-                }
-            }
-        }
-        if w.clock % 23 < 2 {
-            let mut y = OCY - RIN;
-            while y < OCY + RIN {
-                let mut u = OCX - RIN;
-                while u < OCX + RIN {
-                    if dans_vitre(u, y) {
-                        p.luire(u, y, hex(0xd0d8ff), 0.45);
-                    }
-                    u += 1.0;
-                }
-                y += 1.0;
-            }
-        }
-    } else if w.saison() == Saison::Hiver {
+    // la neige l'hiver sur l'oculus (ni pluie ni orage)
+    if w.saison() == Saison::Hiver {
         for i in 0..30 {
             let u = OCX - RIN + 2.0 * RIN * h2(i, 107) + 4.0 * (t * 0.1 + i as f32).sin();
             let y = (OCY - RIN) + ((t * 1.2 + 400.0 * h2(i, 109)) % (2.0 * RIN));
@@ -1936,24 +2248,50 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
         p.lueur(BX, BORD, 44.0, hex(0x8040c0), 0.2);
     }
 
+    // les quatre fins cierges flottants d'ivoire et d'argent sous la voûte
+    for (i, &(cu, cv)) in CHANDELLES_BELVEDERE.iter().enumerate() {
+        let bob = ((t * 0.09 + i as f32 * 1.7).sin() * 2.0).round();
+        let y = cv + bob;
+        let vacille = 0.5 + 0.5 * (t * 0.65 + i as f32 * 2.3).sin();
+        p.lueur(cu + 1.0, y - 2.0, 8.0, hex(0xffdc92), if s.sommeil { 0.09 } else { 0.16 + 0.08 * vacille });
+        // corps de cire en pixel art 2×2 + coupelle d'or + flamme
+        for dv in 0..8 {
+            let cire = if dv == 2 { OR } else if dv < 2 { hex(0xf8f4ea) } else { hex(0xd8deee) };
+            p.poser(cu, y + dv as f32, cire, 1.0);
+            p.poser(cu + 1.0, y + dv as f32, fois(cire, 0.88), 1.0);
+        }
+        let fh = if vacille > 0.65 { 3 } else { 2 };
+        for dv in 1..=fh {
+            let fc = if dv == 1 { hex(0xfffef4) } else { hex(0xffcf68) };
+            p.poser(cu, y - dv as f32, fc, 1.0);
+            p.poser(cu + 1.0, y - dv as f32, fc, 0.92);
+        }
+    }
+
+    // sphère armillaire dorée en lévitation au-dessus du lutrin, et reflet sur la fiole et le grimoire
+    sphere_armillaire(p, t, s.sommeil);
+
     // le dragon de Lara, sur son or
     if let Some(d) = v.dragon {
         dragon_au_nid(p, d, t);
     }
 
-    // le chat de la machine
+    // le chat de la machine (panthère en pixel art 2×2)
     if let Some(chat) = &w.cat {
         if chat.mode == ModeChat::Roof {
-            let (u, y) = CHAT_DORT;
-            let k = p.lumiere(u + 27.0, y + 12.0);
-            p.dessin(u, y, &PANTHERE_DORT, couleur_panthere, 3.0, false, k);
-            // la queue qui bat, de temps en temps ; un petit z
+            let (u, y) = (CHAT_DORT.0, CHAT_DORT.1 + 4.0);
+            let k = p.lumiere(u + 26.0, y + 10.0);
+            p.dessin(u, y, &PANTHERE_DORT, couleur_panthere, 2.0, false, k);
+            // un petit z net en 2×2 quand elle sommeille sur la cimaise
             if chat.age % 40 < 16 {
                 let f = (chat.age % 40) as f32 / 16.0;
-                for (j, r) in ["zzz", ".z.", "zzz"].iter().enumerate() {
+                for (j, r) in ["zzzz", "..z.", ".z..", "zzzz"].iter().enumerate() {
                     for (i, c) in r.bytes().enumerate() {
                         if c == b'z' {
-                            p.poser(u + 8.0 + 6.0 * f + i as f32, y - 6.0 - 10.0 * f + j as f32, hex(0xdfe8ff), 1.0 - f);
+                            let (zu, zv) = ((u + 8.0 + 6.0 * f).floor() + 2.0 * i as f32, (y - 8.0 - 10.0 * f).floor() + 2.0 * j as f32);
+                            for (du, dv) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+                                p.poser(zu + du, zv + dv, hex(0xdfe8ff), 1.0 - f);
+                            }
                         }
                     }
                 }
@@ -1965,20 +2303,70 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
             };
             let droite = chat.dir.unwrap_or(if chat.mode == ModeChat::Flee { 1 } else { -1 }) > 0;
             let u = chat.x as f32 * DW;
-            let y = SOL + 30.0 - 33.0;
-            let k = p.lumiere(u + 39.0, y + 15.0);
+            let y = SOL + 30.0 - 32.0;
+            let k = p.lumiere(u + 36.0, y + 15.0);
             let mut corps: Vec<&str> = PANTHERE.to_vec();
             corps.extend_from_slice(pattes);
-            p.dessin(u, y, &corps, couleur_panthere, 3.0, droite, k);
+            p.dessin(u, y, &corps, couleur_panthere, 2.0, droite, k);
         }
     }
 
-    // la part de la branche sur la cour : repeinte à chaque image par-dessus ce que la cour y a
-    // repeint, pleine et toujours la même, sans rien demander (les cellules dessous savent
-    // quand elles changent)
+    // la part de l'arche d'argent ajourée et de la branche sur la cour : repeinte à chaque image
+    // par-dessus ce que la cour y a repeint, teintée par l'heure du ciel
+    let k_cour = 0.92 - 0.38 * ciel.nuit;
     p.muet = true;
-    branche(LARGE, LARGE + 210.0, &mut |u, v, c| p.poser(u, v, c, 1.0));
+    arche_elfique(LARGE, LARGE + 60.0, &mut |u, v, c| p.poser(u, v, fois(c, k_cour), 1.0));
+    branche(LARGE, LARGE + 210.0, &mut |u, v, c| p.poser(u, v, fois(c, 0.96 - 0.22 * ciel.nuit), 1.0));
     p.muet = false;
+}
+
+/// Sphère armillaire céleste d'or et d'argent qui tourne lentement en lévitation au-dessus du
+/// grimoire enluminé (`u = 451, v = 178`), accompagnée d'un scintillement discret de la fiole d'Eärendil.
+fn sphere_armillaire(p: &mut Pinceau, t: f32, sommeil: bool) {
+    let (cx, cy, r) = (451.0, 178.0 + ((t * 0.06).sin() * 1.5).round(), 11.5);
+    let vif = if sommeil { 0.55 } else { 1.0 };
+    // lueur d'astre au cœur de la sphère
+    p.lueur(cx, cy, 9.0, OR, 0.22 * vif);
+    // berceau méridien d'argent fixe et fleuron inférieur
+    let mut a = 0.0f32;
+    while a < 2.0 * PI {
+        let (u, v) = ((cx + r * a.cos()).round(), (cy + r * a.sin()).round());
+        p.poser(u, v, if a.sin() < 0.0 { hex(0xdde6ff) } else { PIERRE }, 0.95);
+        a += 0.16;
+    }
+    p.poser(cx, cy + r + 1.0, OR, 1.0);
+    p.poser(cx, cy + r + 2.0, OR_TERNI, 1.0);
+    p.poser(cx, cy - r - 1.0, OR, 1.0);
+
+    // deux anneaux célestes d'or en rotation lente, inclinés l'un par rapport à l'autre
+    for &(vitesse, incl, rayon) in &[(0.045f32, 0.48f32, 10.0f32), (-0.032, -0.52, 8.2)] {
+        let ph = t * vitesse;
+        let rx = (rayon * ph.cos().abs()).max(1.8);
+        let mut ang = 0.0f32;
+        while ang < 2.0 * PI {
+            let x0 = rx * ang.cos();
+            let y0 = rayon * ang.sin();
+            let u = (cx + x0 * incl.cos() - y0 * incl.sin()).round();
+            let v = (cy + x0 * incl.sin() + y0 * incl.cos()).round();
+            let devant = (ang + ph).sin() >= 0.0;
+            let col = if devant { hex(0xfff0b4) } else { OR_TERNI };
+            p.poser(u, v, col, if devant { 0.95 } else { 0.75 });
+            ang += 0.2;
+        }
+    }
+    // cœur stellaire central
+    p.eclat(cx, cy, hex(0xfff9e2), 0.85 * vif, 1.0);
+
+    // reflet de runes dorées qui respire sur les pages du grimoire ouvert
+    let onde = 0.5 + 0.5 * (t * 0.14).sin();
+    p.luire(440.0 + ((t * 0.2).sin() * 2.0).round(), 206.0, OR, 0.28 * onde * vif);
+    p.luire(458.0, 207.0, hex(0xffeaa0), 0.32 * (1.0 - onde) * vif);
+
+    // doux éclat d'étoile sur la fiole d'Eärendil dans la bibliothèque
+    let sc = 0.5 + 0.5 * (t * 0.18 + 1.1).sin();
+    if sc > 0.55 {
+        p.eclat(53.0, 149.0, hex(0xe8fcff), (sc - 0.55) * 1.4 * vif, 1.0);
+    }
 }
 
 /// Ce qui passe devant elle : la vision qui monte du bassin, les éclats autour d'elle, les
@@ -2211,20 +2599,31 @@ fn anime_activite(p: &mut Pinceau, v: &Vue, en_vision: bool) {
                     b's' => Some(hex(0x6fd8f0)),
                     b'c' => Some(hex(0xffffff)),
                     _ => None,
-                }, 3.0, false, [1.0; 3]);
+                }, 2.0, false, [1.0; 3]);
             }
         }
         _ => {}
     }
 
-    // la chouette messagère, de la cour vers l'autre bout de la pièce, la nouvelle dans ses serres
+    // la chouette messagère en pixel art 2×2, de la cour vers l'autre bout de la pièce, le parchemin scellé dans ses serres
     if let Some(m) = &w.messenger {
         let f = m.age as f32 / 50.0;
         let (u, y) = ((LARGE + 180.0 - (LARGE + 260.0) * f).floor(), (30.0 + 10.0 * (m.age as f32 / 3.0).sin()).floor());
-        p.dessin(u, y, &CHOUETTE[(m.age / 2 % 2) as usize], couleur_chouette, 3.0, false, [1.0; 3]);
+        p.dessin(u, y, &CHOUETTE[(m.age / 2 % 2) as usize], couleur_chouette, 2.0, false, [1.0; 3]);
         let sceau = if m.kind == Nouvelle::Waiting { hex(0xd04030) } else { hex(0xf2c14e) };
-        for (du, dv, c) in [(15.0, 27.0, hex(0xf2e8d0)), (18.0, 27.0, hex(0xf2e8d0)), (21.0, 27.0, sceau), (15.0, 30.0, hex(0xd8ccb0)), (18.0, 30.0, hex(0xd8ccb0)), (21.0, 30.0, hex(0xd8ccb0))] {
-            for (a, b) in [(0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (0.0, 1.0), (1.0, 1.0), (2.0, 1.0), (0.0, 2.0), (1.0, 2.0), (2.0, 2.0)] {
+        for (du, dv, c) in [
+            (12.0, 24.0, hex(0xf2e8d0)),
+            (14.0, 24.0, hex(0xf2e8d0)),
+            (16.0, 24.0, hex(0xf2e8d0)),
+            (18.0, 24.0, sceau),
+            (20.0, 24.0, hex(0xf2e8d0)),
+            (12.0, 26.0, hex(0xd8ccb0)),
+            (14.0, 26.0, hex(0xd8ccb0)),
+            (16.0, 26.0, sceau),
+            (18.0, 26.0, sceau),
+            (20.0, 26.0, hex(0xd8ccb0)),
+        ] {
+            for (a, b) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
                 p.poser(u + du + a, y + dv + b, c, 1.0);
             }
         }

@@ -583,7 +583,7 @@ function worldNow(): World {
     hour: now.getHours() + now.getMinutes() / 60,
     month: now.getMonth() + 1,
     day: now.getDate(),
-    weather: anim.failStreak >= 2 ? 'storm' : anim.clock < anim.rainbowUntil ? 'rainbow' : undefined,
+    weather: anim.clock < anim.rainbowUntil ? 'rainbow' : undefined,
     hammer: anim.hammer,
     effort: anim.effort,
     usd: anim.usd,
