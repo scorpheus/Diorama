@@ -208,11 +208,12 @@ pub fn planche(sortie: &str, extra: i32) -> std::io::Result<()> {
 /// et, par moment, ses images d'affilée `film-<n>-<k>.png`, pour en faire une animation.
 ///
 ///   rendu.exe --galadriel <dossier> [--large <colonnes>]
-pub fn galadriel(dossier: &str, extra: i32) -> std::io::Result<()> {
+/// `perso` : `None` pour Scorpheus ; `filtre` : ne peindre que les scènes dont le nom en contient un (vide : toutes).
+pub fn galadriel(dossier: &str, extra: i32, perso: Option<Perso>, filtre: &[String]) -> std::io::Result<()> {
     use super::{Etat, SceneForge};
     use crate::scene::{Image, Scene};
     let gala = |f: &dyn Fn(&mut Monde)| {
-        let mut w = Monde { perso: Some(Perso::Galadriel), hour: 23.0, month: 10, day: 28, clock: 400, ..Monde::default() };
+        let mut w = Monde { perso, hour: 23.0, month: 10, day: 28, clock: 400, ..Monde::default() };
         w.rhum = Some(PhaseRhum::Course);
         w.rhum_progress = Some(0.3);
         f(&mut w);
@@ -256,6 +257,9 @@ pub fn galadriel(dossier: &str, extra: i32) -> std::io::Result<()> {
     let pw = fw + 2 * ECART;
     let images = 16;
     for (n, (nom, a, t, monde)) in scenes.iter().enumerate() {
+        if !filtre.is_empty() && !filtre.iter().any(|f| nom.contains(f.as_str())) {
+            continue;
+        }
         let mut sf = SceneForge::new();
         sf.recevoir(Etat { recadrage: Recadrage::Full, extra, lit: true, activite: *a, tick: *t, monde: monde.clone() });
         let mut px = vec![0u32; (fw * fh) as usize];

@@ -238,6 +238,11 @@ pub fn peindre(cat: &Chat, e: Option<&Eclairage>, pixels: &mut [u32], w: usize, 
             // les rosettes suivent le corps (en coordonnées de dessin, tournées avec lui)
             let sx = if droite { nx as i32 - 1 - ax } else { ax };
             let (dessus, dessous) = (a(ax, ay - 1) == VIDE, a(ax, ay + 1) == VIDE);
+            // au grain fin, le modelé tient sur deux pixels d'art : le dos éclairé, le flanc ombré (sur un seul, elle
+            // paraissait découpée à plat)
+            let epais = if GRAIN <= 2 { 2 } else { 1 };
+            let dessus_l = (1..=epais).any(|k| a(ax, ay - k) == VIDE);
+            let dessous_l = (1..=epais).any(|k| a(ax, ay + k) == VIDE);
             let ventre = !dort && v > 4.3 && f == POIL && {
                 let u = (sx as f32 + 0.5) * g / cwf;
                 u > 3.0 && u < 11.5
@@ -262,6 +267,8 @@ pub fn peindre(cat: &Chat, e: Option<&Eclairage>, pixels: &mut [u32], w: usize, 
                 }
                 _ if dessus => clair,
                 _ if dessous => ombre,
+                _ if dessus_l => hex(0xdcb35a),
+                _ if dessous_l => hex(0xb08232),
                 _ => or,
             };
             if f != CREME && !ventre && !dessus {

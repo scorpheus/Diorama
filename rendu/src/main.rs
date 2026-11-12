@@ -400,7 +400,9 @@ fn main() {
     if let Some(i) = args.iter().position(|a| a == "--galadriel") {
         let dossier = args.get(i + 1).map_or(".", |s| s.as_str());
         let large = apres("--large").flatten().unwrap_or(0) as i32;
-        if let Err(e) = forge::planche::galadriel(dossier, large) {
+        let perso = if args.iter().any(|a| a == "--scorpheus") { None } else { Some(forge::monde::Perso::Galadriel) };
+        let filtre: Vec<String> = args.iter().position(|a| a == "--scenes").and_then(|i| args.get(i + 1)).map(|s| s.split(',').map(String::from).collect()).unwrap_or_default();
+        if let Err(e) = forge::planche::galadriel(dossier, large, perso, &filtre) {
             eprintln!("galadriel : {e}");
         }
         return;

@@ -16,7 +16,7 @@ use super::poses::{Caisse, Pose};
 /// Positions (en coordonnées de forge `0..54 × 0..32`) des quatre chandelles flottantes façon Poudlard.
 /// Toutes restent strictement à gauche de `x = 45` (`39.0 + 5.2 = 44.2 < 45.0`) pour préserver l'ombre
 /// de la voûte haute droite loin du foyer.
-pub const CHANDELLES_FORGE: [(f32, f32); 4] = [(11.5, 5.8), (26.8, 4.2), (32.6, 2.8), (39.0, 3.6)];
+pub const CHANDELLES_FORGE: [(f32, f32); 4] = [(10.4, 5.6), (27.0, 3.0), (32.6, 2.8), (39.0, 3.6)];
 
 /// Carte d'éclairage continu (`YARD × SH`) destinée à l'intérieur peint au pixel fin (`interieur.rs`).
 #[derive(Clone)]
@@ -328,8 +328,9 @@ impl<'a> LumiereForge<'a> {
                     up: 1.15,
                     down: 1.0,
                     rgb: [1.0, 0.78, 0.42],
-                    power: 0.22 * (0.9 + 0.1 * drift(tick, 4, 21 + idx as i64 * 5)),
-                    halo: (2.6, 0.22),
+                    // assez pour qu'elles fassent une flaque de lumière la nuit (à 0,22, on ne voyait que des traits)
+                    power: 0.32 * (0.9 + 0.1 * drift(tick, 4, 21 + idx as i64 * 5)),
+                    halo: (3.6, 0.3),
                 });
             }
         }

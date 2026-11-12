@@ -110,12 +110,14 @@ struct Ciel {
 
 fn ciel(heure: f32, orage: bool, phase: f32) -> Ciel {
     let h = heure.rem_euclid(24.0);
+    // calé sur le ciel de la cour (`Monde::nuit` : la nuit de 21 h à 6 h, le crépuscule de 18 h à 21 h), pour que
+    // l'oculus ne montre pas la lune quand la cour flambe encore du couchant
     let nuit = if h < 5.0 || h >= 21.5 {
         1.0
-    } else if h < 7.0 {
-        1.0 - (h - 5.0) / 2.0
-    } else if h >= 18.5 {
-        (h - 18.5) / 3.0
+    } else if h < 6.5 {
+        1.0 - (h - 5.0) / 1.5
+    } else if h >= 20.0 {
+        (h - 20.0) / 1.5
     } else {
         0.0
     };
@@ -139,7 +141,7 @@ fn ciel(heure: f32, orage: bool, phase: f32) -> Ciel {
     }
     // le soleil court de gauche à droite au-dessus de sa capuche, du lever (7 h du ciel) au coucher
     // (19 h 30) ; la lune, de droite à gauche, du coucher au lever
-    let (p, lune) = if (7.0..19.5).contains(&h) { ((h - 7.0) / 12.5, false) } else { (((h - 19.5).rem_euclid(24.0) / 11.5).clamp(0.0, 1.0), true) };
+    let (p, lune) = if (6.5..20.5).contains(&h) { ((h - 6.5) / 14.0, false) } else { (((h - 20.5).rem_euclid(24.0) / 10.0).clamp(0.0, 1.0), true) };
     let astre = if lune { (OCX + 64.0 - 128.0 * p, 64.0 - 26.0 * (PI * p).sin()) } else { (OCX - 64.0 + 128.0 * p, 62.0 - 24.0 * (PI * p).sin()) };
     let lumiere_astre = if lune { hex(0xa8bcff) } else { mix(hex(0xfff0d0), hex(0xffa860), crepuscule) };
     // le rai : plein au midi, doré et bas vers le coucher ; la lune le donne à sa phase
@@ -968,7 +970,11 @@ fn ciel_px(u: f32, v: f32, ciel: &Ciel, saison: Saison, phase: f32, arc: bool) -
         }
     }
     // la forêt d'argent au loin, une fine flèche elfique blanche qui émerge des cimes, puis la brume
-    let cime = 176.0 + 6.0 * (u / 6.0).sin() + 4.0 * (u / 2.7 + 1.0).sin() + 6.0 * (u / 19.0).sin();
+    // la lisière : des cimes de sapins pointues, chacune de sa hauteur (une crête ondulée se lisait comme des monts bruns)
+    let arbre = (u / 7.0).floor();
+    let dans = (u / 7.0).fract() - 0.5;
+    let hauteur = 6.0 + 7.0 * h2(arbre as i32, 77);
+    let cime = 182.0 + 3.0 * (u / 19.0).sin() - (hauteur - dans.abs() * 2.0 * hauteur * 1.1).max(0.0);
     if v < cime && (275.0..=287.0).contains(&u) && v >= 142.0 {
         let dx = u - 281.0;
         let adx = dx.abs();
@@ -2253,18 +2259,27 @@ fn anime_derriere(p: &mut Pinceau, v: &Vue, ciel: &Ciel, lanternes: &Lanternes) 
         let bob = ((t * 0.09 + i as f32 * 1.7).sin() * 2.0).round();
         let y = cv + bob;
         let vacille = 0.5 + 0.5 * (t * 0.65 + i as f32 * 2.3).sin();
-        p.lueur(cu + 1.0, y - 2.0, 8.0, hex(0xffdc92), if s.sommeil { 0.09 } else { 0.16 + 0.08 * vacille });
-        // corps de cire en pixel art 2×2 + coupelle d'or + flamme
-        for dv in 0..8 {
-            let cire = if dv == 2 { OR } else if dv < 2 { hex(0xf8f4ea) } else { hex(0xd8deee) };
+        // un halo assez large pour qu'on les voie flotter (petits et pâles, on ne lisait que des bâtonnets blancs)
+        p.lueur(cu + 1.0, y - 3.0, 13.0, hex(0xffd88a), if s.sommeil { 0.12 } else { 0.24 + 0.1 * vacille });
+        // corps de cire, trois pixels de large, ombré à droite, une coulure + coupelle d'or + flamme en goutte
+        for dv in 0..10 {
+            let cire = if dv == 3 { OR } else if dv < 3 { hex(0xfaf6ec) } else { hex(0xdde2f0) };
+            p.poser(cu - 1.0, y + dv as f32, fois(cire, 1.04), 1.0);
             p.poser(cu, y + dv as f32, cire, 1.0);
-            p.poser(cu + 1.0, y + dv as f32, fois(cire, 0.88), 1.0);
+            p.poser(cu + 1.0, y + dv as f32, fois(cire, 0.8), 1.0);
         }
-        let fh = if vacille > 0.65 { 3 } else { 2 };
-        for dv in 1..=fh {
-            let fc = if dv == 1 { hex(0xfffef4) } else { hex(0xffcf68) };
+        p.poser(cu - 1.0, y + 3.0, hex(0xfaf6ec), 1.0);
+        p.poser(cu - 1.0, y + 4.0, hex(0xf0ecdf), 1.0);
+        p.poser(cu, y - 1.0, hex(0x3a3028), 1.0); // la mèche
+        let fh = if vacille > 0.65 { 5 } else { 4 };
+        for dv in 2..=fh + 1 {
+            let fc = if dv == 2 { hex(0xff9e3c) } else if dv < fh { hex(0xfff6c8) } else { hex(0xffcf68) };
             p.poser(cu, y - dv as f32, fc, 1.0);
-            p.poser(cu + 1.0, y - dv as f32, fc, 0.92);
+            // une goutte : large en bas, effilée en haut
+            if dv <= 3 {
+                p.poser(cu - 1.0, y - dv as f32, if dv == 2 { hex(0xff9e3c) } else { hex(0xffcf68) }, 0.9);
+                p.poser(cu + 1.0, y - dv as f32, if dv == 2 { hex(0xe88a30) } else { hex(0xffb850) }, 0.8);
+            }
         }
     }
 

@@ -215,7 +215,8 @@ fn fond(px: &mut [u32], voile: &mut [u8], bois: &mut [u8], c: &Cadre, sky: &Ciel
         let v = (y as f32 + 0.5) / c.demi;
         let k = (v / HORIZON).clamp(0.0, 1.0).powf(1.15);
         for x in 0..wd {
-            px[y * wd + x] = pack(mix(sky.haut, sky.bas, trame(k, 7.0, x, y)));
+            // un dégradé continu : arrondi à sept paliers, il se lisait en bandes (user : pas de « lumière en paliers »)
+            px[y * wd + x] = pack(mix(sky.haut, sky.bas, k));
         }
     }
     // l'arc-en-ciel, après une série de réussites
@@ -266,7 +267,9 @@ fn fond(px: &mut [u32], voile: &mut [u8], bois: &mut [u8], c: &Cadre, sky: &Ciel
         Chaine { cretes: cretes(haute), lisses: cretes(haute_lisse), roche: [hex(0x48566e), hex(0x5d6e86), hex(0x7d8ea6)], neige: 1.1, loin: 0.42, boisee: false },
         Chaine { cretes: cretes(proche), lisses: cretes(proche_lisse), roche: [hex(0x2c404c), hex(0x3e5560), hex(0x587480)], neige: 0.0, loin: 0.28, boisee: true },
     ];
-    let pas = (0.8 * c.cw).max(1.0) as isize;
+    // la pente des versants, lue sur une fenêtre large : de grandes faces au soleil ou à l'ombre (lue de près, elle
+    // découpait les monts en fines rayures obliques)
+    let pas = (2.2 * c.cw).max(1.0) as isize;
     let peindre_chaines = |px: &mut [u32], voile: &mut [u8], indices: &[usize]| {
         for x in 0..wd {
             let u = u_de(x);
@@ -286,7 +289,9 @@ fn fond(px: &mut [u32], voile: &mut [u8], bois: &mut [u8], c: &Cadre, sky: &Ciel
                         continue;
                     }
                     let d = (v - r).max(0.0);
-                    let xs = (x as isize - (dir * d * 0.6 * c.cw) as isize).clamp(pas, wd as isize - 1 - pas) as usize;
+                    // un biais léger : décalée d'autant que la profondeur, la lecture faisait pencher toutes les arêtes du
+                    // même angle, en rais parallèles
+                    let xs = (x as isize - (dir * d * 0.1 * c.cw) as isize).clamp(pas, wd as isize - 1 - pas) as usize;
                     let pente = (ch.lisses[xs + pas as usize] - ch.lisses[xs - pas as usize]) / (2.0 * pas as f32 / c.cw);
                     let face = trame(smooth(-0.3, 0.3, pente * dir), 2.0, x, y);
                     let mut roche = if face < 0.5 { mix(ch.roche[0], ch.roche[1], face * 2.0) } else { mix(ch.roche[1], ch.roche[2], face * 2.0 - 1.0) };
@@ -299,7 +304,7 @@ fn fond(px: &mut [u32], voile: &mut [u8], bois: &mut [u8], c: &Cadre, sky: &Ciel
                         let blanc = mix(hex(0xb4c4dc), hex(0xf4f7fb), face);
                         roche = mix(roche, blanc, trame(smooth(neige, neige - 0.3, d), 2.0, x, y));
                     }
-                    let brume = trame(smooth(r + 2.5, r + 9.0, v), 3.0, x, y) * 0.22;
+                    let brume = smooth(r + 2.5, r + 9.0, v) * 0.22;
                     col = mix(col, sky.lit(roche, (ch.loin + brume).min(0.9)), cov);
                     ciel *= 1.0 - cov;
                 }
@@ -363,7 +368,9 @@ fn fond(px: &mut [u32], voile: &mut [u8], bois: &mut [u8], c: &Cadre, sky: &Ciel
                 let d = v - (27.0 + (h(j * 7 + 12) - 0.5) * 0.8 - haut);
                 let cov = palier(((sapin(d, haut) * (0.8 + h(j * 7 + 13) * 0.4) - (u - cx).abs()) * c.cw + 0.5).clamp(0.0, 1.0) * (d * c.demi + 0.5).clamp(0.0, 1.0));
                 if cov > 0.0 {
-                    col = mix(col, sky.lit(teinte_sapin(u - cx, d, haut, [hex(0x1c3426), hex(0x264430), hex(0x365c3e)]), 0.1), cov);
+                    let ton = 0.88 + h(j * 7 + 19) * 0.24;
+                    let teinte = fois(teinte_sapin(u - cx, d, haut, [hex(0x1c3426), hex(0x264430), hex(0x365c3e)]), ton);
+                    col = mix(col, sky.lit(teinte, 0.1), cov);
                     couvert = couvert.max(cov);
                 }
             }
@@ -378,7 +385,11 @@ fn fond(px: &mut [u32], voile: &mut [u8], bois: &mut [u8], c: &Cadre, sky: &Ciel
                 let d = v - pointe;
                 let cov = palier(((sapin(d, haut) * (0.82 + h(j * 5 + 15) * 0.36) - (u - cx).abs()) * c.cw + 0.5).clamp(0.0, 1.0) * (d * c.demi + 0.5).clamp(0.0, 1.0));
                 if cov > 0.0 {
-                    col = mix(col, sky.lit(teinte_sapin(u - cx, d, haut, [hex(0x182e20), hex(0x23402c), hex(0x34583a)]), 0.03), cov);
+                    // chaque sapin de devant de son ton, un peu plus clair ou plus sombre : une rangée de triangles
+                    // tous pareils faisait un peigne
+                    let ton = 0.86 + h(j * 5 + 17) * 0.28;
+                    let teinte = fois(teinte_sapin(u - cx, d, haut, [hex(0x182e20), hex(0x23402c), hex(0x34583a)]), ton);
+                    col = mix(col, sky.lit(teinte, 0.03), cov);
                     couvert = couvert.max(cov);
                 }
             }
@@ -785,12 +796,15 @@ fn chateau_et_viaduc(px: &mut [u32], voile: &mut [u8], c: &Cadre, sky: &Ciel, se
 
     let mut t = Toile { px, w: c.w, h: c.h };
 
-    // viaduc à arches reliant l'éperon vers la droite au-dessus de la brume
+    // viaduc à arches reliant l'éperon vers la droite au-dessus de la brume, jusqu'à un pilier de roche coiffé d'une
+    // tour de garde
+    let mut bout_viaduc: Option<(f32, f32)> = None;
     if room >= 25.0 {
         let v_tab = vc + 0.55;
         let u0 = uc + 2.7;
         let u1 = (uc + 13.2).min(c.to - 1.5);
         if u1 > u0 + 3.5 {
+            bout_viaduc = Some((u1, v_tab));
             t.poly(
                 &[(c.x(u0), c.y(v_tab)), (c.x(u1), c.y(v_tab)), (c.x(u1), c.y(v_tab + 0.65)), (c.x(u0), c.y(v_tab + 0.65))],
                 pierre_base,
@@ -800,7 +814,8 @@ fn chateau_et_viaduc(px: &mut [u32], voile: &mut [u8], c: &Cadre, sky: &Ciel, se
             let pas = 2.1;
             let mut up = u0 + 0.35;
             while up < u1 - 0.5 {
-                let h_pile = 3.8;
+                // les piles descendent jusque derrière la chaîne proche, peinte après : jamais coupées dans le vide
+                let h_pile = 14.0;
                 t.poly(
                     &[
                         (c.x(up - 0.28), c.y(v_tab + 0.5)),
@@ -833,17 +848,54 @@ fn chateau_et_viaduc(px: &mut [u32], voile: &mut [u8], c: &Cadre, sky: &Ciel, se
         }
     }
 
-    // assise rocheuse et remparts sur l'éperon
-    t.poly(
-        &[
-            (c.x(uc - 3.7), c.y(vc + 2.4)),
-            (c.x(uc - 3.3), c.y(vc + 0.2)),
-            (c.x(uc + 3.1), c.y(vc + 0.2)),
-            (c.x(uc + 3.6), c.y(vc + 2.5)),
-        ],
-        pierre_ombre,
-        1.0,
-    );
+    // l'éperon rocheux qui porte le château (et le pilier où finit le viaduc) : un rocher qui sort de la chaîne haute et
+    // s'élargit vers le bas jusque derrière la chaîne proche, éclairé du côté du soleil, cerné, des névés sur ses
+    // corniches ; sans lui, le château flottait sur une dalle
+    let eperon = |t: &mut Toile, g0: f32, d0: f32, v_haut: f32, graine: i64| {
+        let roche = [lit(0x343e52), lit(0x46526a), lit(0x5c6a84), lit(0x74849e)];
+        let neige = lit(if hiver { 0xf2f6fa } else { 0xc8d2e2 });
+        let (y_a, y_b) = (c.y(v_haut).floor() as i32, c.y(v_haut + 14.0).ceil() as i32);
+        // des assises de roche : à chaque corniche (tous les ~1,3 rang), la paroi ressort ou rentre d'un coup, de
+        // chaque côté ; la masse s'élargit vers le bas
+        let bords = |y: i32| -> (f32, f32) {
+            let v = (y as f32 + 0.5) / c.demi - v_haut;
+            let assise = (v / 1.3).floor();
+            let sg = (h(assise as i64 * 17 + graine) - 0.5) * 1.1;
+            let sd = (h(assise as i64 * 23 + graine + 3) - 0.5) * 1.1;
+            (c.x(g0 - v * 0.45 + sg), c.x(d0 + v * 0.4 + sd))
+        };
+        for y in y_a.max(0)..y_b.min(t.h as i32) {
+            let v = (y as f32 + 0.5) / c.demi - v_haut;
+            let (g, d) = bords(y);
+            let (gh, dh) = bords(y - 1);
+            let (xa, xb) = (g.round() as i32, d.round() as i32);
+            let assise = (v / 1.3).floor() as i64;
+            for x in xa..xb {
+                let f = (x - xa) as f32 / (xb - xa).max(1) as f32;
+                let cote = if dir >= 0.0 { f } else { 1.0 - f };
+                // des facettes de roche : la lumière selon le côté, troublée d'un bruit lisse qui penche (pas de pans
+                // réguliers, qui faisaient de la maçonnerie)
+                let pan = roule(x as f32 / (1.6 * c.cw) + v * 0.7, graine + assise);
+                let k = (cote * 2.4 + pan * 1.6 - 0.5).clamp(0.0, 3.0) as usize;
+                let mut col = roche[k.min(3)];
+                // le dessus de chaque corniche, là où la paroi rentre, prend la neige (ou le névé l'été)
+                let corniche = (x as f32) < gh.round() || (x as f32) >= dh.round();
+                if corniche && y > y_a {
+                    col = neige;
+                }
+                if y == y_a {
+                    col = roche[3];
+                }
+                // le flanc à l'ombre s'assombrit au bord ; pas de cerne noir autour
+                let ombre = if dir >= 0.0 { x == xa } else { x == xb - 1 };
+                if ombre {
+                    col = mix(col, hex(0x1c2030), 0.4);
+                }
+                t.poser(x, y, col, 1.0);
+            }
+        }
+    };
+    eperon(&mut t, uc - 3.6, uc + 3.3, vc + 0.6, 71);
 
     // une tour cylindrique coiffée d'une flèche pointue
     let tour_pointue = |t: &mut Toile, ut: f32, larg: f32, v_base: f32, v_sommet: f32, h_fleche: f32| {
@@ -861,6 +913,11 @@ fn chateau_et_viaduc(px: &mut [u32], voile: &mut [u8], c: &Cadre, sky: &Ciel, se
         // épi de faîtage
         t.trait_(pointe, (pointe.0, pointe.1 - 1.5), 1.0, pierre_clair, 0.9);
     };
+
+    if let Some((u1, v_tab)) = bout_viaduc {
+        eperon(&mut t, u1 - 0.7, u1 + 0.9, v_tab + 0.65, 83);
+        tour_pointue(&mut t, u1 + 0.1, 0.9, v_tab + 0.7, v_tab - 1.6, 1.6);
+    }
 
     // Grande Salle à nef haute et pignon gothique (à gauche du donjon)
     let (gs0, gs1) = (uc - 2.4, uc + 0.25);
@@ -883,6 +940,15 @@ fn chateau_et_viaduc(px: &mut [u32], voile: &mut [u8], c: &Cadre, sky: &Ciel, se
     t.poly(&[(c.x(uc + 1.5), c.y(vc - 0.6)), (c.x(uc + 2.4), c.y(vc - 0.6)), (c.x(uc + 2.4), c.y(vc + 0.3)), (c.x(uc + 1.5), c.y(vc + 0.3))], pierre_ombre, 1.0);
     tour_pointue(&mut t, uc + 2.55, 0.95, vc + 0.9, vc - 2.7, 2.0);
 
+    // le jour, des baies sombres : le château a des fenêtres même éteint
+    if !(sky.nuit || sky.soir) {
+        let baie = lit(0x23263a);
+        for &(uw, vw) in &[(uc - 2.95, vc - 2.1), (uc + 0.85, vc - 3.7), (uc + 0.72, vc - 2.3), (uc + 2.55, vc - 1.7), (uc - 1.6, vc - 0.65), (uc - 0.6, vc - 0.65)] {
+            let (wx, wy) = (c.x(uw).round() as i32, c.y(vw).round() as i32);
+            t.poser(wx, wy, baie, 0.9);
+            t.poser(wx, wy + 1, baie, 0.9);
+        }
+    }
     // fenêtres dorées allumées au crépuscule et dans la nuit
     if sky.nuit || sky.soir {
         let or_vif = if sky.nuit { hex(0xffd468) } else { hex(0xffbe52) };
@@ -1000,77 +1066,123 @@ fn nuages(t: &mut Toile, voile: &[u8], c: &Cadre, sky: &Ciel, temps: f32) {
     }
 }
 
-/// Les cascades des cols : des filets d'eau qui descendent, avec un pas de côté à chaque corniche, une fente d'ombre à
-/// leur gauche ; l'embrun au pied de la proche. Gelées l'hiver.
+//// Les cascades des cols : de minces filets qui sortent d'une entaille de la roche (un col en V, jamais un sommet),
+/// sautent de corniche en corniche (un pas de côté et un bouillon d'écume à chaque saut), dans une coulée de roche
+/// mouillée qui les tient au flanc ; la proche dévale une paroi de rochers qui perce la forêt et finit en embrun parmi
+/// les sapins. Gelées l'hiver.
 fn cascades(t: &mut Toile, bois: &[u8], c: &Cadre, sky: &Ciel, plan: &Plan, se: Saison, temps: f32) {
     let hiver = se == Saison::Hiver;
     for &(fx, pres) in plan.falls() {
         let fx = fx as f32 + 0.5;
-        let haut = if pres { proche(fx) } else { haute(fx) } + 1.4;
+        let crete = if pres { proche(fx) } else { haute(fx) };
+        let haut = crete + if pres { 1.6 } else { 0.9 };
         let fin = if pres { 23.6 } else { proche(fx) };
         if fin <= haut {
             continue;
         }
         let graine = fx as i64 * 7 + if pres { 3 } else { 0 };
         let loin = if pres { 0.08 } else { 0.3 };
-        let large = if pres { 1.6 } else { 1.05 };
-        // en pixels d'art par tic : la proche court plus vite
+        // en u : un filet mince au loin, plus large de près
+        let large = if pres { 1.1 } else { 0.5 };
         let vitesse = if pres { 1.6 } else { 0.9 };
-        let (y0, y1) = ((haut * c.demi) as i32, (fin * c.demi) as i32);
-        let place = |v: f32| fx + ((roule(v.floor() / 3.0, graine) - 0.5) * 3.2).round() * 0.3;
+        let (y_ent, y0, y1) = (((crete + 0.1) * c.demi) as i32, (haut * c.demi) as i32, (fin * c.demi) as i32);
+        // une corniche tous les ~1,6 rang : le filet y fait un pas de côté
+        let saut = 1.6;
+        let place = |v: f32| {
+            let k = ((v - haut) / saut).floor();
+            fx + ((h(k as i64 * 29 + graine) - 0.5) * 2.2).round() * 0.32
+        };
+        let (tw, th) = (t.w, t.h);
+        let devant_de = |x: i32, y: i32| {
+            let (xc, yc) = ((x.max(0) as usize).min(tw - 1), (y.max(0) as usize).min(th - 1));
+            1.0 - bois[yc * tw + xc] as f32 / 255.0
+        };
+        // la proche : une paroi de rochers en assises irrégulières, qui sort de la forêt
+        if pres {
+            // les teintes de la chaîne proche elle-même : la paroi en fait partie (plus sombre, elle faisait un bloc)
+            let roche = [hex(0x34485a), hex(0x466070), hex(0x5c7888), hex(0x7894a2)];
+            for y in (y0 - (0.8 * c.demi) as i32)..y1 {
+                let v = (y as f32 + 0.5) / c.demi;
+                let assise = ((v - haut) / 1.1).floor() as i64;
+                let evase = ((v - haut) / (fin - haut)).clamp(0.0, 1.0) * 1.2;
+                let (mg, md) = (0.3 + evase + h(assise * 11 + graine) * 0.6, 0.3 + evase + h(assise * 17 + graine) * 0.6);
+                let a = place(v.max(haut));
+                let (xa, xb) = (c.x(a - mg).round() as i32, c.x(a + large + md).round() as i32);
+                let haut_assise = ((v - haut) / 1.1).rem_euclid(1.0) < 0.2;
+                for x in xa..xb {
+                    let devant = devant_de(x, y);
+                    if devant <= 0.0 {
+                        continue;
+                    }
+                    let f = (x - xa) as f32 / (xb - xa).max(1) as f32;
+                    let cote = if sky.cote >= 0.0 { f } else { 1.0 - f };
+                    let pan = roule(x as f32 / (1.4 * c.cw) + v * 0.8, graine + assise);
+                    let k = (cote * 2.2 + pan * 1.6 - 0.4).clamp(0.0, 3.0) as usize;
+                    let col = if haut_assise && hiver { hex(0xeef3f8) } else { roche[k.min(3)] };
+                    t.poser(x, y, sky.lit(col, 0.28), devant);
+                }
+            }
+        }
+        // la coulée de roche mouillée, un pixel de part et d'autre du filet, qui naît en pointe sous la crête
+        let mouille = sky.lit(if pres { hex(0x1e2826) } else { hex(0x34404e) }, loin);
+        for y in y_ent..y1 {
+            let v = (y as f32 + 0.5) / c.demi;
+            let a = place(v.max(haut));
+            let ouvre = ((v - crete) / (haut - crete + 0.6)).clamp(0.0, 1.0);
+            let (xa, xb) = (c.x(a).floor() as i32 - 1, c.x(a + large * ouvre.max(0.4)).ceil() as i32 + 1);
+            for x in xa..xb {
+                let devant = devant_de(x, y);
+                if devant > 0.0 {
+                    let bord = x == xa || x == xb - 1;
+                    t.poser(x, y, mouille, (if bord { 0.35 } else { 0.6 }) * devant * ouvre.max(0.3));
+                }
+            }
+        }
+        // l'eau
         for y in y0..y1 {
             let v = (y as f32 + 0.5) / c.demi;
-            // un pas de côté par corniche (une rangée de forge), et l'écume là où elle retombe
             let a = place(v);
-            let corniche = (place(v - 1.0) - a).abs() > 0.01 && v.fract() < 0.55;
-            // des bords qui tremblent d'un pixel, rangée par rangée : de l'eau, pas une colonne
-            let (ga, gb) = ((h(y as i64 * 7 + graine) > 0.65) as i32, (h(y as i64 * 11 + graine) > 0.6) as i32);
-            let (xa, xb) = (c.x(a - 0.35).floor() as i32, c.x(a + large).ceil() as i32 + gb);
-            let xd = c.x(a).round() as i32 - ga;
+            // l'écume où il retombe, juste sous chaque corniche
+            let bouillon = ((v - haut) / saut).rem_euclid(1.0) < 0.12 && v > haut + 0.5;
+            let lg = large * (0.5 + 0.5 * ((v - haut) / 2.0).clamp(0.0, 1.0));
+            let ga = (h(y as i64 * 7 + graine) > 0.7) as i32;
+            let (xa, xb) = (c.x(a).floor() as i32 - ga, c.x(a + lg).ceil() as i32);
             for x in xa..xb {
-                let (xc, yc) = ((x.max(0) as usize).min(t.w - 1), (y.max(0) as usize).min(t.h - 1));
-                let devant = 1.0 - bois[yc * t.w + xc] as f32 / 255.0;
+                let devant = devant_de(x, y);
                 if devant <= 0.0 {
                     continue;
                 }
-                if x < xd {
-                    if pres && !corniche {
-                        t.poser(x, y, hex(0x101420), 0.25 * devant);
-                    } // la fente d'ombre à sa gauche
-                    continue;
-                }
-                let i = (x - xd).max(0);
+                let i = (x - xa).max(0);
                 let teinte = if hiver {
                     if h((x / 2) as i64 * 3 + (y / 3) as i64 * 7) > 0.5 { hex(0xe4f2fa) } else { hex(0xbfe0f0) }
-                } else if corniche {
-                    if h(x as i64 * 5 + y as i64) > 0.3 { hex(0xf8fdff) } else { hex(0xcdeefc) }
+                } else if bouillon {
+                    if h(x as i64 * 5 + y as i64 + (temps as i64 / 2)) > 0.3 { hex(0xffffff) } else { hex(0xd6f0fc) }
                 } else {
-                    let phase = h(i as i64 * 13 + graine) * 9.0;
-                    let s = (y as f32 - temps * vitesse * (0.8 + h(i as i64 * 7 + graine) * 0.4) + phase).rem_euclid(9.0);
-                    if x == xd {
-                        hex(0xdff6ff)
-                    } else if x >= xb - 1 {
-                        hex(0x5aa8dc)
+                    let phase = h(i as i64 * 13 + graine) * 7.0;
+                    let s = (y as f32 - temps * vitesse * (0.8 + h(i as i64 * 7 + graine) * 0.4) + phase).rem_euclid(7.0);
+                    if x == xb - 1 && xb - xa > 2 {
+                        hex(0x6ab4e2)
                     } else if s < 2.5 {
                         hex(0xf8fdff)
                     } else if s < 4.5 {
-                        hex(0xbfe6fa)
+                        hex(0xc8eafa)
                     } else {
-                        hex(0x7cc4ec)
+                        hex(0x8ccaee)
                     }
                 };
-                t.poser(x, y, sky.lit(teinte, loin), if pres { 0.92 } else { 0.72 } * devant);
+                t.poser(x, y, sky.lit(teinte, loin), devant);
             }
         }
-        // l'embrun au pied de la proche, parmi les pointes des sapins
-        if pres && !hiver {
+        // l'embrun au pied : parmi les pointes des sapins pour la proche, sur la crête qui cache le pied des lointaines
+        if !hiver {
             let respire = 0.5 + 0.2 * (temps / 3.0).sin();
-            t.disque(c.x(fx + 0.4), c.y(fin - 0.4), 1.6 * c.demi, sky.lit(hex(0xf4f9fc), 0.15), respire * 0.45, 1.0);
+            let (r, a) = if pres { (1.6, 0.45) } else { (0.8, 0.3) };
+            t.disque(c.x(place(fin) + large * 0.5), c.y(fin - 0.4), r * c.demi, sky.lit(hex(0xf4f9fc), 0.15), respire * a, 1.0);
         }
     }
 }
 
-/// Vie du ciel de la cour : vol d'oiseaux en V le jour, silhouette rare d'un dragon (ou grand aigle) au-dessus des cimes,
+// Vie du ciel de la cour : vol d'oiseaux en V le jour, silhouette rare d'un dragon (ou grand aigle) au-dessus des cimes,
 /// et chouette blanche messagère (façon Hedwige) glissant silencieusement au crépuscule et la nuit.
 fn oiseaux(t: &mut Toile, c: &Cadre, sky: &Ciel, w: &Monde, temps: f32) {
     if sky.orage {
@@ -1175,8 +1287,8 @@ fn arbre(t: &mut Toile, c: &Cadre, sky: &Ciel, plan: &Plan, se: Saison, temps: f
             let (u0, u1) = (tx + cote * up0 * b, tx + cote * up1 * b + balance(v1));
             // la branche se courbe un peu vers le haut, puis se fourche en rameaux
             let (um, vm) = ((u0 + u1) * 0.5 - cote * 0.3, (v0 + v1) * 0.5 - 0.4);
-            if i == 2 {
-                attaches_lanternes[idx_c] = (um + cote * 0.55, vm + 0.15);
+            if i == 0 {
+                attaches_lanternes[idx_c] = (um, vm);
             }
             let ep = (0.55 - i as f32 * 0.1) * c.cw;
             t.trait_((c.x(u0), c.y(v0)), (c.x(um), c.y(vm)), ep, bois, 1.0);
@@ -1263,33 +1375,44 @@ fn arbre(t: &mut Toile, c: &Cadre, sky: &Ciel, plan: &Plan, se: Saison, temps: f
         }
     }
 
-    // deux lanternes féeriques de fer forgé suspendues aux branches basses et oscillant doucement
+    // deux lanternes féeriques de fer forgé, pendues SOUS la couronne (au bord bas du feuillage, ou aux branches basses
+    // quand l'arbre est nu) pour se découper sur le fond : dedans, elles se perdaient comme des pinceaux
     let allume = sky.nuit || sky.soir || sky.orage;
-    let fer = sky.lit(hex(0x282a36), 0.0);
-    for (idx, &(ua, va)) in attaches_lanternes.iter().enumerate() {
-        if ua <= 0.0 {
+    let fer = sky.lit(hex(0x1e2028), 0.0);
+    let feuillu = feuillage(se).is_some();
+    for (idx, &(ub, vb)) in attaches_lanternes.iter().enumerate() {
+        if ub <= 0.0 {
             continue;
         }
-        let osc = (temps / (rythme * 0.85) + idx as f32 * 2.1).sin() * (0.28 + vent * 0.18);
-        let (ul, vl) = (ua + osc, va + 2.15);
+        let cote = if idx == 0 { -1.0 } else { 1.0 };
+        let (ua, va) = if feuillu { (tx + cote * r * 0.7, ty + r * 0.62) } else { (ub, vb) };
+        let osc = (temps / (rythme * 0.85) + idx as f32 * 2.1).sin() * (0.22 + vent * 0.15);
+        let (ul, vl) = (ua + osc, va + 1.3);
+        let (lw, lh) = (0.5, 1.5);
         if allume {
             let pulse = 0.88 + 0.12 * (temps * 0.35 + idx as f32 * 1.9).sin();
-            t.disque(c.x(ul), c.y(vl + 0.55), 2.6 * c.demi, hex(0xffa434), 0.24 * pulse, 1.0);
-            t.disque(c.x(ul), c.y(vl + 0.55), 1.2 * c.demi, hex(0xffd264), 0.42 * pulse, 0.8);
+            t.disque(c.x(ul), c.y(vl + lh * 0.5), 3.0 * c.demi, hex(0xffa434), 0.22 * pulse, 1.0);
+            t.disque(c.x(ul), c.y(vl + lh * 0.5), 1.4 * c.demi, hex(0xffd264), 0.38 * pulse, 0.8);
         }
-        // chaînette, chapeau pointu et cage vitrée
-        t.trait_((c.x(ua), c.y(va)), (c.x(ul), c.y(vl)), 1.1, fer, 0.95);
-        t.poly(&[(c.x(ul - 0.48), c.y(vl + 0.22)), (c.x(ul + 0.48), c.y(vl + 0.22)), (c.x(ul), c.y(vl - 0.18))], fer, 1.0);
-        let verre = if allume { hex(0xffe88e) } else { sky.lit(hex(0x9ab0c4), 0.0) };
-        t.poly(
-            &[(c.x(ul - 0.34), c.y(vl + 0.22)), (c.x(ul + 0.34), c.y(vl + 0.22)), (c.x(ul + 0.26), c.y(vl + 1.02)), (c.x(ul - 0.26), c.y(vl + 1.02))],
-            verre,
-            if allume { 0.98 } else { 0.75 },
-        );
+        // la chaînette
+        t.trait_((c.x(ua), c.y(va)), (c.x(ul), c.y(vl - 0.3)), 1.0, fer, 0.95);
+        // l'anneau, le chapeau pointu qui déborde, la cage et sa vitre, le fond et sa pointe
+        t.poser(c.x(ul).round() as i32, c.y(vl - 0.45).round() as i32, fer, 1.0);
+        t.poly(&[(c.x(ul - lw - 0.2), c.y(vl + 0.15)), (c.x(ul + lw + 0.2), c.y(vl + 0.15)), (c.x(ul), c.y(vl - 0.4))], fer, 1.0);
+        t.poly(&[(c.x(ul - lw), c.y(vl + 0.1)), (c.x(ul + lw), c.y(vl + 0.1)), (c.x(ul + lw), c.y(vl + lh)), (c.x(ul - lw), c.y(vl + lh))], fer, 1.0);
+        let verre = if allume { hex(0xffd870) } else { sky.lit(hex(0x8aa0b4), 0.0) };
+        let reflet = if allume { hex(0xfff6d0) } else { sky.lit(hex(0xc4d4e2), 0.0) };
+        let (gx0, gx1) = (c.x(ul - lw).round() as i32 + 1, c.x(ul + lw).round() as i32 - 1);
+        let (gy0, gy1) = (c.y(vl + 0.1).round() as i32 + 1, c.y(vl + lh).round() as i32 - 1);
+        for y in gy0..gy1 {
+            for x in gx0..gx1 {
+                t.poser(x, y, if x == gx0 && y < gy0 + 2 { reflet } else { verre }, 1.0);
+            }
+        }
         if allume {
-            t.poser(c.x(ul).round() as i32, c.y(vl + 0.58).round() as i32, hex(0xfffbe0), 1.0);
+            t.poser((gx0 + gx1) / 2, (gy0 + gy1) / 2, hex(0xffffff), 1.0);
         }
-        t.trait_((c.x(ul - 0.36), c.y(vl + 1.05)), (c.x(ul + 0.36), c.y(vl + 1.05)), 1.3, fer, 1.0);
+        t.poser(c.x(ul).round() as i32, c.y(vl + lh + 0.3).round() as i32, fer, 1.0);
     }
 }
 

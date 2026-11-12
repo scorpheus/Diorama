@@ -365,11 +365,17 @@ fn batir_architecture(c: &mut Canevas) {
     // Attention : dans `45..53 × 2..10`, les nervures restent en Mode::Mur sombre pour préserver le contraste nocturne !
     for &pu in &[11.8f32, 28.2, 45.2] {
         let px = c.ax(pu);
-        // Pilastre vertical discret
-        c.rect(px - 1, c.ay(5.5), px + 2, plinthe_y, rgb(0x3a323e), Mode::Mur);
-        c.rect(px, c.ay(5.5), px + 1, plinthe_y, rgb(0x584c5a), Mode::Mur);
+        // Pilastre : une demi-colonne de pierre de cinq pixels, éclairée à gauche, sa base et son chapiteau débordants
+        // (un filet d'un pixel se lisait comme une couture du mur)
+        let (haut_p, bas_p) = (c.ay(5.6), plinthe_y);
+        for (dx, col) in [(-3, rgb(0x2a2430)), (-2, rgb(0x6a5e6e)), (-1, rgb(0x5a4e5e)), (0, rgb(0x52475a)), (1, rgb(0x463c4c)), (2, rgb(0x383040)), (3, rgb(0x2a2430))] {
+            c.rect(px + dx, haut_p, px + dx + 1, bas_p, col, Mode::Mur);
+        }
+        c.rect(px - 4, bas_p - 3, px + 5, bas_p, rgb(0x4e4452), Mode::Mur);
+        c.rect(px - 4, bas_p - 3, px + 5, bas_p - 2, rgb(0x665a6a), Mode::Mur);
         // Chapiteau taillé
-        c.rect(px - 2, c.ay(5.0), px + 3, c.ay(5.8), rgb(0x635666), Mode::Mur);
+        c.rect(px - 4, c.ay(5.0), px + 5, haut_p, rgb(0x635666), Mode::Mur);
+        c.rect(px - 4, haut_p - 1, px + 5, haut_p, rgb(0x3a3040), Mode::Mur);
         // Deux arcs-doubleaux qui montent en ogive vers la poutre maîtresse
         for dir in [-1.0f32, 1.0] {
             let mut st = 0;
@@ -380,7 +386,8 @@ fn batir_architecture(c: &mut Canevas) {
                 if (0.0..YARD as f32).contains(&ru) && rv >= 1.0 {
                     let rx = c.ax(ru);
                     let ry = c.ay(rv);
-                    c.poser(rx, ry, rgb(0x5d5060), Mode::Mur);
+                    c.poser(rx, ry - 1, rgb(0x5d5060), Mode::Mur);
+                    c.poser(rx, ry, rgb(0x52465a), Mode::Mur);
                     c.poser(rx, ry + 1, rgb(0x362e3a), Mode::Mur);
                 }
                 st += 1;
@@ -604,42 +611,73 @@ fn batir_billot_et_enclume(c: &mut Canevas) {
         }
     }
 
-    // 2. Enclume runique naine (`u = 16.0..28.8, v = 25.0..28.2`)
-    // Table d'acier poli + bigorne pointue à gauche + talon carré à droite
-    let table_y0 = c.ay(ay_h);
-    let table_y1 = c.ay(ay_h + 1.35).max(table_y0 + 3);
-    let bigorne_x = c.ax(ax_g);
-    let corps_x0 = c.ax(ax_g + 2.8);
-    let talon_x1 = c.ax(ax_g + 12.8);
-
-    // Table principale et talon
-    c.boite(corps_x0, table_y0, talon_x1, table_y1, rgb(0x8f98ac), CONTOUR, Mode::Plein);
-    // Reflet spéculaire net sur le dessus de la table d'enclume
-    c.rect(corps_x0 + 1, table_y0 + 1, talon_x1 - 2, table_y0 + 2, rgb(0xcbd4e6), Mode::Plein);
-
-    // Bigorne effilée vers le foyer (à gauche)
-    for ax in bigorne_x..corps_x0 + 1 {
-        let t = ((ax - bigorne_x) as f32 / (corps_x0 - bigorne_x).max(1) as f32).clamp(0.0, 1.0);
-        let yb = table_y0 + 1 + ((1.0 - t) * 1.6).round() as i32;
-        let yh = table_y0;
-        c.poser(ax, yh, CONTOUR, Mode::Plein);
-        for ay in yh + 1..=yb.min(table_y1) {
-            c.poser(ax, ay, if ay == yh + 1 { rgb(0xd4dced) } else { rgb(0x7c8498) }, Mode::Plein);
+    // 2. Enclume runique naine, de profil (`u = 16.0..28.8`, table à `v = 25.0`) : la bigorne en cône vers le foyer, la
+    // table épaisse et son talon en surplomb à droite, la taille cintrée, les pieds évasés sur le billot. La silhouette
+    // est décrite rangée par rangée (bords gauche et droit), puis cernée d'un trait net.
+    let y0 = c.ay(ay_h);
+    let (pointe, table0, talon) = (c.ax(ax_g), c.ax(ax_g + 3.2), c.ax(ax_g + 12.8));
+    let (corps0, corps1) = (c.ax(ax_g + 3.8), c.ax(ax_g + 10.4));
+    let bas = by0; // la semelle pose sur le billot
+    let rangs = (bas - y0).max(8);
+    let bord = |r: i32| -> (i32, i32) {
+        let f = r as f32 / rangs as f32;
+        let g = match r {
+            0 => pointe + 4,
+            1 => pointe + 1,
+            2 => pointe,
+            3 => pointe + 3,
+            4 => pointe + 7,
+            5 => table0 + 1,
+            _ => {
+                // la taille se creuse au milieu, les pieds s'évasent en bas
+                let creux = (1.0 - ((f - 0.62) / 0.3).powi(2)).max(0.0);
+                corps0 + (creux * 4.0).round() as i32 - if f > 0.85 { ((f - 0.85) / 0.15 * 2.0).round() as i32 } else { 0 }
+            }
+        };
+        let d = match r {
+            0..=2 => talon,
+            3 => talon - 2,
+            4 => corps1 + 3,
+            5 => corps1 + 1,
+            _ => {
+                let creux = (1.0 - ((f - 0.62) / 0.3).powi(2)).max(0.0);
+                corps1 - (creux * 4.0).round() as i32 + if f > 0.85 { ((f - 0.85) / 0.15 * 2.0).round() as i32 } else { 0 }
+            }
+        };
+        (g, d)
+    };
+    let dedans = |x: i32, r: i32| -> bool {
+        if r < 0 || r >= rangs {
+            return false;
         }
-        c.poser(ax, yb.min(table_y1) + 1, CONTOUR, Mode::Plein);
+        let (g, d) = bord(r);
+        x >= g && x < d
+    };
+    for r in 0..rangs {
+        let (g, d) = bord(r);
+        for x in g..d {
+            let cerne = !dedans(x - 1, r) || !dedans(x + 1, r) || !dedans(x, r - 1) || !dedans(x, r + 1);
+            let col = if cerne {
+                CONTOUR
+            } else if r == 1 {
+                rgb(0xd4dced) // le dessus poli de la table et de la bigorne
+            } else if r <= 3 {
+                if x < table0 { rgb(0x9aa3b8) } else { rgb(0x8f98ac) }
+            } else if x < g + 3 {
+                rgb(0x8a93a8) // le flanc tourné vers le feu
+            } else if x > d - 4 {
+                rgb(0x4c5466)
+            } else {
+                rgb(0x646d82)
+            };
+            c.poser(x, y0 + r, col, Mode::Plein);
+        }
     }
-
-    // Taille cintrée de l'enclume et patins rivés sur le billot
-    let pied_y1 = by0 + 1;
-    let taille_x0 = c.ax(ax_g + 3.8);
-    let taille_x1 = c.ax(ax_g + 10.6);
-    c.boite(taille_x0, table_y1 - 1, taille_x1, pied_y1, rgb(0x636b7e), CONTOUR, Mode::Plein);
-    c.rect(taille_x0 + 1, table_y1, taille_x0 + 4, pied_y1 - 1, rgb(0x838ca0), Mode::Plein);
-    // Semelle évasée
-    c.boite(c.ax(ax_g + 2.8), pied_y1 - 2, c.ax(ax_g + 11.4), pied_y1, rgb(0x555d70), CONTOUR, Mode::Plein);
+    // le trou carré de la tranche, près du talon
+    c.poser(talon - 5, y0 + 1, rgb(0x2a2c38), Mode::Plein);
 
     // Rune naine d'or incrustée au flanc de l'enclume (losange Khuzdul)
-    let (rx, ry) = ((taille_x0 + taille_x1) / 2, (table_y1 + pied_y1) / 2);
+    let (rx, ry) = ((corps0 + corps1) / 2, y0 + rangs * 3 / 5);
     c.poser(rx, ry - 1, rgb(0xe4b448), Mode::Plein);
     c.poser(rx - 1, ry, rgb(0xf4cc64), Mode::Plein);
     c.poser(rx + 1, ry, rgb(0xc89632), Mode::Plein);
@@ -716,7 +754,8 @@ fn peindre_fenetre_ogive(c: &mut Canevas, w: &Monde, clock: i64) {
             if v < v_imposte {
                 // Rosace trilobée et vitrail médiéval au plomb (rubis, saphir, ambre, émeraude)
                 let rosace_d = ((u - uc) * 0.95).hypot(v - (v_haut + 2.35));
-                let plomb_losange = (((u - uc) * 1.6 + v * 1.6).fract() < 0.14) || (((u - uc) * 1.6 - v * 1.6).fract().abs() < 0.14);
+                // des losanges de verre d'environ six pixels d'art, sertis de plomb (plus serrés, ils faisaient un damier)
+                let plomb_losange = (((u - uc) * 0.72 + v * 0.72).rem_euclid(1.0) < 0.16) || (((u - uc) * 0.72 - v * 0.72).rem_euclid(1.0) < 0.16);
                 let verre = if (rosace_d - 1.25).abs() < 0.22 || plomb_losange {
                     rgb(0x23202b)
                 } else if rosace_d < 1.25 {
@@ -824,13 +863,23 @@ fn peindre_fenetre_ogive(c: &mut Canevas, w: &Monde, clock: i64) {
 
     // Citrouille sculptée illuminée sur l'appui à Halloween
     if w.fete() == Some(Fete::Halloween) {
-        let px = c.ax(u1 - 2.6);
-        let py = ay_appui - 2;
-        c.disque(px, py, 2, rgb(0xe46d24), Mode::Plein);
-        c.poser(px, py - 3, rgb(0x3c6e2c), Mode::Plein);
-        c.poser(px - 1, py - 1, rgb(0xffea64), Mode::Lueur);
-        c.poser(px + 1, py - 1, rgb(0xffea64), Mode::Lueur);
-        c.poser(px, py + 1, rgb(0xffb838), Mode::Lueur);
+        // une citrouille ronde et côtelée, cernée, sa queue verte, ses yeux et sa bouche qui luisent (un disque de
+        // rayon 2 se lisait comme une croix)
+        const CITROUILLE: [&str; 6] = ["...g...", ".kkgkk.", "kOoOoOk", "kyOoOyk", "kOyyyOk", ".kkkkk."];
+        let (px, py) = (c.ax(u1 - 2.6) - 3, ay_appui - 6);
+        for (j, ligne) in CITROUILLE.iter().enumerate() {
+            for (i, b) in ligne.bytes().enumerate() {
+                let (col, mode) = match b {
+                    b'k' => (CONTOUR, Mode::Plein),
+                    b'g' => (rgb(0x3c6e2c), Mode::Plein),
+                    b'O' => (rgb(0xe8742a), Mode::Plein),
+                    b'o' => (rgb(0xc45a1e), Mode::Plein),
+                    b'y' => (rgb(0xffd85a), Mode::Lueur),
+                    _ => continue,
+                };
+                c.poser(px + i as i32, py + j as i32, col, mode);
+            }
+        }
     }
 }
 
@@ -902,10 +951,11 @@ fn peindre_etagere_alchimie(c: &mut Canevas, clock: i64) {
 // ============================================================================
 
 fn peindre_astrolabe(c: &mut Canevas, heure: f32) {
-    // Placé en `u = 42.4, v = 13.6`, rayon ~ 2.1 (`v = 11.2..16.0`, hors de `45..53 × 2..10`)
-    let cx = c.ax(42.4);
-    let cy = c.ay(13.6);
-    let r = c.ay(2.15).max(5);
+    // Placé en `u = 27.4, v = 8.4`, entre la fenêtre et la tête de Scorpheus (`C.0 = 30`) : jamais derrière elle, où
+    // son anneau d'or faisait une auréole
+    let cx = c.ax(27.4);
+    let cy = c.ay(8.4);
+    let r = c.ay(1.7).max(5);
 
     // Anneau de suspension en haut
     c.boite(cx - 1, cy - r - 3, cx + 2, cy - r, rgb(0xd4a646), CONTOUR, Mode::Sol);
@@ -1173,99 +1223,216 @@ fn peindre_cloche_bronze(c: &mut Canevas, bell_age: Option<i64>) {
 fn peindre_foyer_et_soufflet(c: &mut Canevas, w: &Monde, p: &Pose, tick: i64) {
     let feu = if w.exhausted { 0 } else { p.fire.clamp(0, 4) };
 
-    // 1. Quatre runes angulaires de Khazad-dûm gravées dans le linteau (`0..=4` allumées selon `feu`)
-    let ly = c.ay(16.3);
+    // 1. Quatre runes angulaires de Khazad-dûm gravées dans le linteau (`0..=4` allumées selon `feu`) : des
+    // glyphes à hampe et branches obliques, à la manière des Cirth, jamais des croix
+    const RUNES: [[&str; 5]; 4] = [
+        ["X.X", "XX.", "X..", "XX.", "X.X"],
+        [".X.", "X.X", ".X.", ".X.", ".X."],
+        ["X.X", ".X.", "X.X", ".X.", "X.X"],
+        ["XX.", "X.X", "XX.", "X.X", "XX."],
+    ];
+    let ly = c.ay(16.1);
     for (idx, &ru) in [3.2f32, 5.7, 8.2, 10.6].iter().enumerate() {
-        let rx = c.ax(ru);
+        let rx = c.ax(ru) - 1;
         let active = (idx as i32) < feu;
         let (col, mode) = if active {
             let pulse = ((tick + idx as i64 * 3) % 6) < 3;
-            (if pulse { rgb(0xffd85c) } else { rgb(0xff8e28) }, Mode::Lueur)
+            (if pulse { rgb(0xffd85c) } else { rgb(0xff9a30) }, Mode::Lueur)
         } else {
-            (rgb(0x282330), Mode::Plein)
+            (rgb(0x262130), Mode::Plein)
         };
-        // Glyphe runique nain ciselé (`3×4` pixels d'art)
-        c.poser(rx, ly, col, mode);
-        c.poser(rx - 1, ly + 1, col, mode);
-        c.poser(rx + 1, ly + 1, col, mode);
-        c.poser(rx, ly + 2, col, mode);
-        if idx % 2 == 0 {
-            c.poser(rx - 1, ly + 3, col, mode);
-            c.poser(rx + 1, ly + 3, col, mode);
-        } else {
-            c.poser(rx, ly + 3, col, mode);
+        for (j, ligne) in RUNES[idx].iter().enumerate() {
+            for (i, b) in ligne.bytes().enumerate() {
+                if b == b'X' {
+                    c.poser(rx + i as i32, ly + j as i32, col, mode);
+                }
+            }
         }
     }
 
-    // 2. Réserve hebdomadaire de bûches sur le degré gauche de la hotte (`world.fuel7d`, `0..=10`)
+    // 2. Réserve hebdomadaire de bûches (`world.fuel7d`, `0..=10`) : des rondins vus en bout, empilés en pyramide sur
+    // une planche à consoles de fer scellée à gauche de la hotte
     let pile = match w.fuel7d {
         None => 10usize,
         Some(f) => ((10.0 * (1.0 - f.min(100.0) / 100.0)).round() as i32).clamp(0, 10) as usize,
     };
-    const TAS_BOIS: [(f32, f32); 10] = [
-        (0.8, 14.5), (2.1, 14.5), (3.4, 14.5), (4.7, 14.5),
-        (1.2, 13.4), (2.5, 13.4), (3.8, 13.4),
-        (1.8, 12.3), (3.1, 12.3),
-        (2.4, 11.2),
-    ];
-    for &(bu, bv) in TAS_BOIS.iter().take(pile) {
-        let (bx, by) = (c.ax(bu), c.ay(bv));
-        c.disque(bx, by, 2, CONTOUR, Mode::Plein);
-        c.disque(bx, by, 1, rgb(0x6e4426), Mode::Plein);
-        c.poser(bx, by, rgb(0xd8b07a), Mode::Plein); // tranche claire du cœur de chêne
+    let planche_y = c.ay(14.9);
+    let (px0, px1) = (c.ax(0.0), c.ax(5.6));
+    c.boite(px0, planche_y, px1, planche_y + 2, rgb(0x7a4c2a), CONTOUR, Mode::Plein);
+    c.rect(px0, planche_y, px1 - 1, planche_y + 1, rgb(0x96643a), Mode::Plein);
+    for &kx in &[px0 + 3, px1 - 4] {
+        c.ligne(kx, planche_y + 2, kx + 2, planche_y + 4, rgb(0x2e3240), Mode::Plein);
+    }
+    const RONDIN: [&str; 5] = [".bbb.", "bttTb", "btctb", "bTttb", ".bbb."];
+    let rang_x = |k: usize| -> (i32, i32) {
+        // quatre rondins, puis trois, deux et un au sommet ; cinq pixels d'art de large, jointifs
+        let (rang, i) = match k {
+            0..=3 => (0, k as i32),
+            4..=6 => (1, (k - 4) as i32),
+            7..=8 => (2, (k - 7) as i32),
+            _ => (3, 0),
+        };
+        (px0 + 1 + rang * 5 / 2 + i * 5, planche_y - 5 - rang * 4)
+    };
+    for k in 0..pile {
+        let (bx, by) = rang_x(k);
+        for (j, ligne) in RONDIN.iter().enumerate() {
+            for (i, b) in ligne.bytes().enumerate() {
+                let col = match b {
+                    b'b' => rgb(0x4a2e1a),
+                    b't' => rgb(0xc89a62),
+                    b'T' => rgb(0xe0b67c),
+                    b'c' => rgb(0x8a5e34),
+                    _ => continue,
+                };
+                c.poser(bx + i as i32, by + j as i32, col, Mode::Plein);
+            }
+        }
     }
 
-    // 3. Bûches ardentes et lit de braises dans l'âtre (`world.fuel5h`, `0..=8`)
+    // 3. L'âtre (`world.fuel5h`, `0..=8` bûches) : la brique qui rougit, les flammes qui montent DERRIÈRE les bûches
+    // couchées (le bois se découpe en sombre sur le feu), le lit de braises dessous
     let logs = match w.fuel5h {
         None => 8usize,
         Some(f) => ((8.0 * (1.0 - f.min(100.0) / 100.0)).round() as i32).clamp(0, 8) as usize,
     };
     let (mx0, mx1) = (c.ax(MOUTH.0 as f32), c.ax((MOUTH.0 + MOUTH.2) as f32));
     let my_sol = c.ay(26.2);
+    let haut0 = c.ay(MOUTH.1 as f32);
+    let t = tick as f32 * 0.55;
 
-    // Tapis de braises incandescentes
-    for ax in mx0..mx1 {
-        let vif = ((ax as i64 + tick / 2) % 3) == 0;
-        let br = if feu == 0 {
-            if vif { rgb(0x9e321e) } else { rgb(0x521c18) }
-        } else if vif {
-            rgb(0xff7824)
-        } else {
-            rgb(0xc8381c)
-        };
-        c.poser(ax, my_sol, br, Mode::Lueur);
-        c.poser(ax, my_sol - 1, echelle(br, 0.8), Mode::Lueur);
-    }
-    for i in 0..logs {
-        let lu = MOUTH.0 as f32 + 0.5 + i as f32 * 0.95;
-        let lx = c.ax(lu);
-        c.boite(lx - 1, my_sol - 3, lx + 2, my_sol, rgb(0x4a2c1a), CONTOUR, Mode::Plein);
-        if feu > 0 && (i + (tick as usize / 3)) % 2 == 0 {
-            c.poser(lx, my_sol - 2, rgb(0xff6820), Mode::Lueur);
+    // la brique réfractaire rougit au-dessus du feu
+    if feu > 0 {
+        for ay in haut0..my_sol {
+            let k = ((ay - haut0) as f32 / (my_sol - haut0).max(1) as f32).powf(1.6) * (0.35 + 0.15 * feu as f32);
+            for ax in mx0..mx1 {
+                let centre = 1.0 - ((ax as f32 - (mx0 + mx1) as f32 * 0.5).abs() / ((mx1 - mx0) as f32 * 0.5)).min(1.0);
+                let a = (k * (0.5 + 0.5 * centre)).min(0.85);
+                if a > 0.08 {
+                    let fond = c.buf[(ay * c.aw + ax) as usize].rgb;
+                    c.poser(ax, ay, melange(fond, rgb(0x8a2a12), a), Mode::Lueur);
+                }
+            }
         }
     }
 
-    // 4. Langues de flammes étagées en pixel art net (`Mode::Lueur`)
+    // les langues de flamme : cinq fuseaux qui s'effilent et ondulent, plus hauts au centre ; le cœur blanc-or, puis
+    // l'or, l'orange et un liseré vermeil au bord
     if feu > 0 {
-        let my_haut = c.ay(MOUTH.1 as f32 + 0.4);
-        let h_max = (my_sol - 2 - my_haut).max(3);
-        for ax in mx0..mx1 {
-            let centre = 1.0 - ((ax as f32 - (mx0 + mx1 - 1) as f32 * 0.5).abs() / ((mx1 - mx0).max(2) as f32 * 0.55)).min(1.0);
-            let danse = hash_f(tick * 29 + ax as i64 * 13) * 0.42 - 0.14;
-            let frac_h = ((feu as f32 / 4.0) * (0.45 + 0.65 * centre) + danse).clamp(0.12, 1.0);
-            let h_col = ((h_max as f32 * frac_h).round() as i32).max(1);
-            for k in 0..h_col {
-                let f = k as f32 / h_col.max(1) as f32;
-                let col = if f < 0.24 {
-                    rgb(0xfff49c) // cœur blanc-or
-                } else if f < 0.52 {
-                    rgb(0xffbe34) // or vif
-                } else if f < 0.80 {
-                    rgb(0xf2641e) // orange forge
+        let h_max = (my_sol - c.ay(MOUTH.1 as f32 + 0.5)) as f32;
+        let large = (mx1 - mx0) as f32;
+        let lw = (mx1 - mx0) as usize;
+        let mut chaleur = vec![0.0f32; lw * (my_sol - haut0).max(0) as usize];
+        let langues = 5;
+        for i in 0..langues {
+            let fi = i as f32;
+            let place = (fi + 0.5) / langues as f32;
+            let centre = 1.0 - (place - 0.5).abs() * 1.3;
+            let souffle = (t * 1.7 + fi * 2.1).sin() * 0.12 + (t * 2.9 + fi * 1.3).sin() * 0.08;
+            let h = h_max * (0.4 + 0.6 * feu as f32 / 4.0) * (0.55 + 0.45 * centre + souffle).clamp(0.35, 1.0);
+            let cx = mx0 as f32 + large * place + (t * 1.1 + fi).sin() * 0.8;
+            let bw = large / langues as f32 * 0.85 + 1.0;
+            for dy in 0..(h as i32) {
+                let s = dy as f32 / h;
+                let demi = bw * (1.0 - s).powf(0.8) * (0.7 + 0.3 * (s * 5.0).min(1.0));
+                let x_c = cx + (t * 2.3 + fi * 1.3 + s * 4.0).sin() * s * 2.6;
+                let ay = my_sol - 1 - dy;
+                if ay < haut0 {
+                    break;
+                }
+                for ax in (x_c - demi).floor() as i32..=(x_c + demi).ceil() as i32 {
+                    if ax < mx0 || ax >= mx1 {
+                        continue;
+                    }
+                    let dx = (ax as f32 + 0.5 - x_c).abs() / demi.max(0.5);
+                    if dx > 1.0 {
+                        continue;
+                    }
+                    let q = (1.0 - dx) * 0.75 + (1.0 - s) * 0.55 - 0.1;
+                    let j = (ay - haut0) as usize * lw + (ax - mx0) as usize;
+                    if q > chaleur[j] {
+                        chaleur[j] = q;
+                    }
+                }
+            }
+        }
+        for ay in haut0..my_sol {
+            for ax in mx0..mx1 {
+                let q = chaleur[(ay - haut0) as usize * lw + (ax - mx0) as usize];
+                if q <= 0.0 {
+                    continue;
+                }
+                let col = if q > 0.86 {
+                    rgb(0xfff6c4)
+                } else if q > 0.66 {
+                    rgb(0xffd84a)
+                } else if q > 0.42 {
+                    rgb(0xffa02a)
+                } else if q > 0.2 {
+                    rgb(0xf0601c)
                 } else {
-                    rgb(0xb8281e) // crête vermeille
+                    rgb(0xb02a18)
                 };
-                c.poser(ax, my_sol - 2 - k, col, Mode::Lueur);
+                c.poser(ax, ay, col, Mode::Lueur);
+            }
+        }
+    }
+
+    // le lit de braises
+    for ax in mx0..mx1 {
+        for (k, ay) in [my_sol, my_sol + 1].into_iter().enumerate() {
+            let vif = hash_f(ax as i64 * 7 + k as i64 * 3 + tick / 3) > 0.55;
+            let br = match (feu == 0, vif) {
+                (true, true) => rgb(0x7a2618),
+                (true, false) => rgb(0x3a1814),
+                (false, true) => rgb(0xffb040),
+                (false, false) => rgb(0xd04a1c),
+            };
+            c.poser(ax, ay, if k == 1 { echelle(br, 0.75) } else { br }, Mode::Lueur);
+        }
+    }
+
+    // les bûches : deux couchées au fond, puis d'autres croisées en tipi par-dessus (dans l'ordre où elles brûlent : les
+    // dernières de la liste partent les premières) ; écorce sombre cernée, bout coupé clair, braises sur le dessus
+    const BUCHES: [(i32, i32, i32, i32); 8] = [
+        (1, 14, 0, 0),
+        (21, 34, 0, 0),
+        (10, 25, 1, 1),
+        (3, 15, 2, 7),
+        (33, 21, 2, 7),
+        (13, 24, 5, 5),
+        (8, 17, 7, 11),
+        (28, 19, 7, 11),
+    ];
+    let echelle_x = (mx1 - mx0) as f32 / 36.0;
+    for (i, &(xa, xb, ya, yb)) in BUCHES.iter().enumerate().take(logs) {
+        let (xa, xb) = (mx0 + (xa as f32 * echelle_x) as i32, mx0 + (xb as f32 * echelle_x) as i32);
+        let (g, d) = (xa.min(xb), xa.max(xb));
+        for x in g..=d {
+            let f = if xb == xa { 0.0 } else { (x - xa) as f32 / (xb - xa) as f32 };
+            let y = my_sol - 2 - (ya as f32 + (yb - ya) as f32 * f).round() as i32;
+            c.poser(x, y - 2, CONTOUR, Mode::Plein);
+            // sombres : le feu qui les éclaire par derrière les ferait virer à l'orange
+            c.poser(x, y - 1, rgb(0x4a2c18), Mode::Plein);
+            c.poser(x, y, rgb(0x2a1810), Mode::Plein);
+            c.poser(x, y + 1, CONTOUR, Mode::Plein);
+            if feu > 0 && hash_f(x as i64 * 13 + i as i64 * 5 + tick / 2) > 0.82 {
+                c.poser(x, y - 1, rgb(0xff8a2a), Mode::Lueur);
+            }
+        }
+        // le bout coupé, clair, du côté où la bûche finit
+        let yb_ = my_sol - 2 - yb;
+        c.poser(xb, yb_ - 1, rgb(0xd8aa6c), Mode::Plein);
+        c.poser(xb, yb_, rgb(0xb08048), Mode::Plein);
+    }
+
+    // de petites langues devant les bûches, qui lèchent le bois
+    if feu >= 2 {
+        for i in 0..3 {
+            let lx = mx0 + 4 + i * (mx1 - mx0 - 8) / 2;
+            let hh = 2 + ((t * 2.0 + i as f32 * 2.4).sin() * 1.5 + 1.5) as i32;
+            for dy in 0..hh {
+                c.poser(lx, my_sol - 5 - dy, if dy == 0 { rgb(0xffd84a) } else { rgb(0xffa02a) }, Mode::Lueur);
             }
         }
     }
@@ -1304,52 +1471,89 @@ fn peindre_foyer_et_soufflet(c: &mut Canevas, w: &Monde, p: &Pose, tick: i64) {
         c.poser(kx + 1, ky - 3 - vap, rgb(0xdce2ee), Mode::Sol);
     }
 
-    // 6. Soufflet médiéval fuselé en poire : cuir sombre plissé, joues de chêne et clous de laiton (`u = 11.4..18.4`)
-    let bx0 = c.ax(12.4);
-    let bx1 = c.ax(17.8);
-    let by_mil = c.ay(23.2);
-    let demi_max = if p.bellows { 3 } else { 5 };
-
-    // Buse conique de laiton fichée dans le flanc du four
-    c.rect(c.ax(11.3), by_mil - 1, bx0 + 1, by_mil + 1, CONTOUR, Mode::Plein);
-    c.rect(c.ax(11.4), by_mil - 1, bx0 + 1, by_mil, rgb(0xd4a442), Mode::Plein);
-    if p.bellows {
-        c.poser(c.ax(10.4), by_mil - 1, rgb(0xfff0a0), Mode::Lueur);
-        c.poser(c.ax(9.6), by_mil - 2, rgb(0xffb844), Mode::Lueur);
+    // 6. Le soufflet, accroché au flanc du four, vu de face : une poire de chêne cernée de clous de laiton, sa soupape
+    // de cuir au milieu, sa buse de laiton qui entre dans le four, sa poignée percée à droite ; le cuir plissé dépasse
+    // dessous, épais quand il est plein d'air, mince quand Scorpheus l'écrase (`p.bellows`)
+    let by = c.ay(23.0);
+    let (nez, cx, poignee) = (c.ax(12.6), c.ax(16.3), c.ax(18.9));
+    let r = ((poignee - cx) as f32 * 0.62).max(4.0);
+    let rx_cone = nez + 2;
+    let demi = |ax: i32| -> f32 {
+        let dx = (ax - cx) as f32;
+        let rond = if dx.abs() <= r { (r * r - dx * dx).sqrt() } else { -1.0 };
+        let cone = if ax >= rx_cone && ax <= cx { 1.6 + (ax - rx_cone) as f32 / (cx - rx_cone).max(1) as f32 * (r * 0.8 - 1.6) } else { -1.0 };
+        rond.max(cone)
+    };
+    let cuir = if p.bellows { 1 } else { 3 };
+    // la buse : un cône de laiton qui s'effile vers le feu
+    for ax in c.ax(11.4)..=rx_cone {
+        let e = if ax < nez - 1 { 0 } else { 1 };
+        c.rect(ax, by - 1 - e, ax + 1, by + 2 + e, CONTOUR, Mode::Plein);
+        c.poser(ax, by - e, rgb(0xe0b04c), Mode::Plein);
+        c.poser(ax, by + 1, rgb(0xa8782c), Mode::Plein);
     }
-
-    // Corps en soufflet triangulaire (étroit à la buse à gauche, large aux poignées à droite)
-    let larg = (bx1 - bx0).max(2);
-    for ax in bx0..=bx1 {
-        let t = (ax - bx0) as f32 / larg as f32;
-        let demi = (1.0 + t * (demi_max - 1) as f32).round() as i32;
-        let yh = by_mil - demi;
-        let yb = by_mil + demi;
-        for ay in yh..=yb {
-            let col = if ax == bx0 || ax == bx1 || ay == yh || ay == yb {
+    let fin = cx + r as i32;
+    // le cuir qui dépasse sous la planche, plissé
+    for ax in rx_cone..=fin {
+        let d = demi(ax);
+        if d < 0.0 {
+            continue;
+        }
+        let y0 = by + d.round() as i32;
+        for k in 0..=cuir {
+            let pli = (ax + k) % 3 == 0;
+            c.poser(ax, y0 + k, if k == cuir { CONTOUR } else if pli { rgb(0x3a1a18) } else { rgb(0x6a2e26) }, Mode::Plein);
+        }
+    }
+    // la planche de chêne, éclairée du côté du feu (en haut, à gauche), son contour net
+    for ax in rx_cone..=fin {
+        let d = demi(ax);
+        if d < 0.0 {
+            continue;
+        }
+        let dr = d.round() as i32;
+        let voisin = |x: i32| { let e = demi(x); if e < 0.0 { -1 } else { e.round() as i32 } };
+        let (dg, dd) = (voisin(ax - 1), voisin(ax + 1));
+        for ay in by - dr..=by + dr {
+            let dy = (ay - by).abs();
+            let bord = dy == dr || dy > dg || dy > dd;
+            let col = if bord {
                 CONTOUR
-            } else if ay == yh + 1 || ay == yb - 1 {
-                // Joues de chêne ferré et clous de laiton
-                if (ax - bx0) % 2 == 1 && t > 0.25 {
-                    rgb(0xe2b64c)
-                } else {
-                    rgb(0x4e2f1a)
-                }
-            } else if (ax - bx0) % 2 == 0 {
-                rgb(0x3b1e22) // pli creux du cuir
             } else {
-                rgb(0x642a2c) // cuir tanné grenat sombre
+                let fil = ((ay * 3 + ax / 4) % 5) == 0;
+                let clair = ((ay - by) as f32) < -d * 0.35 || ax < cx - (r * 0.5) as i32;
+                match (clair, fil) {
+                    (true, false) => rgb(0x9a6638),
+                    (true, true) => rgb(0x84542c),
+                    (false, false) => rgb(0x7a4c28),
+                    (false, true) => rgb(0x643c20),
+                }
             };
             c.poser(ax, ay, col, Mode::Plein);
         }
     }
-    // Deux poignées de chêne tournées vers la droite
-    let lev_x = c.ax(18.7);
-    let ecart_p = if p.bellows { 2 } else { 4 };
-    c.ligne(bx1, by_mil - demi_max + 1, lev_x, by_mil - ecart_p, rgb(0x6e4426), Mode::Plein);
-    c.ligne(bx1, by_mil + demi_max - 1, lev_x, by_mil + ecart_p - 1, rgb(0x52321b), Mode::Plein);
-    c.poser(lev_x, by_mil - ecart_p, rgb(0xdcb04c), Mode::Plein);
-    c.poser(lev_x, by_mil + ecart_p - 1, rgb(0xdcb04c), Mode::Plein);
+    // les clous de laiton autour de la planche
+    for (k, ax) in (rx_cone + 2..fin - 1).enumerate() {
+        let d = demi(ax);
+        if d >= 2.0 && k % 3 == 0 {
+            c.poser(ax, by - d.round() as i32 + 1, rgb(0xf0c860), Mode::Plein);
+            c.poser(ax, by + d.round() as i32 - 1, rgb(0xc8983c), Mode::Plein);
+        }
+    }
+    // la soupape : un rond de cuir cousu au milieu
+    c.disque(cx, by, 2, rgb(0x5a2622), Mode::Plein);
+    c.poser(cx - 1, by - 1, rgb(0x8a3e30), Mode::Plein);
+    c.poser(cx, by, CONTOUR, Mode::Plein);
+    // la poignée, percée, qui dépasse à droite
+    c.boite(fin - 1, by - 2, poignee + 1, by + 3, rgb(0x8a5a32), CONTOUR, Mode::Plein);
+    c.rect(poignee - 2, by, poignee, by + 1, rgb(0x2a1a12), Mode::Plein);
+    // le souffle : des étincelles qui jaillissent de la buse dans le feu
+    if p.bellows && feu > 0 {
+        for i in 0..3i64 {
+            let a = (tick + i * 2).rem_euclid(6) as i32;
+            c.poser(c.ax(11.0) - a * 2, by - (i as i32 - 1) * a / 2, if a < 3 { rgb(0xfff2a0) } else { rgb(0xffa83a) }, Mode::Lueur);
+        }
+    }
 }
 
 // ============================================================================
@@ -1571,20 +1775,21 @@ fn peindre_chandelles_poudlard(c: &mut Canevas, clock: i64) {
         let (u, v) = position_chandelle(idx, clock);
         let cx = c.ax(u);
         let cy = c.ay(v);
-        // Fût de cire d'abeille ivoire + coulure de cire
-        c.boite(cx - 1, cy, cx + 2, cy + 5, rgb(0xf2e8cf), CONTOUR, Mode::Sol);
-        c.poser(cx, cy + 1, rgb(0xfff8e8), Mode::Sol);
-        c.poser(cx - 1, cy + 3, rgb(0xe4d4b2), Mode::Sol);
+        // Fût de cire d'abeille ivoire, ombré à droite, une coulure, et sa coupelle de laiton
+        c.boite(cx - 1, cy, cx + 3, cy + 7, rgb(0xf2e8cf), CONTOUR, Mode::Sol);
+        c.rect(cx, cy + 1, cx + 1, cy + 6, rgb(0xfff8e8), Mode::Sol);
+        c.rect(cx + 1, cy + 1, cx + 2, cy + 6, rgb(0xd8c8a4), Mode::Sol);
+        c.poser(cx - 1, cy + 2, rgb(0xf6ecd4), Mode::Sol);
+        c.rect(cx - 2, cy + 6, cx + 4, cy + 7, rgb(0xc89a40), Mode::Sol);
 
-        // Flamme dorée vacillante au sommet (`Mode::Lueur`)
+        // Flamme en goutte, vacillante (`Mode::Lueur`) : large et orangée en bas, blanche au cœur, effilée en haut
         let danse = ((clock + idx as i64 * 5) % 6 < 2) as i32;
-        c.poser(cx, cy - 2, rgb(0xff9e2c), Mode::Lueur);
-        c.poser(cx, cy - 3, rgb(0xfff6b0), Mode::Lueur);
-        if danse == 0 {
-            c.poser(cx, cy - 4, rgb(0xffcf48), Mode::Lueur);
-        } else {
-            c.poser(cx + 1, cy - 3, rgb(0xffb838), Mode::Lueur);
-        }
+        c.poser(cx, cy - 1, rgb(0xff8e2c), Mode::Lueur);
+        c.poser(cx + 1, cy - 1, rgb(0xe8782a), Mode::Lueur);
+        c.poser(cx, cy - 2, rgb(0xfff6c8), Mode::Lueur);
+        c.poser(cx + 1, cy - 2, rgb(0xffcf48), Mode::Lueur);
+        c.poser(cx + danse, cy - 3, rgb(0xffe27a), Mode::Lueur);
+        c.poser(cx + danse, cy - 4, rgb(0xffb838), Mode::Lueur);
     }
 }
 
