@@ -57,6 +57,10 @@ BASE = {
     'R': '#4a2c16', 'g': '#b4b7bf', 'd': '#7c808c', 's': '#ffd75e', 'c': '#7fd4ff',
 }
 
+# l'apprenti : les pixels de la pioche posée contre l'épaule, effacés quand il la prend en main
+SANS_PIOCHE = [(x, y, ["."]) for x, y in [(0, 4), (1, 4), (2, 4), (0, 5), (1, 5), (2, 5), (0, 6), (1, 6), (2, 6),
+                                         (1, 7), (1, 8), (1, 9), (1, 10), (1, 11)]]
+
 HABITANTS = {
     # le marin de face : suroît et ciré jaunes, grosse barbe blanche, l'écharpe à la couleur du profil
     'marin': {
@@ -335,6 +339,141 @@ HABITANTS = {
         'ouvrage': [
             [(1, 12, ["..O..O..O..O.."]), (1, 13, ["kkkkkkkkkkkkkk"]), (1, 14, ["kdgdgsgdgdgdgk"]), (1, 15, ["kkkkkkkkkkkkkk"])],
             [(1, 12, [".O..O..O..O..."]), (1, 13, ["kkkkkkkkkkkkkk"]), (1, 14, ["kdgsgdgdgsgdgk"]), (1, 15, ["kkkkkkkkkkkkkk"])],
+        ],
+    },
+    # le soudeur du Repaire des Mécanos : masque de soudure carré relevé sur le front (la visière à la couleur du
+    # profil), tablier de cuir sombre sur un débardeur, gros gants ; à l'ouvrage, le masque baissé, il soude une
+    # pièce de moteur au chalumeau : l'arc bleu-blanc, les gerbes d'étincelles d'or
+    'soudeur': {
+        'profil_couleur': '#2ab8a6',
+        'description': "le soudeur du Repaire des Mécanos : masque de soudure relevé sur le front à la couleur du profil, tablier de cuir sur débardeur, gros gants ; il soude une pièce de moteur, arc bleu-blanc et gerbes d'étincelles",
+        'palette': {'E': '#1e2a30', 'e': '#9ff4ec', 'h': '#3a2a1e', 'L': '#5a3a26', 'l': '#3a2416',
+                    'G': '#c8964a', 'n': '#3a3440', 'a': '#2e2420', 'A': '#8a90a0', 'f': '#ffffff'},
+        'debout': miroir([
+            "........",
+            "........",
+            "....kkkk",
+            "...kOOOO",
+            "...kOEEE",
+            "...koooo",
+            "...khppp",
+            "...kppmp",
+            "...kpppp",
+            "....kppp",
+            "..kppwLL",
+            ".kpppwLL",
+            ".kGGkLLL",
+            ".kGGkLlL",
+            "...knnk.",
+            "..kaaak.",
+        ]),
+        'plus': [(5, 4, ["e"])],
+        'yeux': [(6, 7), (9, 7)],
+        'ferme': 'q',
+        'bouche': (7, 9, ["MM"]),
+        'triste': [(6, 7, ["m..m"]), (11, 6, ["c"])],
+        'main': (13, 12),
+        'ouvrage': [
+            # le masque baissé, la pièce sur l'établi, le chalumeau dans le gant droit, l'arc et ses étincelles
+            [(3, 2, [".kkkkkkkk.", "khhhhhhhhk", "kOOOOOOOOk", "kOEEEEEEOk", "kOOOOOOOOk", "kooooooook"]),
+             (5, 13, ["kkkkkkk", "kAAdAAk", "kkkkkkk"]), (11, 11, ["kG"]), (10, 12, ["dk"]),
+             (9, 12, ["f"]), (8, 11, ["u.s"]), (12, 10, ["s"]), (4, 12, ["s"])],
+            [(3, 2, [".kkkkkkkk.", "khhhhhhhhk", "kOOOOOOOOk", "kOeeeeeeOk", "kOOOOOOOOk", "kooooooook"]),
+             (5, 13, ["kkkkkkk", "kAAdAAk", "kkkkkkk"]), (11, 11, ["kG"]), (10, 12, ["dk"]),
+             (8, 11, ["ufu"]), (8, 12, ["fuf"]), (6, 10, ["s"]), (13, 9, ["s"]), (3, 11, ["s"]), (14, 12, ["s"])],
+            [(3, 2, [".kkkkkkkk.", "khhhhhhhhk", "kOOOOOOOOk", "kOEEEEEEOk", "kOOOOOOOOk", "kooooooook"]),
+             (5, 13, ["kkkkkkk", "kAAdAAk", "kkkkkkk"]), (11, 11, ["kG"]), (10, 12, ["dk"]),
+             (9, 12, ["u"]), (7, 10, ["s"]), (11, 9, ["s"]), (2, 13, ["s"]), (15, 11, ["s"])],
+        ],
+    },
+    # l'astromancien de Gemini : coiffe d'astronome constellée à la couleur du profil, besicles rondes de laiton,
+    # barbe blanche, robe sombre bordée d'or ; à l'ouvrage, il fait tourner entre ses mains deux étoiles jumelles,
+    # l'une blanc-cyan, l'autre d'or (les Gémeaux)
+    'astromancien': {
+        'profil_couleur': '#4a88f0',
+        'description': "l'astromancien de Gemini : coiffe d'astronome constellée à la couleur du profil, besicles de laiton, robe sombre bordée d'or ; il fait tourner entre ses mains deux étoiles jumelles, blanc-cyan et or",
+        'palette': {'N': '#2a2450', 'n': '#18142e', 'y': '#e8c46a', 'Y': '#fff3b0', 'W': '#f4f1ea',
+                    'l': '#c9c4ba', 'e': '#7ff0ff', 'f': '#ffffff'},
+        'debout': miroir([
+            ".......k",
+            "......kO",
+            ".....kOO",
+            ".....kOO",
+            "....kOOO",
+            "...kOOOO",
+            ".kkooooo",
+            "...kpppp",
+            "...kpymy",
+            "...kpWWW",
+            "..kNWWWW",
+            ".kNNNWWl",
+            ".kpNNNWl",
+            ".kNnNNNl",
+            ".kNnNNNN",
+            ".kyyyyyy",
+        ]),
+        'plus': [(7, 2, ["s"]), (9, 4, ["w"]), (5, 5, ["w"]), (10, 3, ["s"]), (13, 12, ["p"]), (12, 12, ["N"])],
+        'yeux': [(6, 8), (9, 8)],
+        'ferme': 'y',
+        'bouche': (7, 10, ["MM"]),
+        'triste': [(5, 8, ["yyyyyy"]), (11, 7, ["c"])],
+        'main': (13, 12),
+        'lettre_bras': 'N',
+        'ouvrage': [
+            # les mains réunies devant la poitrine, les deux étoiles qui tournent l'une autour de l'autre
+            [(5, 13, ["p....p"]), (5, 10, [".e.", "efe", ".e."]), (9, 12, [".Y.", "YsY", ".Y."])],
+            [(5, 13, ["p....p"]), (6, 9, [".e.", "efe", ".e."]), (8, 13, [".Y.", "YsY"])],
+            [(5, 13, ["p....p"]), (8, 10, [".e.", "efe", ".e."]), (4, 12, [".Y.", "YsY", ".Y."])],
+            [(5, 13, ["p....p"]), (7, 12, [".e.", "efe", ".e."]), (6, 9, [".Y.", "YsY", ".Y."])],
+        ],
+    },
+    # l'apprenti des tickets Jira : un jeune nain mineur de la forge, bien distinct du forgeron (barbe courte
+    # brune, joue tachée de suie) : casque à bandeau à la couleur du profil et sa lampe frontale qui luit,
+    # bretelles, pioche contre l'épaule ; à l'ouvrage, il frappe un bloc de minerai qui jette des éclats
+    'apprenti': {
+        'profil_couleur': '#e0a030',
+        'description': "l'apprenti des tickets Jira : jeune nain mineur, casque à bandeau à la couleur du profil et lampe frontale, barbe courte brune, joue de suie, bretelles, pioche sur l'épaule ; il frappe un bloc de minerai",
+        'palette': {'A': '#9aa0b0', 'G': '#d8dce6', 'h': '#6a4428', 'S': '#d8c8a0', 'r': '#7a4a24',
+                    'b': '#4a3020', 'B': '#5a4a3a', 'n': '#3a3440', 'a': '#2e2420', 'Y': '#fff3b0',
+                    'f': '#ffffff', 'e': '#7ff0ff'},
+        'debout': miroir([
+            "........",
+            "........",
+            ".....kkk",
+            "....kAAA",
+            "...kAAAA",
+            "...kOOOO",
+            "...kpppp",
+            "...kppmp",
+            "...kpppq",
+            "...khhhh",
+            "..kSkhhh",
+            "..kSbSSS",
+            ".kpSbSSS",
+            "..kRRRRR",
+            "...kBBk.",
+            "..kaaak.",
+        ]),
+        # la lampe frontale dans le bandeau ; un reflet sur le casque ; la suie sur une joue ; la pioche tenue
+        # droite contre l'épaule droite (à gauche pour nous), le fer en T au-dessus
+        'plus': [(7, 5, ["YY"]), (5, 3, ["G"]), (4, 8, ["x"]),
+                 (0, 4, ["kkk"]), (0, 5, ["AGA"]), (0, 6, ["Ar"]), (2, 6, ["A"]), (1, 7, ["r", "r", "r", "r", "r"])],
+        'yeux': [(6, 7), (9, 7)],
+        'ferme': 'q',
+        'bouche': (7, 10, ["MM"]),
+        'triste': [(6, 7, ["m..m"]), (11, 6, ["c"])],
+        'main': (13, 12),
+        'ouvrage': [
+            # la pioche passe dans l'autre main : levée au-dessus de la tête, puis elle frappe le bloc de minerai
+            # posé à ses pieds, qui jette des éclats
+            [*SANS_PIOCHE, (12, 13, ["kkkk", "kxXk", "kXek"]),
+             (14, 10, ["p"]), (14, 5, ["r", "r", "r", "r", "r"]), (13, 3, ["kkk"]), (13, 4, ["AGA"]), (13, 5, ["A"]), (15, 5, ["A"])],
+            [*SANS_PIOCHE, (12, 13, ["kkkk", "kxXk", "kXek"]),
+             (13, 12, ["p"]), (14, 11, ["r"]), (13, 10, ["r"]), (15, 10, ["A"]), (15, 11, ["G"]), (15, 12, ["A"]), (14, 9, ["A"]),
+             (11, 12, ["f"]), (12, 11, ["s"]), (11, 10, ["e"])],
+            [*SANS_PIOCHE, (12, 13, ["kkkk", "kxXk", "kXek"]),
+             (13, 12, ["p"]), (14, 11, ["r"]), (13, 10, ["r"]), (15, 10, ["A"]), (15, 11, ["G"]), (15, 12, ["A"]), (14, 9, ["A"]),
+             (10, 11, ["s"]), (11, 9, ["f"]), (10, 13, ["e"])],
         ],
     },
 }
