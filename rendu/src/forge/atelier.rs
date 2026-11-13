@@ -35,6 +35,10 @@ pub struct Contexte {
     pub invites: Vec<InviteVu>,
     /// les louveteaux de ce dessin, que louveteau.rs peint au pixel d'art quand `pet` (la scène ne les dessine pas)
     pub louveteaux: std::cell::RefCell<Vec<super::louveteau::Vu>>,
+    /// les chouettes messagères de ce dessin, que chouette.rs peint au pixel d'art quand `pet`
+    pub chouettes: std::cell::RefCell<Vec<super::chouette::Vol>>,
+    /// le cadeau laissé dans la cour, que cadeau.rs peint au pixel d'art quand `pet`
+    pub cadeaux: std::cell::RefCell<Vec<Don>>,
     /// le coin des louveteaux dans la cour (le milieu de leur enclume), quand ils s'y tiennent
     pub coin: std::cell::Cell<Option<i32>>,
 }
@@ -51,7 +55,7 @@ pub struct InviteVu {
 
 impl Default for Contexte {
     fn default() -> Self {
-        Contexte { edge: SW, pet: false, interieur_fin: false, tete: &HAMMER_NORMAL, cape: *b"oO", invites: Vec::new(), louveteaux: Default::default(), coin: Default::default() }
+        Contexte { edge: SW, pet: false, interieur_fin: false, tete: &HAMMER_NORMAL, cape: *b"oO", invites: Vec::new(), louveteaux: Default::default(), chouettes: Default::default(), cadeaux: Default::default(), coin: Default::default() }
     }
 }
 
@@ -560,7 +564,11 @@ fn draw_visitor(ctx: &Contexte, g: &mut Grille, w: &Monde, clock: i64) {
     if kind == Visiteur::Corbeau {
         let (x, y) = (ctx.edge - arr(age as f64 * 1.3), 1 + arr((age as f64 / 3.0).sin()));
         let chouette = w.heure_ciel() >= 17.5 || hasard(clock.div_euclid(VISIT_EVERY) * 11 + 3) >= 0.5;
-        g.stamp(x, y, oiseau_messager(age, chouette));
+        if chouette && ctx.pet {
+            ctx.chouettes.borrow_mut().push(super::chouette::Vol { x, y, age, porte: false, sens: -1 });
+        } else {
+            g.stamp(x, y, oiseau_messager(age, chouette));
+        }
     } else {
         // une phalène autour de la lanterne
         let a = age as f64 * 0.6;
@@ -784,6 +792,10 @@ fn draw_messenger(ctx: &Contexte, g: &mut Grille, m: &Messager, clock: i64) {
     // portant dans ses serres un rouleau de parchemin scellé à la cire rouge et or
     let (x, y) = (ctx.edge - arr(m.age as f64 * 1.6), arr((m.age as f64 / 3.0).sin()));
     let chouette = hasard((clock - m.age) * 17 + 5) >= 0.5;
+    if chouette && ctx.pet {
+        ctx.chouettes.borrow_mut().push(super::chouette::Vol { x, y, age: m.age, porte: true, sens: -1 });
+        return;
+    }
     g.stamp(x, y, oiseau_messager(m.age, chouette));
     g.stamp(
         x + CLAWS.0 - 1,
@@ -1672,8 +1684,12 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
                 let rx = CRATE_AT.0 + 1 - arr(af * if a < 0 { 0.7 } else { 1.4 });
                 let ry = CRATE_AT.1 - 6 - arr(af.abs() * if a < 0 { 3.0 } else { 1.3 });
                 let chouette = hasard((clock - a) * 13 + 7) >= 0.5;
-                g.stamp(rx, ry, oiseau_messager(a, chouette));
-                if a >= 0 {
+                if chouette && ctx.pet {
+                    ctx.chouettes.borrow_mut().push(super::chouette::Vol { x: rx, y: ry, age: a, porte: a >= 0, sens: -1 });
+                } else {
+                    g.stamp(rx, ry, oiseau_messager(a, chouette));
+                }
+                if a >= 0 && !(chouette && ctx.pet) {
                     if chouette {
                         g.stamp(rx + CLAWS.0 - 2, ry + CLAWS.1, &["kWWFWWk", ".kFyFk."]); // rouleau de parchemin scellé à la cire
                     } else {
@@ -1745,7 +1761,11 @@ pub fn compose(ctx: &mut Contexte, cour: &mut Cour, p: &Pose, world: &Monde, tic
         draw_cat(&mut g, cat);
     }
     if let Some(gift) = &world.gift {
-        draw_gift(&mut g, gift);
+        if ctx.pet {
+            ctx.cadeaux.borrow_mut().push(gift.clone());
+        } else {
+            draw_gift(&mut g, gift);
+        }
     }
 
     // les invités d'autres sessions : le même Scorpheus, chacun à son allure, dans la cour

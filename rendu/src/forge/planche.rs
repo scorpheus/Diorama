@@ -268,6 +268,38 @@ pub fn galadriel(dossier: &str, extra: i32, perso: Option<Perso>, filtre: &[Stri
             w.flavor = Saveur::Build;
             w.apprentices = vec![petit(3, 20, b'P'), petit(7, 33, b'b'), petit(11, 52, b'G')];
         })),
+        // la vie de la cour : le lapin, l'écureuil et le poisson sortent tous au début de leur cycle (paysage.rs)
+        ("betes-ete", Activite::Idle, 0, gala(&|w| {
+            w.hour = 11.0;
+            w.month = 7;
+            w.rhum = None;
+            w.clock = 2;
+        })),
+        // les cadeaux des agents dans l'herbe de la cour, l'un après l'autre
+        ("cadeau-pieces", Activite::Idle, 0, gala(&|w| { w.hour = 11.0; w.rhum = None; w.gift = Some(Don { kind: Cadeau::Coin, age: 1 }) })),
+        ("cadeau-lembas", Activite::Idle, 0, gala(&|w| { w.hour = 11.0; w.rhum = None; w.gift = Some(Don { kind: Cadeau::Cookie, age: 1 }) })),
+        ("cadeau-minerai", Activite::Idle, 0, gala(&|w| { w.hour = 11.0; w.rhum = None; w.gift = Some(Don { kind: Cadeau::Ore, age: 1 }) })),
+        ("cadeau-mot", Activite::Idle, 0, gala(&|w| { w.hour = 20.5; w.rhum = None; w.gift = Some(Don { kind: Cadeau::Note, age: 1 }) })),
+        // la chouette mécanique qui traverse le ciel de la cour, la nuit
+        ("chouette-nuit", Activite::Idle, 0, gala(&|w| {
+            w.hour = 22.0;
+            w.rhum = None;
+            w.clock = 460 + 90;
+        })),
+        // le râtelier plein, Andúril au-dessus, l'arme du jour encore rouge ; la nuit, Dard luit
+        ("armes-jour", Activite::Idle, 0, gala(&|w| {
+            w.hour = 11.0;
+            w.rhum = None;
+            w.rack = vec![Arme::Sword, Arme::Axe, Arme::Dagger, Arme::Mace, Arme::Sword, Arme::Axe, Arme::Mace];
+            w.masterpiece = true;
+            w.forging = true;
+        })),
+        ("armes-nuit", Activite::Running, 0, gala(&|w| {
+            w.hour = 23.0;
+            w.rhum = None;
+            w.rack = vec![Arme::Sword, Arme::Axe, Arme::Dagger, Arme::Mace, Arme::Sword, Arme::Dagger, Arme::Axe];
+            w.masterpiece = true;
+        })),
     ];
     let cols = (super::atelier::SW + extra.clamp(0, super::atelier::GROW)) as usize;
     let (fw, fh) = (cols as i32 * CW, ROWS * CH);
@@ -277,6 +309,11 @@ pub fn galadriel(dossier: &str, extra: i32, perso: Option<Perso>, filtre: &[Stri
     for (n, (nom, a, t, monde)) in scenes.iter().enumerate() {
         if !filtre.is_empty() && !filtre.iter().any(|f| nom.contains(f.as_str())) {
             continue;
+        }
+        // à son poste, comme ClaudeTerminal l'y mène (cerveau/acte.rs) : au soufflet pour une compilation
+        let mut monde = monde.clone();
+        if let Some(x) = anchor_of(*a, &monde).filter(|_| !monde.walking) {
+            monde.x = x;
         }
         let mut sf = SceneForge::new();
         sf.recevoir(Etat { recadrage: Recadrage::Full, extra, lit: true, activite: *a, tick: *t, monde: monde.clone() });

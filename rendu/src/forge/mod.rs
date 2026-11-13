@@ -14,6 +14,8 @@ pub mod gerbe;
 pub mod interieur;
 pub mod jauges;
 pub mod lumiere;
+pub mod cadeau;
+pub mod chouette;
 pub mod louveteau;
 pub mod paysage;
 pub mod monde;
@@ -55,6 +57,10 @@ pub struct Forge {
     pub chat: Option<(monde::Chat, Option<pet::Eclairage>)>,
     /// les louveteaux de la dernière image et la lumière sur eux, peints au pixel d'art comme elle (louveteau.rs)
     pub louveteaux: Vec<(louveteau::Vu, Option<pet::Eclairage>)>,
+    /// les chouettes messagères mécaniques de la dernière image et la lumière sur elles (chouette.rs)
+    pub chouettes: Vec<(chouette::Vol, Option<pet::Eclairage>)>,
+    /// le cadeau des agents dans la cour et la lumière sur lui (cadeau.rs)
+    pub cadeaux: Vec<(monde::Don, Option<pet::Eclairage>)>,
     /// leur coin de cour (le milieu de l'enclume) et la lumière dessus
     pub coin: Option<(i32, Option<pet::Eclairage>)>,
     /// carte d'éclairage continu de la pièce pour `interieur.rs`
@@ -91,8 +97,12 @@ impl Forge {
         let p = poses::pose_of(activity, tick, world);
         self.pose = Some(p);
         self.ctx.louveteaux.borrow_mut().clear();
+        self.ctx.chouettes.borrow_mut().clear();
+        self.ctx.cadeaux.borrow_mut().clear();
         let scene = compose(&mut self.ctx, &mut self.cour, &p, world, tick, false, width);
         self.louveteaux = self.ctx.louveteaux.borrow_mut().drain(..).map(|c| (c, None)).collect();
+        self.chouettes = self.ctx.chouettes.borrow_mut().drain(..).map(|c| (c, None)).collect();
+        self.cadeaux = self.ctx.cadeaux.borrow_mut().drain(..).map(|c| (c, None)).collect();
         self.coin = self.ctx.coin.get().map(|s| (s, None));
         let fin = if x1 == SW { width } else { x1 };
         let coup = if pet && p.sparks_age == Some(0) { p.spark_count.map(|n| n as usize) } else { None };
@@ -162,6 +172,18 @@ impl Forge {
         }
         if let Some((s, e)) = self.coin.as_mut() {
             let (x, y, w, h) = louveteau::emprise_coin(*s, SH);
+            let mut l = lumiere.eclairage(x, y, w, h);
+            dehors_au_ciel(&mut l, ciel, porte, Perso::Scorpheus);
+            *e = Some(l);
+        }
+        for (c, e) in self.cadeaux.iter_mut() {
+            let (x, y, w, h) = cadeau::emprise(c);
+            let mut l = lumiere.eclairage(x, y, w, h);
+            dehors_au_ciel(&mut l, ciel, porte, Perso::Scorpheus);
+            *e = Some(l);
+        }
+        for (c, e) in self.chouettes.iter_mut() {
+            let (x, y, w, h) = chouette::emprise(c);
             let mut l = lumiere.eclairage(x, y, w, h);
             dehors_au_ciel(&mut l, ciel, porte, Perso::Scorpheus);
             *e = Some(l);
@@ -523,6 +545,10 @@ impl crate::scene::Scene for SceneForge {
         }
         // les jauges au sol, sous lui quand il passe dessus
         let mut peints: Vec<_> = jauges::peindre(image.pixels, w, h, cw, ch, &monde).into_iter().collect();
+        // le cadeau des agents, dans l'herbe
+        for (c, e) in &self.forge.cadeaux {
+            peints.extend(cadeau::peindre(c, e.as_ref(), image.pixels, w, h, x0, cw, ch));
+        }
         // la panthère, au pixel d'art, derrière lui et ses invités
         if let Some((cat, e)) = &self.forge.chat {
             peints.extend(chat::peindre(cat, e.as_ref(), image.pixels, w, h, x0, cw, ch));
@@ -535,6 +561,10 @@ impl crate::scene::Scene for SceneForge {
             peints.extend(louveteau::peindre(c, e.as_ref(), image.pixels, w, h, x0, cw, ch));
         }
         peints.extend(acteurs.iter().filter_map(|a| pet::peindre(a, image.pixels, w, h, x0, cw, ch)));
+        // les chouettes messagères, au-dessus de tout le monde
+        for (c, e) in &self.forge.chouettes {
+            peints.extend(chouette::peindre(c, e.as_ref(), image.pixels, w, h, x0, cw, ch));
+        }
         let fete = monde.fete();
         peints.extend(acteurs.iter().filter_map(|a| interieur::peindre_chapeau_acteur(a, fete, image.pixels, w, h, x0, cw, ch)));
         peints.extend(self.gerbe.peindre(image.pixels, w, h));

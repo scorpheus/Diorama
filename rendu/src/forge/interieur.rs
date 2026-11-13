@@ -28,6 +28,9 @@ use super::poses::{Caisse, Droite, Gauche, Lingot, Pose};
 /// Taille d'un pixel d'art de l'intérieur en vrais pixels d'écran (`2×2`).
 pub const GRAIN: usize = 2;
 
+/// Le haut de l'appui de la fenêtre, en demi-rangées : la panthère roulée s'y pose (chat.rs).
+pub(super) const V_APPUI: f32 = 9.4;
+
 const CONTOUR: [u8; 3] = [0x1b, 0x19, 0x24];
 
 const fn rgb(hex: u32) -> [u8; 3] {
@@ -718,7 +721,7 @@ fn peindre_fenetre_ogive(c: &mut Canevas, w: &Monde, clock: i64) {
     let uc = (u0 + u1) * 0.5; // 19.0
     let v_haut = 0.6f32;
     let v_imposte = 4.6f32; // naissance de l'arc brisé
-    let v_appui = 9.4f32;
+    let v_appui = V_APPUI;
 
     let nuit = w.nuit();
     let ciel_h = w.heure_ciel() as f32;
@@ -1034,24 +1037,35 @@ fn peindre_ratelier_et_anduril(c: &mut Canevas, w: &Monde, activite: Activite, p
         c.poser(sx, ry + 1, rgb(0xdcb04c), Mode::Sol);
     }
 
-    // *Andúril*, la Flamme de l'Ouest reforgée : couchée à l'horizontale sur crochets d'or quand `masterpiece`
+    // *Andúril*, la Flamme de l'Ouest reforgée : couchée à l'horizontale sur crochets d'or quand `masterpiece` ; sa garde
+    // en lettres (`ANDURIL_GARDE`), puis la longue lame de mithril, ses runes qui luisent une à une
     if w.masterpiece {
         let ay = c.ay(10.95);
         let (ax_g, ax_d) = (c.ax(15.2), c.ax(26.8));
-        // Crochets d'or
-        c.poser(c.ax(18.0), ay + 1, rgb(0xd4a43c), Mode::Sol);
-        c.poser(c.ax(24.0), ay + 1, rgb(0xd4a43c), Mode::Sol);
-        // Pommeau saphir, fusée et grande garde elfique d'or
-        c.poser(ax_g, ay, rgb(0x54a8ff), Mode::Lueur);
-        c.rect(ax_g + 1, ay, ax_g + 4, ay + 1, rgb(0x6e3b22), Mode::Sol);
-        c.rect(ax_g + 4, ay - 2, ax_g + 5, ay + 3, rgb(0xf4ce5e), Mode::Lueur);
-        // Longue lame de mithril aux runes stellaires
-        c.rect(ax_g + 5, ay - 1, ax_d, ay + 2, CONTOUR, Mode::Sol);
-        c.rect(ax_g + 5, ay, ax_d - 1, ay + 1, rgb(0xe8f2ff), Mode::Lueur);
-        c.poser(ax_d - 1, ay, rgb(0xffffff), Mode::Lueur);
-        let eclat = ((w.clock / 3) % 8) as i32;
-        if ax_g + 6 + eclat * 2 < ax_d - 1 {
-            c.poser(ax_g + 6 + eclat * 2, ay, rgb(0xffffff), Mode::Lueur);
+        c.poser(c.ax(19.0), ay + 3, rgb(0xd4a43c), Mode::Sol);
+        c.poser(c.ax(24.0), ay + 3, rgb(0xd4a43c), Mode::Sol);
+        dessin_arme(c, ax_g, ay - 4, &ANDURIL_GARDE, &|l| teinte_arme(l, Etat::Froide));
+        let (debut, pointe) = (ax_g + 11, ax_d);
+        let eclat = ((w.clock / 3) % 12) as i32;
+        for x in debut..=pointe {
+            let reste = pointe - x;
+            let demi: i32 = if reste <= 1 { 0 } else if reste <= 4 { 1 } else { 2 };
+            for dy in -demi..=demi {
+                let col = if dy.abs() == demi {
+                    CONTOUR
+                } else if dy < 0 {
+                    rgb(0xf4f8ff)
+                } else if dy > 0 {
+                    rgb(0x9aa6c0)
+                } else if (x - debut) % 4 == 2 && reste > 5 {
+                    // les runes : chacune s'allume quand l'éclat passe
+                    if ((x - debut) / 4 - eclat).abs() <= 1 { rgb(0xffffff) } else { rgb(0x8ad8ff) }
+                } else {
+                    rgb(0xd4dcec)
+                };
+                let mode = if dy == 0 && (x - debut) % 4 == 2 { Mode::Lueur } else { Mode::Sol };
+                c.poser(x, ay + dy, col, mode);
+            }
         }
     }
 
@@ -1065,65 +1079,200 @@ fn peindre_ratelier_et_anduril(c: &mut Canevas, w: &Monde, activite: Activite, p
     for (i, &arme) in derniers.iter().enumerate() {
         let su = RACK_SLOTS[i] as f32 + 0.5;
         let sx = c.ax(su);
-        let hot = w.forging && i + 1 == derniers.len();
-        let y_top = ry + 2;
-        let y_bas = c.ay(17.6);
+        let etat = if w.forging && i + 1 == derniers.len() {
+            Etat::Chaude
+        } else if lueur_dard && arme == Arme::Sword {
+            Etat::Dard
+        } else {
+            Etat::Froide
+        };
+        // pendue à sa cheville par le haut, le milieu de l'image (sa colonne 4) sous la cheville
+        let image: &[&str] = match arme {
+            Arme::Sword => &EPEE,
+            Arme::Axe => &HACHE,
+            Arme::Dagger => &DAGUE,
+            Arme::Mace => &MASSE,
+        };
+        let x0 = if arme == Arme::Axe { sx - 6 } else { sx - 4 };
+        dessin_arme(c, x0, ry + 1, image, &|l| teinte_arme(l, etat));
+    }
+}
 
-        match arme {
-            Arme::Sword => {
-                // Épée elfique à lame foliacée (*Dard / Glamdring*), pointe en bas, garde d'or en haut
-                let (lame, coeur, mode) = if hot {
-                    (rgb(0xff9428), rgb(0xfff078), Mode::Lueur)
-                } else if lueur_dard {
-                    (rgb(0x5cc8ff), rgb(0xdff8ff), Mode::Lueur)
-                } else {
-                    (rgb(0x9ca8be), rgb(0xdce4f4), Mode::Sol)
-                };
-                // Pommeau + poignée + garde en haut
-                c.poser(sx, y_top - 2, rgb(0xf4cc58), Mode::Sol);
-                c.poser(sx, y_top - 1, rgb(0x5e341e), Mode::Sol);
-                c.rect(sx - 2, y_top, sx + 3, y_top + 1, rgb(0xe8bc48), Mode::Sol);
-                // Lame avec contour
-                c.rect(sx - 1, y_top + 1, sx + 2, y_bas, CONTOUR, Mode::Sol);
-                for ay in y_top + 1..y_bas {
-                    c.poser(sx, ay, if (ay - y_top) % 3 == 0 { coeur } else { lame }, mode);
-                }
-                c.poser(sx, y_bas, coeur, mode);
-            }
-            Arme::Axe => {
-                // Hache de bataille naine à fer croissant damasquiné d'or
-                for ay in y_top - 1..=y_bas {
-                    c.poser(sx, ay, rgb(0x744628), Mode::Sol);
-                }
-                let fer = if hot { rgb(0xffa838) } else { rgb(0xa8b4ca) };
-                let mode = if hot { Mode::Lueur } else { Mode::Sol };
-                c.boite(sx - 3, y_top + 1, sx + 1, y_top + 5, fer, CONTOUR, mode);
-                c.poser(sx - 2, y_top + 2, if hot { rgb(0xfff088) } else { rgb(0xe4ecfc) }, mode);
-                c.poser(sx - 1, y_top + 3, rgb(0xdcb044), Mode::Sol);
-            }
-            Arme::Dagger => {
-                // Dague elfique courbe sertie de mithril
-                let y_fin = (y_top + y_bas) / 2 + 2;
-                c.poser(sx, y_top - 1, rgb(0x52301c), Mode::Sol);
-                c.rect(sx - 1, y_top, sx + 2, y_top + 1, rgb(0xd8b450), Mode::Sol);
-                let lame = if hot { rgb(0xffb43c) } else { rgb(0xc4d0e6) };
-                let mode = if hot { Mode::Lueur } else { Mode::Sol };
-                for ay in y_top + 1..=y_fin {
-                    c.poser(sx, ay, lame, mode);
-                }
-            }
-            Arme::Mace => {
-                // Masse d'armes à ailettes d'acier et cœur de cristal saphir
-                for ay in y_top..=y_bas {
-                    c.poser(sx, ay, rgb(0x683e22), Mode::Sol);
-                }
-                let ym = y_bas - 1;
-                c.boite(sx - 2, ym - 2, sx + 3, ym + 2, rgb(0x8892a8), CONTOUR, Mode::Sol);
-                c.poser(sx, ym, if hot { rgb(0xffe868) } else { rgb(0x64ccff) }, Mode::Lueur);
+/// L'état d'une arme du râtelier : froide, chauffée au rouge (celle du jour, encore à la forge), ou luisante d'un bleu
+/// elfique (*Dard*, la nuit quand la forge bat son plein ou après un échec).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Etat {
+    Froide,
+    Chaude,
+    Dard,
+}
+
+/// La couleur d'une lettre des armes : l'acier (`H S s d`, `u` les runes) suit l'état, le reste est fixe.
+fn teinte_arme(l: u8, etat: Etat) -> Option<([u8; 3], Mode)> {
+    let acier = |froid: u32, chaud: u32, bleu: u32| match etat {
+        Etat::Froide => (rgb(froid), Mode::Sol),
+        Etat::Chaude => (rgb(chaud), Mode::Lueur),
+        Etat::Dard => (rgb(bleu), Mode::Lueur),
+    };
+    Some(match l {
+        b'k' => (CONTOUR, Mode::Sol),
+        b'H' => acier(0xeef4ff, 0xfff4a0, 0xe8faff),
+        b'S' => acier(0xc4d0e4, 0xffc040, 0x9ce0ff),
+        b's' => acier(0x8a96b0, 0xff8a20, 0x5cb8ff),
+        b'd' => acier(0x56607a, 0xc04a10, 0x2a78c8),
+        b'u' => match etat {
+            Etat::Froide => (rgb(0x7ab8d8), Mode::Sol),
+            Etat::Chaude => (rgb(0xffffff), Mode::Lueur),
+            Etat::Dard => (rgb(0xffffff), Mode::Lueur),
+        },
+        b'G' => (rgb(0xf4d060), Mode::Sol),
+        b'g' => (rgb(0xc89030), Mode::Sol),
+        b'y' => (rgb(0x8a5c1c), Mode::Sol),
+        b'L' => (rgb(0x7a4a2a), Mode::Sol),
+        b'l' => (rgb(0x4e2c18), Mode::Sol),
+        b'W' => (rgb(0x8a5a32), Mode::Sol),
+        b'w' => (rgb(0x5a3820), Mode::Sol),
+        b'B' => (rgb(0x64c8ff), Mode::Lueur),
+        b'b' => (rgb(0x2a70c8), Mode::Sol),
+        b'R' => (rgb(0xe04050), Mode::Lueur),
+        b'r' => (rgb(0x8a1a2a), Mode::Sol),
+        _ => return None,
+    })
+}
+
+/// Pose une image en lettres, son coin haut gauche en (`x0`, `y0`), pixel de canevas pour lettre.
+fn dessin_arme(c: &mut Canevas, x0: i32, y0: i32, image: &[&str], teinte: &dyn Fn(u8) -> Option<([u8; 3], Mode)>) {
+    for (j, ligne) in image.iter().enumerate() {
+        for (i, l) in ligne.bytes().enumerate() {
+            if let Some((col, mode)) = teinte(l) {
+                c.poser(x0 + i as i32, y0 + j as i32, col, mode);
             }
         }
     }
 }
+
+// Les armes du râtelier, dessinées à la main (9 de large, la cheville au-dessus de la colonne 4 ; la hache au-dessus
+// de son manche, colonne 6) : l'épée elfique à lame en feuille, garde recourbée et pommeau de saphir, ses runes sur la
+// lame ; la hache naine à barbe incrustée d'or ; la dague au pommeau de rubis ; la masse à ailettes au cœur de saphir.
+const EPEE: [&str; 28] = [
+    "...kkk...",
+    "..kGBGk..",
+    "..kgGgk..",
+    "...kGk...",
+    "...kLk...",
+    "...klk...",
+    "...kLk...",
+    "...klk...",
+    "...kLk...",
+    "kk.kgk.kk",
+    "kGkkGkkgk",
+    "kgGGBGGyk",
+    ".kkgGykk.",
+    "...kHk...",
+    "..kHSsk..",
+    "..kHusk..",
+    "..kHSsk..",
+    "..kHSsk..",
+    ".kHHusdk.",
+    ".kHHSssk.",
+    ".kHHSssk.",
+    ".kHHusdk.",
+    "..kHSsk..",
+    "..kHSsk..",
+    "...kHsk..",
+    "...kHk...",
+    "...kSk...",
+    "....k....",
+];
+const HACHE: [&str; 26] = [
+    "......k..",
+    ".....kGk.",
+    ".....kgk.",
+    ".....kWk.",
+    ".kk..kwk.",
+    "kHSk.kWk.",
+    "kHSskkWkk",
+    "kHSsddWdk",
+    "kHSgGdWdk",
+    "kHSsgdWdk",
+    "kHSssdWk.",
+    ".kHSsdWk.",
+    "..kHsdWk.",
+    "...kkdwk.",
+    "....kkWk.",
+    ".....kwk.",
+    ".....kWk.",
+    ".....kwk.",
+    ".....kWk.",
+    ".....kLk.",
+    ".....klk.",
+    ".....kLk.",
+    ".....klk.",
+    ".....kgk.",
+    ".....kGk.",
+    "......k..",
+];
+const DAGUE: [&str; 18] = [
+    "...kkk...",
+    "..kRrRk..",
+    "...krk...",
+    "...kGk...",
+    "...kLk...",
+    "...klk...",
+    "...kLk...",
+    ".kkkgkkk.",
+    "kGGGRGGyk",
+    ".kkgGykk.",
+    "...kHsk..",
+    "...kHsk..",
+    "...kHuk..",
+    "...kHsk..",
+    "...kHsk..",
+    "...kHsk..",
+    "...kHk...",
+    "....k....",
+];
+const MASSE: [&str; 27] = [
+    "...kkk...",
+    "..kl.lk..",
+    "..k...k..",
+    "...klk...",
+    "...kLk...",
+    "...klk...",
+    "...kLk...",
+    "...klk...",
+    "...kLk...",
+    "..kgGyk..",
+    "...kSk...",
+    "...ksk...",
+    "...kSk...",
+    "...ksk...",
+    "...kSk...",
+    "..kgGyk..",
+    "..kkkkk..",
+    ".kHSkSsk.",
+    "kHHSkSsdk",
+    "kHSkBkSdk",
+    "kHSBbBsdk",
+    "kHSkBkSdk",
+    "kHHSkSsdk",
+    ".kHSkSsk.",
+    "..kkSkk..",
+    "...kdk...",
+    "....k....",
+];
+const ANDURIL_GARDE: [&str; 9] = [
+    "........kk..",
+    ".......kGGk.",
+    "kkk....kgGk.",
+    "kBGkkkkkgGkk",
+    "kGLlLlLlGBGk",
+    "kgGkkkkkgGkk",
+    "kkk....kgGk.",
+    ".......kGyk.",
+    "........kk..",
+];
+
 
 fn couleur_palette(lettre: u8, defaut: u32) -> [u8; 3] {
     PALETTE.get(lettre as usize).copied().flatten().map(rgb).unwrap_or_else(|| rgb(defaut))
@@ -1649,8 +1798,12 @@ fn peindre_foyer_et_soufflet(c: &mut Canevas, w: &Monde, p: &Pose, tick: i64) {
 
     // 6. Le soufflet, accroché au flanc du four, vu de face : une poire de chêne cernée de clous de laiton, sa soupape
     // de cuir au milieu, sa buse de laiton qui entre dans le four, sa poignée percée à droite ; le cuir plissé dépasse
-    // dessous, épais quand il est plein d'air, mince quand Scorpheus l'écrase (`p.bellows`)
+    // dessous, épais quand il est plein d'air, mince quand Scorpheus l'écrase (`p.bellows`). Quand il le relâche, la
+    // planche remonte avec sa patte (la rangée `Soufflet` du pet : la patte haute, puis basse sur la poignée) et le cuir
+    // s'étire dessous en se remplissant d'air ; la buse, fixée au four, ne bouge pas.
     let by = c.ay(23.0);
+    let leve = if p.left == Gauche::Pull && !p.bellows { 2.4 } else { 0.0 };
+    let leve_px = (by - c.ay(23.0 - leve)) as f32;
     let (nez, cx, poignee) = (c.ax(12.6), c.ax(16.3), c.ax(18.9));
     let r = ((poignee - cx) as f32 * 0.62).max(4.0);
     let rx_cone = nez + 2;
@@ -1669,16 +1822,29 @@ fn peindre_foyer_et_soufflet(c: &mut Canevas, w: &Monde, p: &Pose, tick: i64) {
         c.poser(ax, by + 1, rgb(0xa8782c), Mode::Plein);
     }
     let fin = cx + r as i32;
+    // la planche pivote sur la buse : elle se lève d'autant plus qu'on va vers la poignée
+    let haut_de = |ax: i32| -> i32 { by - (leve_px * ((ax - rx_cone) as f32 / (poignee - rx_cone).max(1) as f32).clamp(0.0, 1.0)).round() as i32 };
+    let bb = haut_de(cx);
+    let bp = haut_de(poignee);
     // le cuir qui dépasse sous la planche, plissé
     for ax in rx_cone..=fin {
         let d = demi(ax);
         if d < 0.0 {
             continue;
         }
-        let y0 = by + d.round() as i32;
-        for k in 0..=cuir {
-            let pli = (ax + k) % 3 == 0;
-            c.poser(ax, y0 + k, if k == cuir { CONTOUR } else if pli { rgb(0x3a1a18) } else { rgb(0x6a2e26) }, Mode::Plein);
+        // le cuir en accordéon : des plis horizontaux, un trait sombre tous les trois, un reflet au-dessus
+        let (y0, y1) = (haut_de(ax) + d.round() as i32, by + d.round() as i32 + cuir);
+        for y in y0..=y1 {
+            let col = if y == y1 || ax == fin || ax == rx_cone {
+                CONTOUR
+            } else {
+                match (y1 - y).rem_euclid(3) {
+                    0 => rgb(0x3a1a18),
+                    1 => rgb(0x6a2e26),
+                    _ => rgb(0x8a4232),
+                }
+            };
+            c.poser(ax, y, col, Mode::Plein);
         }
     }
     // la planche de chêne, éclairée du côté du feu (en haut, à gauche), son contour net
@@ -1690,14 +1856,15 @@ fn peindre_foyer_et_soufflet(c: &mut Canevas, w: &Monde, p: &Pose, tick: i64) {
         let dr = d.round() as i32;
         let voisin = |x: i32| { let e = demi(x); if e < 0.0 { -1 } else { e.round() as i32 } };
         let (dg, dd) = (voisin(ax - 1), voisin(ax + 1));
-        for ay in by - dr..=by + dr {
-            let dy = (ay - by).abs();
+        let bc = haut_de(ax);
+        for ay in bc - dr..=bc + dr {
+            let dy = (ay - bc).abs();
             let bord = dy == dr || dy > dg || dy > dd;
             let col = if bord {
                 CONTOUR
             } else {
                 let fil = ((ay * 3 + ax / 4) % 5) == 0;
-                let clair = ((ay - by) as f32) < -d * 0.35 || ax < cx - (r * 0.5) as i32;
+                let clair = ((ay - bc) as f32) < -d * 0.35 || ax < cx - (r * 0.5) as i32;
                 match (clair, fil) {
                     (true, false) => rgb(0x9a6638),
                     (true, true) => rgb(0x84542c),
@@ -1712,17 +1879,17 @@ fn peindre_foyer_et_soufflet(c: &mut Canevas, w: &Monde, p: &Pose, tick: i64) {
     for (k, ax) in (rx_cone + 2..fin - 1).enumerate() {
         let d = demi(ax);
         if d >= 2.0 && k % 3 == 0 {
-            c.poser(ax, by - d.round() as i32 + 1, rgb(0xf0c860), Mode::Plein);
-            c.poser(ax, by + d.round() as i32 - 1, rgb(0xc8983c), Mode::Plein);
+            c.poser(ax, haut_de(ax) - d.round() as i32 + 1, rgb(0xf0c860), Mode::Plein);
+            c.poser(ax, haut_de(ax) + d.round() as i32 - 1, rgb(0xc8983c), Mode::Plein);
         }
     }
     // la soupape : un rond de cuir cousu au milieu
-    c.disque(cx, by, 2, rgb(0x5a2622), Mode::Plein);
-    c.poser(cx - 1, by - 1, rgb(0x8a3e30), Mode::Plein);
-    c.poser(cx, by, CONTOUR, Mode::Plein);
+    c.disque(cx, bb, 2, rgb(0x5a2622), Mode::Plein);
+    c.poser(cx - 1, bb - 1, rgb(0x8a3e30), Mode::Plein);
+    c.poser(cx, bb, CONTOUR, Mode::Plein);
     // la poignée, percée, qui dépasse à droite
-    c.boite(fin - 1, by - 2, poignee + 1, by + 3, rgb(0x8a5a32), CONTOUR, Mode::Plein);
-    c.rect(poignee - 2, by, poignee, by + 1, rgb(0x2a1a12), Mode::Plein);
+    c.boite(fin - 1, bp - 2, poignee + 1, bp + 3, rgb(0x8a5a32), CONTOUR, Mode::Plein);
+    c.rect(poignee - 2, bp, poignee, bp + 1, rgb(0x2a1a12), Mode::Plein);
     // le souffle : des étincelles qui jaillissent de la buse dans le feu
     if p.bellows && feu > 0 {
         for i in 0..3i64 {

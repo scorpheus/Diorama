@@ -68,7 +68,9 @@ impl Ciel {
 
 // les trois chaînes, en rangées de forge : la lointaine (nouvelle), la haute et la proche de cour.rs, et leur grain
 fn lointaine_lisse(u: f32) -> f32 {
-    3.5 + roule(u / 13.0, 41) * 7.0 + roule(u / 4.5, 42) * 1.8
+    // des pics isolés plutôt qu'un mur : la hauteur suit le bruit à la puissance 1,8, les cols descendent bas et
+    // laissent passer le ciel (user, 13-11 : « ça fait toujours assez massif »)
+    11.5 - 6.8 * roule(u / 11.0, 41).powf(1.8) - roule(u / 4.5, 42) * 1.3
 }
 fn haute_lisse(u: f32) -> f32 {
     8.0 + roule(u / 9.0, 1) * 6.0 + roule(u / 4.0, 2) * 2.0
@@ -173,13 +175,13 @@ impl Paysage {
             oiseaux(&mut toile, &c, &sky, w, t);
             arbre(&mut toile, &c, &sky, plan, se, t);
             puits(&mut toile, &c, &sky, plan, se, t);
-            if !gala {
-                smial(&mut toile, &c, &sky, plan, se, t);
-            }
             moulin(&mut toile, &c, &sky, plan, se, t, travail);
             meteo_et_menhir(&mut toile, &c, &sky, se, gala, t);
             if w.banquet && !gala {
                 banquet(&mut toile, &c, &sky, t);
+            }
+            if !gala {
+                petites_betes(&mut toile, &c, &sky, plan, se, t);
             }
             lucioles(&mut toile, &c, &sky, se, t);
             if !gala {
@@ -252,21 +254,27 @@ fn fond(px: &mut [u32], voile: &mut [u8], bois: &mut [u8], c: &Cadre, sky: &Ciel
             let f = ((heure - 6.0) / 15.0).clamp(0.0, 1.0);
             let (u, v) = (c.from + room * (0.1 + 0.8 * f), 3.0 + 15.0 * (1.0 - (PI * f).sin()));
             let (halo, disque) = if sky.soir { (hex(0xffa860), hex(0xffd08a)) } else { (hex(0xfff0c0), hex(0xfffbe8)) };
-            t.disque(c.x(u), c.y(v), 7.0 * c.demi, halo, 0.32, 1.0);
-            t.disque(c.x(u), c.y(v), 1.5 * c.demi, disque, 1.0, 0.15);
+            // au pixel d'art net : deux anneaux d'une seule teinte chacun plutôt qu'un halo dégradé (l'alpha en
+            // paliers y traçait des cernes), puis le disque plein
+            let (x, y, r) = (c.x(u).round() + 0.5, c.y(v).round() + 0.5, (1.5 * c.demi).round());
+            t.disque(x, y, r + 5.0, halo, 0.16, 0.0);
+            t.disque(x, y, r + 2.0, halo, 0.3, 0.0);
+            t.disque(x, y, r, disque, 1.0, 0.0);
         } else if sky.nuit && !sky.orage {
             // la lune, un croissant
             let (u, v) = (c.from + room * 0.72, 4.5);
-            t.disque(c.x(u), c.y(v), 4.0 * c.demi, hex(0x8090c0), 0.18, 1.0);
-            t.disque(c.x(u), c.y(v), 1.4 * c.demi, hex(0xeef0f6), 1.0, 0.05);
+            let (x, y, r) = (c.x(u).round() + 0.5, c.y(v).round() + 0.5, (1.4 * c.demi).round());
+            t.disque(x, y, r + 4.0, hex(0x8090c0), 0.12, 0.0);
+            t.disque(x, y, r + 2.0, hex(0x8090c0), 0.14, 0.0);
+            t.disque(x, y, r, hex(0xeef0f6), 1.0, 0.0);
             let fond_lune = mix(sky.haut, sky.bas, (v / HORIZON).powf(1.15));
-            t.disque(c.x(u + 0.55), c.y(v - 0.35), 1.2 * c.demi, fond_lune, 1.0, 0.05);
+            t.disque(x + (0.55 * c.cw).round(), y - (0.35 * c.demi).round(), r - 1.0, fond_lune, 1.0, 0.0);
         }
     }
     let dir = sky.cote;
     let cretes = |f: fn(f32) -> f32| (0..wd).map(|x| f(u_de(x))).collect::<Vec<f32>>();
     let chaines = [
-        Chaine { cretes: cretes(lointaine), lisses: cretes(lointaine_lisse), roche: [hex(0x6c7c9e), hex(0x7d8fb0), hex(0x98a8c6)], neige: 1.4, loin: 0.6, boisee: false },
+        Chaine { cretes: cretes(lointaine), lisses: cretes(lointaine_lisse), roche: [hex(0x6c7c9e), hex(0x7d8fb0), hex(0x98a8c6)], neige: 0.95, loin: 0.7, boisee: false },
         Chaine { cretes: cretes(haute), lisses: cretes(haute_lisse), roche: [hex(0x48566e), hex(0x5d6e86), hex(0x7d8ea6)], neige: 1.1, loin: 0.42, boisee: false },
         Chaine { cretes: cretes(proche), lisses: cretes(proche_lisse), roche: [hex(0x2c404c), hex(0x3e5560), hex(0x587480)], neige: 0.0, loin: 0.28, boisee: true },
     ];
@@ -1083,44 +1091,120 @@ fn etoiles(t: &mut Toile, voile: &[u8], c: &Cadre, sky: &Ciel, temps: f32) {
     }
 }
 
-/// Les nuages qui passent derrière les monts, de droite à gauche, ronds, éclairés dessus et plus sombres dessous ;
-/// plus vite, plus nombreux et plus sombres dans l'orage.
+/// Les nuages qui passent derrière les monts, de droite à gauche, au pixel d'art net (user, 13-11 : « le ciel peut
+/// être mieux, comme les nuages » ; l'étalon du propre, les engrenages) : des bosses rondes sur un ventre plat, un
+/// liseré de lumière en haut de chaque bosse, l'ombre dans les jointures et sous le ventre, en aplats francs, sans
+/// flou ; plus vite, plus nombreux et plus sombres dans l'orage.
 fn nuages(t: &mut Toile, voile: &[u8], c: &Cadre, sky: &Ciel, temps: f32) {
     let room = c.to - c.from;
     let n = ((room / 22.0).ceil() as i64).max(1) + if sky.orage { 3 } else { 0 };
     let vitesse = if sky.orage { 0.05 } else { 0.012 };
     let tour = room + 34.0;
-    let (clair, ombre) = if sky.orage {
-        (hex(0x5e6270), hex(0x34384a))
+    // le liseré, le corps, la jointure, l'ombre, le ventre
+    let teintes: [u32; 5] = if sky.orage {
+        [0x7a7e8c, 0x5e6270, 0x50546a, 0x44485a, 0x34384a]
     } else if sky.nuit {
-        (hex(0x34406a), hex(0x1c2444))
+        [0x4a5680, 0x34406a, 0x2e3962, 0x283258, 0x1c2444]
     } else if sky.soir {
-        (hex(0xf6c0aa), hex(0x8a5a7a))
+        [0xffe2cc, 0xf6c0aa, 0xdaa2a2, 0xb47e92, 0x8a5a7a]
     } else {
-        (hex(0xfbfcfe), hex(0xbac6d6))
+        [0xfbfdff, 0xe8eff8, 0xd0dcea, 0xb8c8dc, 0x9cb0c8]
     };
+    let a = if sky.nuit { 0.75 } else { 1.0 };
     for i in 0..n {
         let depart = h(i * 41 + 3) * tour;
         let u = c.to + 14.0 - (depart + temps * vitesse * (0.7 + 0.6 * h(i * 3))).rem_euclid(tour);
-        let taille = 1.5 + h(i * 11) * 1.5 + if sky.orage { 1.0 } else { 0.0 };
-        let base = 3.5 + h(i * 7 + 1) * 6.0 + taille;
-        let a = if sky.nuit { 0.75 } else { 0.96 };
-        let bosses = 7;
-        for passe in 0..2 {
-            for k in 0..bosses {
-                let f = k as f32 / (bosses - 1) as f32;
-                let r = taille * (0.55 + 0.45 * (f * PI).sin()) * (0.8 + 0.4 * h(i * 97 + k));
-                let x = c.x(u + (f - 0.5) * taille * 3.2);
-                let y = c.y(base - r * 0.8 - (f * PI).sin() * taille * 0.5);
-                if passe == 0 {
-                    disque_ciel(t, voile, x, y + 0.25 * r * c.demi, r * c.demi, ombre, a, 0.12);
-                } else {
-                    disque_ciel(t, voile, x - 0.15 * r * c.cw, y - 0.14 * r * c.demi, r * c.demi * 0.8, clair, a, 0.22);
+        let image: &[&str] = match ((h(i * 11) * 6.0) as i64, sky.orage) {
+            (0 | 1, _) | (2 | 3, true) => &NUAGE_GRAND,
+            (2 | 3, false) => &NUAGE_MOYEN,
+            (4, _) => &NUAGE_LONG,
+            _ => &NUAGE_PETIT,
+        };
+        let (iw, ih) = (image[0].len() as i32, image.len() as i32);
+        let (gauche, haut) = (c.x(u).round() as i32 - iw / 2, c.y(3.6 + h(i * 7 + 1) * 4.2).round() as i32 - ih);
+        for (j, ligne) in image.iter().enumerate() {
+            for (k, l) in ligne.bytes().enumerate() {
+                let teinte = match l {
+                    b'W' => teintes[0],
+                    b'B' => teintes[1],
+                    b'M' => teintes[2],
+                    b'S' => teintes[3],
+                    b'D' => teintes[4],
+                    _ => continue,
+                };
+                let (x, y) = (gauche + k as i32, haut + j as i32);
+                if x < 0 || y < 0 || x >= t.w as i32 || y >= t.h as i32 {
+                    continue;
+                }
+                let ciel = voile[y as usize * t.w + x as usize];
+                if ciel > 0 {
+                    t.poser(x, y, hex(teinte), a * ciel as f32 / 255.0);
                 }
             }
         }
     }
 }
+
+const NUAGE_GRAND: [&str; 18] = [
+    ".....................WWWWWWWWWW...................",
+    "....................WBBBBBBBBBBW..................",
+    ".............WWWWWWWBBBBBBBBBBBBW.................",
+    "............WBBBBBBWMBBBBBBBBBBBB.................",
+    "...........WBBBBBBBBWMBBBBBBBBBMMWWWW.............",
+    "..........WBBBBBBBBBBWMBBBBBBBMWWBBBBWW...........",
+    ".........WBBBBBBBBBMMMWBBBBBBMWMMBBBBBBW..........",
+    "......WWWWMMBBBBBMMWWWWMMBBMMWWWWMMBBBMMWWWW......",
+    "....WWBBBBWWBBBBBWWBBBBWWBBWWBBBBWWBBBWWBBBBWW....",
+    "....BBBBBBBBMBBBMBBBBBBBBMMBBBBBBBBMBMBBBBBBBB....",
+    "...WBBBBBBBBWBBBWBBBBBBBBWWBBBBBBBBWBWBBBBBBBBW...",
+    "...BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB...",
+    "...BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB...",
+    "...SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS...",
+    "....SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS....",
+    "....DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD....",
+    "..................................................",
+    "..................................................",
+];
+const NUAGE_MOYEN: [&str; 14] = [
+    ".................WWWWWWWW...........",
+    "................WBBBBBBBBW..........",
+    "...........WWWW.MBBBBBBBBB..........",
+    ".........WWBBBBWWBBBBBBBBBW.........",
+    ".........BBBBBBMMMMBBBBBBMWWWW......",
+    ".....WWWWMBBBBMWWWWMBBBBMWBBBBW.....",
+    "....WBBBBWMBBMWBBBBWMBBBWBBBBBBW....",
+    "...WBBBBBBWBBWBBBBBBWBBBBBBBBBBB....",
+    "...BBBBBBBBBBBBBBBBBBBBBBBBBBBBB....",
+    "...SSSSSSSSSSSSSSSSSSSSSSSSSSSSS....",
+    "...SSSSSSSSSSSSSSSSSSSSSSSSSSSS.....",
+    "....DDDDDDDDDDDDDDDDDDDDDDDDDD......",
+    "....................................",
+    "....................................",
+];
+const NUAGE_PETIT: [&str; 9] = [
+    "........WWWW..........",
+    ".......WBBBBW.........",
+    "......WBBBBBBW........",
+    "...WWWWMBBBBBMWWWW....",
+    "..WBBBBWBBBBBWBBBBW...",
+    "..SSSSSSSSSSSSSSSSS...",
+    "..SSSSSSSSSSSSSSSSS...",
+    "..DDDDDDDDDDDDDDDDD...",
+    "......................",
+];
+const NUAGE_LONG: [&str; 10] = [
+    "........................WWWWWWWW..........................",
+    "..................WWWW..BBBBBBBB..........................",
+    "..........WWWW...WBBBBWWBBBBBBBBW..WWWW...................",
+    ".........WBBBBW.WBBBBBBWBBBBBBBBB.WBBBBW...WWWW...........",
+    "....WWWWWBBBBBBWBBBBBBBBBBBBBBBBBWBBBBBBW.WBBBBW.WWWW.....",
+    "...WBBBBWBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBWBBBBW....",
+    "...SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS....",
+    "...SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS....",
+    "...DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD....",
+    "..........................................................",
+];
+
 
 //// Les cascades des cols : de minces filets qui sortent d'une entaille de la roche (un col en V, jamais un sommet),
 /// sautent de corniche en corniche (un pas de côté et un bouillon d'écume à chaque saut), dans une coulée de roche
@@ -1239,7 +1323,7 @@ fn cascades(t: &mut Toile, bois: &[u8], c: &Cadre, sky: &Ciel, plan: &Plan, se: 
 }
 
 // Vie du ciel de la cour : vol d'oiseaux en V le jour, silhouette rare d'un dragon (ou grand aigle) au-dessus des cimes,
-/// et chouette blanche messagère (façon Hedwige) glissant silencieusement au crépuscule et la nuit.
+/// et chouette mécanique messagère glissant au crépuscule et la nuit.
 fn oiseaux(t: &mut Toile, c: &Cadre, sky: &Ciel, w: &Monde, temps: f32) {
     if sky.orage {
         return;
@@ -1266,7 +1350,8 @@ fn oiseaux(t: &mut Toile, c: &Cadre, sky: &Ciel, w: &Monde, temps: f32) {
         }
     }
 
-    // chouette blanche messagère au crépuscule et dans la nuit claire
+    // la chouette mécanique messagère au crépuscule et dans la nuit claire, en lettres (chouette.rs) : laiton sous le
+    // ciel, la lentille qui luit d'elle-même ; elle ne porte rien, elle rentre
     if sky.nuit || sky.soir {
         let periode = 460.0;
         let tour = (temps / periode).floor() as i64;
@@ -1275,20 +1360,12 @@ fn oiseaux(t: &mut Toile, c: &Cadre, sky: &Ciel, w: &Monde, temps: f32) {
             let vers_droite = tour % 2 == 0;
             let u = if vers_droite { c.from - 3.0 + f * (room + 6.0) } else { c.to + 3.0 - f * (room + 6.0) };
             let v = 6.2 + h(tour * 11 + 3) * 4.5 + (temps * 0.14).sin() * 0.45;
-            let sens = if vers_droite { 1.0 } else { -1.0 };
-            let bat = (temps * 0.55).sin();
-            let (x, y) = (c.x(u), c.y(v));
-            let aile_envergure = 1.35 * c.cw;
-            let aile_h = bat * 0.95 * c.demi;
-            let blanc = hex(0xf2f5fc);
-            let ombre_plume = hex(0xaebbd6);
-            // ailes déployées en croissant soyeux
-            t.trait_((x - aile_envergure, y - aile_h), (x, y), 2.0, blanc, 0.95);
-            t.trait_((x, y), (x + aile_envergure, y - aile_h * 0.85), 2.0, blanc, 0.95);
-            t.trait_((x - aile_envergure * 0.75, y - aile_h * 0.6 + 1.0), (x + aile_envergure * 0.75, y - aile_h * 0.5 + 1.0), 1.2, ombre_plume, 0.8);
-            // corps rond, tête et oeil d'ambre
-            t.disque(x, y + 0.5, 1.5, blanc, 1.0, 0.0);
-            t.poser((x + sens * 1.4).round() as i32, y.round() as i32, hex(0xffc842), 1.0);
+            let image = super::chouette::image(temps as i64);
+            let (x, y) = (c.x(u).round() as i32 - 9, c.y(v).round() as i32 - 9);
+            lettres(t, x, y, image, vers_droite, &|l| {
+                let (k, luit) = super::chouette::couleur(l, false)?;
+                Some(if luit { hex(k) } else { sky.lit(hex(k), 0.0) })
+            });
         }
     }
 
@@ -2203,200 +2280,147 @@ fn avant_toit(t: &mut Toile, c: &Cadre, sky: &Ciel, se: Saison, temps: f32) {
     }
 }
 
-/// Où se tient le trou de hobbit : son milieu, en colonnes de forge, s'il y a la place entre le coin des louveteaux
-/// (`from + 25 .. from + 44`) et le puits.
-fn smial_ou(c: &Cadre, plan: &Plan) -> Option<f32> {
-    let droite = plan.well? as f32 - 2.5;
-    let gauche = c.from + 45.0;
-    (droite - gauche >= 2.0 * SMIAL_DEMI).then_some((gauche + droite) / 2.0)
+// Les petites bêtes de la cour, dessinées à la main en lettres (un pixel d'art par lettre), vues de côté, tournées vers
+// la droite : le lapin assis et en plein bond, l'écureuil qui grimpe, le poisson qui saute, le papillon ailes ouvertes et
+// fermées.
+const LAPIN_ASSIS: [&str; 10] = ["...kk....", "..kwWk...", "..kwWk...", "...kwWk..", "..kkWWWk.", ".kWWWWmWk", "kcWWWWWWn", "kcWWWWWk.", ".kwWkkWk.", "..kk..kk."];
+const LAPIN_BOND: [&str; 10] = [".....kk...", "....kwWk..", ".....kwWk.", "......kWk.", ".kkkkWWWWk", "kcWWWWWmWn", "kcWWWWWWk.", ".kwkkkwk..", "kwk....kk.", "kk........"];
+const ECUREUIL: [&str; 12] = [".....kk..", "....kRRk.", "....kRmRk", "...kkRRRn", ".kk.kqRk.", "kRRkkqRRk", "kRrRkRRk.", "kRRrRRRk.", "kqRRRrRk.", ".kqRRRk..", "..kkkRkk.", ".....kk.."];
+const ECUREUIL_2: [&str; 12] = [".....kk..", "....kRRk.", "....kRmRk", "...kkRRRn", "kk..kqRkk", "kRk.kqRRk", "kRRkRRRk.", "kRrRRRk..", "kqRRrRRk.", ".kqRRRRk.", "..kkkRRk.", "....kk..."];
+const POISSON_HAUT: [&str; 5] = ["..kkk..", ".kFFFk.", "kFeFFfk", ".kfffkFk", "..kkk.kk"];
+const POISSON_BAS: [&str; 5] = ["kk.kkk..", "kFkfffk.", ".kffFeFk", "..kFFFk.", "...kkk.."];
+const PAPILLON_OUVERT: [&str; 3] = ["Ak.kA", "AAkAA", ".aka."];
+const PAPILLON_FERME: [&str; 3] = [".AkA.", ".aka.", "..k.."];
+
+
+/// Une image en lettres au pixel d'art, son coin haut gauche en (`x`, `y`), retournée si `miroir`.
+fn lettres(t: &mut Toile, x: i32, y: i32, image: &[&str], miroir: bool, couleur: &dyn Fn(u8) -> Option<Rgb>) {
+    let large = image.iter().map(|l| l.len()).max().unwrap_or(0) as i32;
+    for (j, ligne) in image.iter().enumerate() {
+        for (i, l) in ligne.bytes().enumerate() {
+            if let Some(col) = couleur(l) {
+                let i = if miroir { large - 1 - i as i32 } else { i as i32 };
+                t.poser(x + i, y + j as i32, col, 1.0);
+            }
+        }
+    }
 }
 
-/// La demi-largeur de la colline du trou de hobbit, en colonnes de forge.
-const SMIAL_DEMI: f32 = 9.5;
-
-/// Un trou de hobbit, à la manière de la Comté : une colline ronde et herbue, une porte ronde verte au bouton de laiton
-/// en plein milieu, une fenêtre ronde (dorée le soir), une cheminée qui fume, un fanal près de la porte et des
-/// pierres de gué jusqu'au pré. Au pixel d'art, sans lissage.
-fn smial(t: &mut Toile, c: &Cadre, sky: &Ciel, plan: &Plan, se: Saison, temps: f32) {
-    let Some(uc) = smial_ou(c, plan) else { return };
-    let lit = |k: u32| sky.lit(hex(k), 0.0);
-    let (xc, yb) = (c.x(uc).round() as i32, c.y(SOL + 0.7).round() as i32);
-    let demi_l = (SMIAL_DEMI * c.cw).round() as i32;
-    let haut = (6.4 * c.demi).round() as i32;
-    let soleil = if sky.cote < 0.0 { -1.0 } else { 1.0 };
-    let veille = sky.nuit || sky.soir;
-
-    // 1. La colline : un dôme bosselé, en quatre tons nets, éclairé du côté du soleil ; neige en hiver, ocre en automne
-    let tons: [u32; 4] = match se {
-        Saison::Hiver => [0xf4f8ff, 0xd8e2f0, 0xa8b8cc, 0x6a7a74],
-        Saison::Automne => [0xa8b05c, 0x889646, 0x687838, 0x4a5a2c],
-        _ => [0x9ccc5c, 0x74a844, 0x548636, 0x3a642c],
+/// La vie de la cour, de temps en temps (user, 13-11 : « plus de vie dans la cour ») : un lapin sort du bois, fait
+/// quelques bonds dans le pré, s'assied, regarde alentour et rentre ; un écureuil grimpe au tronc jusqu'à la couronne ;
+/// un poisson saute dans le ruisseau du moulin ; des papillons dansent sur le pré au printemps et l'été.
+fn petites_betes(t: &mut Toile, c: &Cadre, sky: &Ciel, plan: &Plan, se: Saison, temps: f32) {
+    if sky.orage {
+        return;
+    }
+    let room = c.to - c.from;
+    let tic = temps as i64;
+    let hiver = se == Saison::Hiver;
+    let pal = |l: u8| -> Option<Rgb> {
+        let k = match l {
+            b'k' => 0x2a2224,
+            b'W' => if hiver { 0xf0f0f6 } else { 0x9c8068 },
+            b'w' => if hiver { 0xbcc2d0 } else { 0x6c5646 },
+            b'c' => 0xf2ead8,
+            b'm' => 0x141018,
+            b'n' => 0xe89aa0,
+            b'R' => 0xc8642c,
+            b'r' => 0x8a3e1c,
+            b'q' => 0xf0c890,
+            b'F' => 0xc8d4e4,
+            b'f' => 0x7890b0,
+            b'e' => 0x101418,
+            b'A' => 0xf4a83a,
+            b'a' => 0x8a4a1a,
+            b'B' => 0x6ab8f0,
+            b'b' => 0x2a5a9a,
+            _ => return None,
+        };
+        Some(sky.lit(hex(k), 0.0))
     };
-    let crete = |dx: i32| -> i32 {
-        let q = (dx as f32 / demi_l as f32).abs();
-        if q >= 1.0 {
-            return yb;
+
+    // 1. Le lapin, le jour : quatre bonds vers le pré, une pause à regarder, quatre bonds pour rentrer
+    let droite = plan.well.map_or(plan.tree.0 as f32 - 6.0, |p| p as f32 - 3.0);
+    if !sky.nuit && droite - (c.from + 46.0) > 10.0 {
+        let (periode, tour) = (1100, tic.div_euclid(1100));
+        let a = tic.rem_euclid(periode);
+        if a < 220 {
+            let u0 = c.from + 46.0 + h(tour * 13 + 1) * (droite - c.from - 56.0);
+            let pas = 1.2f32;
+            let (bonds, dans_bond, sens) = if a < 60 {
+                ((a / 15) as f32 + (a % 15).min(6) as f32 / 6.0, a % 15 < 6, 1)
+            } else if a < 140 {
+                (4.0, false, if a < 100 { 1 } else { -1 })
+            } else if a < 200 {
+                let b = a - 140;
+                (4.0 - (b / 15) as f32 - (b % 15).min(6) as f32 / 6.0, b % 15 < 6, -1)
+            } else {
+                (0.0, false, -1)
+            };
+            let saut = if dans_bond { ((a % 15) as f32 / 6.0 * std::f32::consts::PI).sin() * 3.0 } else { 0.0 };
+            let image: &[&str] = if dans_bond { &LAPIN_BOND } else { &LAPIN_ASSIS };
+            let (x, y) = (c.x(u0 + bonds * pas).round() as i32, (c.y(29.7) - saut).round() as i32 - image.len() as i32);
+            lettres(t, x, y, image, sens < 0, &pal);
         }
-        let bosse = roule(dx as f32 / 9.0, 41) * 1.6;
-        yb - (haut as f32 * (1.0 - q * q).powf(0.55) + bosse * (1.0 - q)).round() as i32
-    };
-    for dx in -demi_l..=demi_l {
-        let top = crete(dx);
-        for y in top..=yb + 1 {
-            let prof = (y - top) as f32 / haut as f32;
-            let v = 0.62 + 0.42 * soleil * dx as f32 / demi_l as f32 - 0.55 * prof - if y == top { -0.3 } else { 0.0 };
-            let mut k = if v > 0.85 { 0 } else if v > 0.5 { 1 } else if v > 0.2 { 2 } else { 3 };
-            if se == Saison::Hiver && prof > 0.38 + roule(dx as f32 / 5.0, 43) * 0.12 {
-                k = 3; // sous la neige, l'herbe d'hiver
+    }
+
+    // 2. L'écureuil, hors l'hiver et la nuit : il grimpe le long du tronc, de l'herbe jusque sous la couronne
+    if !sky.nuit && !hiver && room >= 30.0 {
+        let (tx, r) = (plan.tree.0 as f32 + 0.5, plan.tree.1 as f32);
+        let a = tic.rem_euclid(800);
+        if a < 90 {
+            let (v_bas, v_haut) = (26.5f32, r + 0.5 + r * 0.75);
+            let f = (a as f32 / 70.0).min(1.0);
+            let v = v_bas + (v_haut - v_bas) * f;
+            let image: &[&str] = if a < 70 && (a / 2) % 2 == 0 { &ECUREUIL } else { &ECUREUIL_2 };
+            let (x, y) = (c.x(tx).round() as i32 - 4, c.y(v).round() as i32 - image.len() as i32);
+            lettres(t, x, y, image, false, &pal);
+        }
+    }
+
+    // 3. Le poisson qui saute dans le ruisseau du moulin, hors l'hiver : un arc d'argent, une gerbe en partant et en
+    //    retombant
+    if let Some(cx) = plan.wheel.filter(|_| !hiver) {
+        let a = tic.rem_euclid(520);
+        let u = cx as f32 + 0.5 - 13.6 + h(tic.div_euclid(520) * 7 + 3) * 1.5;
+        let (x0, y0) = (c.x(u).round() as i32, c.y(31.2).round() as i32);
+        let gerbe = |t: &mut Toile, x: i32| {
+            let eau = sky.lit(hex(0xdcf2ff), 0.0);
+            for (dx, dy) in [(-2, 0), (2, 0), (-1, -1), (1, -1)] {
+                t.poser(x + dx, y0 + dy, eau, 1.0);
             }
-            t.poser(xc + dx, y, lit(tons[k]), 1.0);
-        }
-        // l'ourlet sombre de la crête, et quelques touffes qui dépassent
-        t.poser(xc + dx, top - 1, lit(tons[3]), 0.55);
-        if h(dx as i64 * 13 + 7) > 0.8 && se != Saison::Hiver {
-            t.poser(xc + dx, top - 1, lit(tons[2]), 1.0);
-            t.poser(xc + dx, top - 2, lit(tons[2]), 0.8);
-        }
-        // fleurs des champs au printemps et l'été
-        if matches!(se, Saison::Printemps | Saison::Ete) && h(dx as i64 * 31 + 3) > 0.86 {
-            let y = top + 3 + (h(dx as i64 * 17) * (yb - top - 5).max(1) as f32) as i32;
-            let fleur = [0xf4e070, 0xffffff, 0xf0a0c8, 0xe86048][(h(dx as i64 * 5) * 4.0) as usize % 4];
-            t.poser(xc + dx, y, lit(fleur), 1.0);
-        }
-    }
-
-    // 2. La porte ronde verte, ses planches, son cadre de chêne, et le bouton de laiton au milieu
-    let rd = ((1.55 * c.demi).round() as i32).max(5);
-    let (dx0, dy0) = (xc - (1.3 * c.cw).round() as i32, yb - rd);
-    for y in dy0 - rd - 3..=yb {
-        for x in dx0 - rd - 3..=dx0 + rd + 3 {
-            let (fx, fy) = ((x - dx0) as f32, (y - dy0) as f32);
-            let d = (fx * fx + fy * fy).sqrt();
-            let col = if d <= rd as f32 - 0.4 {
-                let planche = (x - dx0 + rd).rem_euclid(3) == 0;
-                let ombre = fx * soleil < -(rd as f32) * 0.35;
-                match (planche, ombre) {
-                    (true, _) => 0x1c4a24,
-                    (false, true) => 0x245e30,
-                    _ => 0x2f7a3c,
-                }
-            } else if d <= rd as f32 + 0.7 {
-                0x2a1a10
-            } else if d <= rd as f32 + 2.4 {
-                if (fy.atan2(fx) * 5.0).rem_euclid(1.0) < 0.12 { 0x4a2e18 } else { 0x7a5030 }
-            } else if d <= rd as f32 + 3.2 {
-                0x2a1a10
-            } else {
-                continue;
-            };
-            if y <= yb {
-                t.poser(x, y, lit(col), 1.0);
+        };
+        if a < 16 {
+            let f = a as f32 / 16.0;
+            let x = x0 + (f * 12.0).round() as i32;
+            let y = y0 - ((f * std::f32::consts::PI).sin() * 13.0).round() as i32 - 4;
+            lettres(t, x - 4, y, if f < 0.5 { &POISSON_HAUT } else { &POISSON_BAS }, true, &pal);
+            if a < 4 {
+                gerbe(t, x0);
             }
-        }
-    }
-    t.poser(dx0, dy0, lit(0xf4c848), 1.0);
-    t.poser(dx0 + 1, dy0, lit(0xb08020), 1.0);
-    t.poser(dx0, dy0 + 1, lit(0xb08020), 1.0);
-    t.poser(dx0 + 1, dy0 + 1, lit(0x7a5410), 1.0);
-    // le seuil de pierre et les pierres de gué jusqu'au pré
-    for x in dx0 - rd - 2..=dx0 + rd + 2 {
-        t.poser(x, yb + 1, lit(0x9a9488), 1.0);
-        t.poser(x, yb + 2, lit(0x6a6458), 1.0);
-    }
-    for (k, (ex, ey)) in [(0.4f32, 5i32), (-0.9, 9), (0.6, 13)].iter().enumerate() {
-        let (px, py) = (dx0 + (ex * c.cw) as i32, yb + ey);
-        let l = 3 + k as i32;
-        for x in px - l..=px + l {
-            t.poser(x, py, lit(0xa8a296), 1.0);
-            t.poser(x, py + 1, lit(0x6e6a60), 1.0);
+        } else if a < 21 {
+            gerbe(t, x0 + 12);
         }
     }
 
-    // 3. La fenêtre ronde à croisillons : le ciel s'y reflète le jour, une lueur de chandelle y tremble le soir
-    let rf = ((0.85 * c.demi).round() as i32).max(3);
-    let (fx0, fy0) = (xc + (2.6 * c.cw).round() as i32, yb - (3.4 * c.demi).round() as i32);
-    let tremble = 0.85 + 0.15 * (temps * 0.7).sin() * (temps * 0.31).cos();
-    for y in fy0 - rf - 2..=fy0 + rf + 2 {
-        for x in fx0 - rf - 2..=fx0 + rf + 2 {
-            let (ex, ey) = ((x - fx0) as f32, (y - fy0) as f32);
-            let d = (ex * ex + ey * ey).sqrt();
-            let col = if d <= rf as f32 - 0.3 {
-                if x == fx0 || y == fy0 {
-                    lit(0x5a3a20)
-                } else if veille {
-                    mix(hex(0xffc860), hex(0xfff0b0), if ex < 0.0 && ey < 0.0 { 0.6 } else { 0.0 }) // la lueur ne s'éteint pas
-                } else if ex + ey < -1.0 {
-                    lit(0xd8ecf8)
-                } else {
-                    lit(0x7c98b0)
-                }
-            } else if d <= rf as f32 + 1.2 {
-                lit(0x7a5030)
-            } else if d <= rf as f32 + 2.0 {
-                lit(0x2a1a10)
-            } else {
-                continue;
-            };
-            t.poser(x, y, col, 1.0);
+    // 4. Les papillons, le jour au printemps et l'été : trois qui dansent sur le pré, l'un monarque, l'autre bleu
+    if !sky.nuit && matches!(se, Saison::Printemps | Saison::Ete) && room >= 30.0 {
+        for i in 0..3i64 {
+            let fi = i as f32;
+            let base = c.from + 12.0 + h(i * 31 + 7) * (room - 24.0);
+            let u = base + (temps / 41.0 + fi * 2.1).sin() * 4.5 + (temps / 13.0 + fi).sin() * 0.8;
+            let v = 27.0 + (temps / 9.0 + fi * 1.7).sin() * 0.9 + (temps / 23.0 + fi).cos() * 0.6;
+            let ouvert = (tic + i) % 3 != 0;
+            let bleu = i % 2 == 1;
+            let couleur = |l: u8| pal(match (l, bleu) {
+                (b'A', true) => b'B',
+                (b'a', true) => b'b',
+                (l, _) => l,
+            });
+            let image: &[&str] = if ouvert { &PAPILLON_OUVERT } else { &PAPILLON_FERME };
+            lettres(t, c.x(u).round() as i32 - 2, c.y(v).round() as i32 - 1, image, false, &couleur);
         }
     }
-    // la jardinière fleurie sous la fenêtre
-    for x in fx0 - rf - 1..=fx0 + rf + 1 {
-        t.poser(x, fy0 + rf + 3, lit(0x6a4424), 1.0);
-        let fleur = if se == Saison::Hiver { 0x5a6a5a } else if (x - fx0).rem_euclid(2) == 0 { 0xe85050 } else { 0x4a8a3a };
-        t.poser(x, fy0 + rf + 2, lit(fleur), 1.0);
-    }
-
-    // 4. La cheminée de pierre plantée dans la colline, et sa fumée qui monte en volutes
-    let cx0 = xc + (5.2 * c.cw).round() as i32;
-    let ctop = crete(cx0 - xc) - (1.8 * c.demi).round() as i32;
-    for y in ctop..=crete(cx0 - xc) + 1 {
-        for x in cx0 - 2..=cx0 + 2 {
-            let joint = (y - ctop).rem_euclid(3) == 2;
-            let col = if x == cx0 - 2 || x == cx0 + 2 { 0x3a3440 } else if joint { 0x5a5462 } else { 0x8a8494 };
-            t.poser(x, y, lit(col), 1.0);
-        }
-    }
-    for x in cx0 - 3..=cx0 + 3 {
-        t.poser(x, ctop - 1, lit(0x4a4452), 1.0);
-    }
-    for k in 0..4 {
-        let age = (temps * 0.35 + k as f32 * 9.0).rem_euclid(36.0);
-        let vie = age / 36.0;
-        let (sx, sy) = (cx0 as f32 + 0.5 + vie * 10.0 + (age * 0.3 + k as f32).sin() * 1.5, ctop as f32 - 2.0 - age * 0.9);
-        // une bouffée blanche ombrée dessous, qui s'élargit et pâlit en montant
-        let r = 1.6 + vie * 3.0;
-        let a = (1.0 - vie * vie) * if veille { 0.7 } else { 1.0 };
-        t.disque(sx, sy + 0.6, r, lit(0xa4a8b6), a, 0.0);
-        t.disque(sx - 0.4, sy - 0.4, r * 0.8, lit(0xf6f8fc), a, 0.0);
-    }
-
-    // 5. Le fanal sur son piquet, près de la porte : une lueur dorée la nuit
-    let (lx, ly) = (dx0 - rd - (1.6 * c.cw).round() as i32, yb);
-    for y in ly - (2.6 * c.demi).round() as i32..=ly {
-        t.poser(lx, y, lit(0x4a3220), 1.0);
-    }
-    // le bras de fer, la chaînette et la lanterne qui pend dessous, sa flamme qui tremble la nuit
-    let lh = ly - (2.6 * c.demi).round() as i32;
-    for x in lx..=lx + 4 {
-        t.poser(x, lh, lit(0x3a2a1c), 1.0);
-    }
-    t.poser(lx + 1, lh + 1, lit(0x3a2a1c), 1.0);
-    t.poser(lx + 4, lh + 1, lit(0x2a2630), 1.0);
-    for y in lh + 2..=lh + 7 {
-        for x in lx + 3..=lx + 5 {
-            let bord = x != lx + 4 || y == lh + 2 || y == lh + 7;
-            let col = if bord {
-                lit(0x2a2630)
-            } else if veille {
-                if y == lh + 4 && tremble > 0.9 { hex(0xfff4c0) } else { hex(0xffc860) }
-            } else {
-                lit(0xc8c0ac)
-            };
-            t.poser(x, y, col, 1.0);
-        }
-    }
-    t.poser(lx + 4, lh + 8, lit(0x2a2630), 1.0);
 }
 
 /// Lucioles dorées les nuits d'été, et feux follets bleutés qui dérivent doucement au-dessus de l'herbe et de l'eau la nuit.

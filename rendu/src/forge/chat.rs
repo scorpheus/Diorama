@@ -406,8 +406,13 @@ pub fn peindre(cat: &Chat, e: Option<&Eclairage>, pixels: &mut [u32], w: usize, 
     }
     // posée en pixels d'écran sous la lumière de la forge, lue au pixel de forge
     let gauche = (ex - x0) * cw;
-    let dessus = (ey as f32 * demi + haut * demi).round() as i32;
     let g = GRAIN as i32;
+    // roulée, son dernier rang peint (le trait compris) se pose sur l'appui tel qu'interieur.rs le trace, au
+    // pixel près (user, 13-11 : « elle semble être 1 pixel au-dessus du bord ») ; debout, le bas sur le sol
+    let dessus = match (0..ny).rev().find(|&ay| (0..nx).any(|ax| col[ay * nx + ax].is_some())).filter(|_| dort) {
+        Some(bas) => ((super::interieur::V_APPUI * demi / g as f32).round() as i32) * g - (bas as i32 + 1) * g,
+        None => (ey as f32 * demi + haut * demi).round() as i32,
+    };
     let mut couvert: Option<(i32, i32, i32, i32)> = None;
     for ay in 0..ny {
         for ax in 0..nx {
