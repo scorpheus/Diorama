@@ -38,7 +38,7 @@ const named = (() => {
     return ''
   }
 })()
-/** The session a word names, as the plugin reads it: its id, its pid, or its name. */
+/** The session a word names, as ClaudeTerminal reads it (cerveau/rhum.rs): its id, its pid, or its name. */
 const find = (word: string) =>
   sessions.find(s => s.sessionId === word || String(s.pid) === word || (s.name !== undefined && s.name.toLowerCase() === word.toLowerCase()))
 

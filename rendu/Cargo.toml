@@ -2,7 +2,7 @@
 name = "rendu"
 version = "0.1.0"
 edition = "2021"
-description = "Diorama : l'appli qui dessine les bandeaux, en vrais pixels, par-dessus le terminal"
+description = "Diorama : la forge que ClaudeTerminal peint, et les outils pour la regarder (planche, vitrine)"
 license = "MIT"
 
 [dependencies]
@@ -13,19 +13,9 @@ serde_json = "1"
 [dependencies.windows]
 version = "0.61"
 features = [
-  "Wdk_System_Threading",
   "Win32_Foundation",
   "Win32_Graphics_Gdi",
-  "Win32_Security",
-  "Win32_System_Console",
-  "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_LibraryLoader",
-  "Win32_System_SystemInformation",
-  "Win32_System_Threading",
-  "Win32_System_WindowsProgramming",
-  "Win32_UI_Accessibility",
-  "Win32_UI_HiDpi",
-  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
 ]
 

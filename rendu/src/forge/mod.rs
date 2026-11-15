@@ -1,6 +1,9 @@
 //! La forge de Scorpheus, dessinée par l'appli : le monde changé en cellules (des demi-blocs
 //! et des glyphes plus fins, à la couleur près), comme hooks/themes/forge.ts les dessinait
-//! pour le terminal.
+//! pour le terminal. ClaudeTerminal la compile telle quelle ; son cerveau (`src/cerveau/`) lui donne
+//! le monde de chaque session (`Etat`). Les fichiers `hooks/…` et `tools/*.mts` que citent les
+//! en-têtes sont ceux de l'ancien mod d'où la forge a été portée : retirés le 15-11-2026,
+//! l'historique les garde jusqu'au commit 2fa375b.
 
 pub mod accessoires;
 pub mod atelier;
@@ -268,7 +271,7 @@ pub fn cadre_cour(x0: i32, cols: usize, cw: i32, ch: i32, h: usize) -> Option<ba
 
 impl Monde {
     /// Le monde `e` tics plus tard, tel que l'appli le voit passer entre deux messages du
-    /// plugin : l'horloge et tous les âges avancent (le pendant de `later` dans register.tsx ;
+    /// cerveau : l'horloge et tous les âges avancent (le pendant de `later` de l'ancien register.tsx ;
     /// un écart entre les deux ne coûte qu'un message de plus).
     pub fn plus_tard(&self, e: i64) -> Monde {
         let mut w = self.clone();
@@ -308,7 +311,7 @@ impl Monde {
     }
 }
 
-/// Ce que le plugin dit du bandeau d'une session : le recadrage, la lumière, le moment.
+/// Ce que le cerveau dit du bandeau d'une session : le recadrage, la lumière, le moment.
 pub struct Etat {
     pub recadrage: Recadrage,
     pub extra: i32,
@@ -318,9 +321,11 @@ pub struct Etat {
     pub monde: Monde,
 }
 
+#[cfg(test)]
 impl Etat {
-    /// « <recadrage> <extra> <lumière 0|1> <moment> <tic> <monde en JSON> ».
-    pub fn lire(texte: &str) -> Result<Etat, String> {
+    /// « <recadrage> <extra> <lumière 0|1> <moment> <tic> <monde en JSON> » : la ligne de l'ancien mod,
+    /// gardée pour que les essais décrivent un monde en une ligne.
+    fn lire(texte: &str) -> Result<Etat, String> {
         let mut m = texte.splitn(6, ' ');
         let mut mot = || m.next().ok_or_else(|| "ligne courte".to_string());
         let recadrage = Recadrage::de(mot()?).ok_or("recadrage inconnu")?;
@@ -336,9 +341,9 @@ impl Etat {
 /// La lettre du ciré jaune (accessoires::PALETTE) : sa tenue pendant la Route du Rhum.
 const CIRE: u8 = b'7';
 
-/// Un tic du monde, en secondes : celui du plugin (register.tsx : TICK_MS).
+/// Un tic du monde, en secondes : celui du cerveau (ClaudeTerminal, `cerveau::TICK_MS`).
 const TIC: f32 = 0.15;
-/// Au-delà de cet écart (en tics) entre l'horloge montrée et celle du plugin, on la recale.
+/// Au-delà de cet écart (en tics) entre l'horloge montrée et celle du cerveau, on la recale.
 const ECART_MAX: f64 = 100.0;
 
 /// La forge d'un bandeau : le dernier état reçu, avancé d'un tic toutes les 150 ms, et les cellules
@@ -348,11 +353,11 @@ pub struct SceneForge {
     etat: Option<Etat>,
     /// les secondes passées depuis le dernier état reçu : le monde avance d'un tic toutes les
     /// TIC secondes, au temps réel et non à l'image peinte. Une appli qui peint un peu moins vite
-    /// que le plugin ne compte pas (WM_TIMER à 150 ms en donne moins de 6,67 par seconde) : sinon
+    /// que le cerveau ne compte pas (WM_TIMER à 150 ms en donne moins de 6,67 par seconde) : sinon
     /// chaque état reçu la ramenait de quelques tics en avant, et la baie sautait.
     temps: f32,
-    /// l'horloge montrée, en tics : elle suit celle du plugin sans jamais sauter. Le plugin compte
-    /// ses tics au minuteur de Claude, qui prend du retard ; l'appli compte au temps réel. Recalée
+    /// l'horloge montrée, en tics : elle suit celle du cerveau sans jamais sauter. Le cerveau compte
+    /// ses tics à son minuteur, qui peut prendre du retard ; l'appli compte au temps réel. Recalée
     /// d'un coup à chaque état reçu, la baie sautait de quelques tics, en avant ou en arrière :
     /// elle rattrape l'écart en douceur, et ne recule jamais.
     lisse: Option<f64>,
@@ -371,7 +376,7 @@ pub struct SceneForge {
     pub vision: Option<belvedere::Vision>,
     /// le dragon de Lara, dans le coin du belvédère (belvedere::Dragon), suivi par l'appli
     pub dragon: belvedere::Dragon,
-    /// le tic du dernier coup de marteau : un message du plugin qui le redonne ne frappe pas deux fois
+    /// le tic du dernier coup de marteau : un état du cerveau qui le redonne ne frappe pas deux fois
     frappe: i64,
     pub images: u64,
 }
@@ -387,7 +392,7 @@ impl SceneForge {
     }
 
     pub fn recevoir(&mut self, etat: Etat) {
-        // un écart de plus de 15 s (une session reprise, un plugin rechargé) : on la recale
+        // un écart de plus de 15 s (une session reprise, une appli rechargée) : on la recale
         if self.lisse.is_some_and(|l| (etat.monde.clock as f64 - l).abs() > ECART_MAX) {
             self.lisse = None;
             self.montree = None;
@@ -396,7 +401,7 @@ impl SceneForge {
         self.temps = 0.0;
     }
 
-    /// L'horloge montrée à cette image : celle du plugin avancée au temps réel, rejointe en
+    /// L'horloge montrée à cette image : celle du cerveau avancée au temps réel, rejointe en
     /// douceur (l'écart comblé en 1,5 s, de 4 fois moins vite à 3 fois plus vite que le temps).
     fn horloge_lisse(&mut self, cible: f64, dt: f32) -> i64 {
         let pas = (dt / TIC) as f64;
@@ -618,7 +623,7 @@ impl crate::scene::Scene for SceneForge {
 mod tests {
     use super::*;
 
-    /// Une appli qui peint moins d'images que de tics ne prend pas de retard sur le plugin : le
+    /// Une appli qui peint moins d'images que de tics ne prend pas de retard sur le cerveau : le
     /// monde avance au temps réel (deux tics pour une image de 0,3 s), pas à l'image.
     #[test]
     fn le_monde_avance_au_temps_reel_et_non_a_l_image() {
@@ -633,10 +638,10 @@ mod tests {
         assert_eq!(s.horloge(), Some(106));
     }
 
-    /// Un plugin en retard ou en avance sur le temps réel : l'horloge montrée ne recule jamais et
+    /// Un cerveau en retard ou en avance sur le temps réel : l'horloge montrée ne recule jamais et
     /// n'avance jamais de plus de 3 tics d'une image à l'autre, puis rejoint la sienne.
     #[test]
-    fn l_horloge_montree_rejoint_celle_du_plugin_sans_sauter() {
+    fn l_horloge_montree_rejoint_celle_du_cerveau_sans_sauter() {
         use crate::scene::{Image, Scene};
         let mut s = SceneForge::new();
         let etat = |clock| Etat { recadrage: Recadrage::Full, extra: 0, lit: false, activite: Activite::Idle, tick: 0, monde: Monde { clock, ..Monde::default() } };
@@ -645,7 +650,7 @@ mod tests {
         let mut montree = Vec::new();
         s.recevoir(etat(1000));
         for k in 0..40 {
-            // le plugin, ses tics en retard : 1 tic tous les 0,2 s, redit toutes les 4 images
+            // le cerveau, ses tics en retard : 1 tic tous les 0,2 s, redit toutes les 4 images
             if k > 0 && k % 4 == 0 {
                 s.recevoir(etat(1000 + k * 3 / 4));
             }
@@ -664,12 +669,12 @@ mod tests {
         assert_eq!(s.saute, None);
     }
 
-    /// Une ligne telle que le plugin l'envoie (tests/diorama.test.tsx, rendu natif).
+    /// Un monde au format de `Etat::lire`, tel que l'ancien mod l'envoyait.
     const LIGNE: &str = r#"full 0 1 idle 993 {"hour":14,"month":10,"day":2,"hammer":"sledge","effort":0,"x":-12,"walking":false,"facing":1,"apprentices":[],"cape":["Z","v"],"accessory":"aucun","absent":false,"guests":[],"banquet":false,"cat":{"mode":"roof","x":14,"age":84},"lanternLit":false,"personality":"reveur","masterpiece":false,"rack":[],"forging":false,"banner":{"cloth":"E","emblem":"s","bits":259},"speaking":false,"duck":false,"exhausted":false,"tea":false,"flavor":"forge","pressure":0,"ctx":0,"hourglasses":0,"turnTicks":0,"clock":1012}"#;
 
     #[test]
-    fn le_monde_du_plugin_se_lit_et_se_dessine() {
-        let etat = Etat::lire(LIGNE).expect("la ligne du plugin se lit");
+    fn le_monde_se_lit_et_se_dessine() {
+        let etat = Etat::lire(LIGNE).expect("la ligne se lit");
         assert_eq!((etat.recadrage, etat.extra, etat.lit, etat.activite, etat.tick), (Recadrage::Full, 0, true, Activite::Idle, 993));
         assert_eq!((etat.monde.x, etat.monde.clock, etat.monde.cape[0].0), (-12, 1012, b'Z'));
         let cells = Forge::default().frame(etat.recadrage, etat.activite, etat.tick, &etat.monde, etat.lit, etat.extra);
@@ -736,7 +741,7 @@ mod tests {
     #[test]
     fn la_route_du_rhum_se_lit_du_monde_et_se_garde_entre_deux_messages() {
         let ligne = LIGNE.replace(r#""clock":1012}"#, r#""clock":1012,"rhum":"race"}"#);
-        let etat = Etat::lire(&ligne).expect("la ligne du plugin se lit");
+        let etat = Etat::lire(&ligne).expect("la ligne se lit");
         assert_eq!(etat.monde.rhum, Some(monde::PhaseRhum::Course));
         assert_eq!(etat.monde.plus_tard(10).rhum, Some(monde::PhaseRhum::Course));
         assert_eq!(Etat::lire(LIGNE).expect("sans elle aussi").monde.rhum, None);
@@ -746,12 +751,5 @@ mod tests {
         assert_eq!(m.rhum_progress, Some(0.5));
         assert_eq!(m.rhum_flotte, Some(vec![[0.0, 30.0, -34.0, 1.0], [2.0, 40.5, -15.2, 1.0]]));
         assert_eq!(m.rhum_tetes, Some(vec![[0, 0x1d3f8a, 0xf2c14e]]));
-    }
-
-    #[test]
-    fn une_ligne_abimee_ne_casse_rien() {
-        assert!(Etat::lire("full 0 1 idle").is_err());
-        assert!(Etat::lire("large 0 1 idle 3 {}").is_err());
-        assert!(Etat::lire(r#"full 0 1 idle 3 {"hour":1}"#).is_err());
     }
 }

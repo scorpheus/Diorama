@@ -96,7 +96,7 @@ pub fn scenes() -> Vec<(Activite, i64, Monde)> {
             w.rhum_flotte = Some(flotte_exemple());
             w.rhum_traces = Some(traces_exemple());
             w.rhum_tetes = Some(vec![[0, 0xf4f4f4, 0x2a8a3a], [2, 0x101018, 0xe0c020], [3, 0xd04a2a, 0xffffff]]);
-            // ou un vrai pointage, tel que le greffon l'envoie : RHUM_JSON=<fichier> (rhumFlotte, rhumTraces, rhumTetes)
+            // ou un vrai pointage, au format du monde : RHUM_JSON=<fichier> (rhumFlotte, rhumTraces, rhumTetes)
             if let Some(v) = std::env::var("RHUM_JSON").ok().and_then(|f| std::fs::read_to_string(f).ok()).and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()) {
                 w.rhum_flotte = serde_json::from_value(v["rhumFlotte"].clone()).ok();
                 w.rhum_traces = serde_json::from_value(v["rhumTraces"].clone()).ok();
@@ -245,7 +245,7 @@ pub fn galadriel(dossier: &str, extra: i32, perso: Option<Perso>, filtre: &[Stri
         ("dehors-crepuscule", Activite::Idle, 0, gala(&|w| { w.hour = 19.6; w.rhum = None; w.x = 27 })),
         ("dehors-nuit", Activite::Idle, 0, gala(&|w| { w.rhum = None; w.x = 27 })),
         ("visite", Activite::Idle, 0, gala(&|w| {
-            // deux invités à leurs places, comme le plugin les y mène : le second tomberait sur elle
+            // deux invités à leurs places, comme le cerveau les y mène : le second tomberait sur elle
             let invite = Invite { x: GUEST_SPOT, walking: false, facing: -1, cape: [Lettre(b'N'), Lettre(b'L')], accessory: Accessoire::Lunettes, tick: 3, waving: true, perso: None };
             w.guests = vec![invite.clone(), Invite { x: GUEST_SPOT - 14, cape: [Lettre(b'C'), Lettre(b'D')], accessory: Accessoire::Bandeau, tick: 40, waving: false, ..invite }];
             w.x = 4;

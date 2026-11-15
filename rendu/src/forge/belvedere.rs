@@ -256,7 +256,7 @@ pub const VISION_S: f32 = 9.0;
 
 /// Une vision dans la vasque : l'habitant d'une session qui écrit à Galadriel, ou à qui elle écrit, monte de
 /// l'eau, pâle et cyan, flotte au-dessus d'elle quelques secondes, puis se défait (user, 02-11 : « je prends
-/// le 3, la vision dans la vasque »). L'appli la pose ; le monde du mod n'en sait rien. Posée quand le
+/// le 3, la vision dans la vasque »). L'appli la pose ; le monde du cerveau n'en sait rien. Posée quand le
 /// belvédère n'est pas à l'écran, elle attend qu'il y soit (`VISION_ATTENTE` au plus).
 pub struct Vision {
     /// ses images, `w` × `h` en ARGB (alpha nul : transparent), qui tournent toutes les 150 ms
@@ -298,7 +298,7 @@ pub const DRAGON_VOL_S: f32 = 3.5;
 
 /// Le dragon de Lara (user, 03-11 : « le dragon de la Lara, oui ») : quand Lara occupe la carte graphique, un petit
 /// dragon dort sur un tas d'or dans le coin du belvédère ; quand on la libère, il s'envole, et l'or reste seul ;
-/// quand on la reprend, il revient. L'appli dit où en est Lara (`suivre`) ; le monde du mod n'en sait rien.
+/// quand on la reprend, il revient. L'appli dit où en est Lara (`suivre`) ; le monde du cerveau n'en sait rien.
 #[derive(Clone, Copy, Debug)]
 pub struct Dragon {
     pub lara: Lara,

@@ -212,8 +212,8 @@ Les touches :
 - C : changer la cape (forêt, braise, nuit, prune, ocre, ardoise) ;
 - A : changer l'accessoire.
 
-Pour les mettre dans l'appli du bandeau : `rendu\rendu.ps1 -Lancer`. Il recompile si `pet/` a
-changé, puis remplace l'appli qui tourne.
+Pour les mettre dans le Diorama des sessions : recompiler ClaudeTerminal, qui lit les planches de
+`rendu/pet/` à la compilation.
 
 ## Ce qui peut clocher
 

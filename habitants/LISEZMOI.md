@@ -5,7 +5,7 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
 
 - **Où** : dépôt Diorama, dossier `habitants/`. Un fichier par personnage, `habitants/<nom>.json` (UTF-8). Les
   accessoires (pigeon, toiles, bougie, bourse, météo, mineurs, bulle) tous dans `habitants/accessoires.json` (plus bas).
-- **Format** : le dessin à lettres des thèmes du Diorama (THEMES.md), une lettre par pixel, `.` transparent.
+- **Format** : le dessin à lettres de la forge, une lettre par pixel, `.` transparent.
   ```json
   { "nom": "marin", "description": "…", "valide": false, "taille": [16, 16],
     "palette": { "k": "#1b1a24", "O": "#3f80dc", "o": "#1f4f9e", … },
@@ -58,7 +58,7 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
     à 1, ou l'indice qu'il tient lui-même (les toiles : 0, 1, 2 selon ses seuils de repos).
   - Placement : par le milieu du bord bas, agrandi du même facteur entier que l'habitant. Les accessoires dessinés
     tournés vers la droite (`pigeon`, `mineur`, `mineur-lingot`) se retournent en miroir pour aller à gauche.
-  - **Le vol du pigeon** reprend celui du passeur (`passeur/passeur.cs`, `Step`) : durée
+  - **Le vol du pigeon** reprend celui de l'ancien passeur du mod (`passeur/passeur.cs`, `Step`, retiré le 15-11-2026, dans l'historique jusqu'au commit 2fa375b) : durée
     `min(2,2 ; max(1,0 ; 0,8 + distance / 3000))` s (distance en pixels d'écran) ; avec `t` de 0 à 1 et
     `e = 0,5 − 0,5 cos(π t)` (il part et se pose en douceur), `x = x0 + (x1 − x0) e`,
     `y = y0 + (y1 − y0) e − h · 4 e (1 − e)`, `h` la hauteur d'arc qui ne sort pas de la fenêtre ; opacité

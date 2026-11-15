@@ -125,7 +125,7 @@ async function lireLeTracker(): Promise<ReturnType<typeof LIRE>> {
   }
 }
 
-/** Les classes du tracker sous les noms du plugin (« Ultim 32/23 » : Ultim). */
+/** Les classes du tracker sous les noms de la forge (« Ultim 32/23 » : Ultim). */
 function classeDe(nom: string | null): string | undefined {
   const k = (nom ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
   if (k.startsWith('ultim')) return 'Ultim'
@@ -178,7 +178,7 @@ async function pointer(): Promise<void> {
       ...(Array.isArray(b.trace) && b.trace.length > 1 ? { trace: b.trace } : {}),
     }]
   })
-  // une classe que le plugin ne connaît pas ne s'écrit pas : on le dit, pour qu'elle ne manque pas en silence
+  // une classe que la forge ne connaît pas ne s'écrit pas : on le dit, pour qu'elle ne manque pas en silence
   if (inconnues.size > 0) console.log(`${heure()}  classes laissées de côté : ${[...inconnues].map(([c, n]) => `${c} (${n})`).join(', ')}`)
   if (bateaux.length === 0) {
     console.log(`${heure()}  ${url} : aucun bateau lisible (état ${lu.etat}) ; rien d'écrit`)
@@ -194,7 +194,7 @@ async function pointer(): Promise<void> {
   const cote = `${sortie}.${process.pid}.tmp`
   writeFileSync(cote, texte)
   renameSync(cote, sortie)
-  // le départ que donne le tracker, à comparer à celui du plugin (RHUM_START, 1er novembre 12h02 UTC)
+  // le départ que donne le tracker, à comparer à celui de ClaudeTerminal (cerveau/rhum.rs : DEPART, 1er novembre 12h02 UTC)
   const depart = typeof lu.depart === 'number' ? `, départ ${new Date(lu.depart * 1000).toISOString().replace(/:00\.000Z$/, 'Z')}` : ''
   console.log(`${heure()}  pointage de ${at} (état ${lu.etat}${depart}) : ${bateaux.length} bateaux (${parClasse}) → ${sortie}`)
 }

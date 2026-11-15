@@ -5,6 +5,13 @@ la course. Cette page dit ce qu'il reste à vérifier et à brancher sur le PC, 
 connecté aux vraies informations. Le départ est le **dimanche 1er novembre 2026 à 13h02**, de
 Saint-Malo, pour 3 542 milles jusqu'à Pointe-à-Pitre.
 
+> **15 novembre 2026** : le mod de Claude Code est retiré du dépôt. Ce que faisaient `hooks/register.tsx`,
+> `hooks/world.ts` et `tests/diorama.test.tsx` (quelle session montre la course, le compte à rebours, le
+> pointage lu, le relevé tous les quarts d'heure), le cerveau de ClaudeTerminal le fait (`src/cerveau/rhum.rs`,
+> ses tests dans `src/cerveau/tests.rs`) ; le dessin au terminal (`hooks/themes/forge-yard.ts`) n'existe plus.
+> La suite de cette page est le journal de l'époque du mod, gardé tel quel ; l'historique a ces fichiers
+> jusqu'au commit 2fa375b. Le tableau des fichiers, en bas, est à jour.
+
 ## Où on en est
 
 - **Une seule session montre la course** : celle que nomme `%USERPROFILE%\.claude\diorama-route-du-rhum.txt`
@@ -166,23 +173,19 @@ rose des vents, une punaise, et un voile de nuit sur le papier.
    autres accessoires : `tools/pet/chatgpt.py --tenue`, voir `tools/pet/CHATGPT.md`).
 6. **Le vrai vent** : la vitesse et la direction du vent sur la flotte (si la source les donne) pour
    la houle, l'angle des voiles, les grains.
-7. **Le dessin au terminal** (`rendu` à `non`, `hooks/themes/forge-yard.ts`) : il reste à
-   Saint-Malo, en gros pixels. Lui porter au moins les étapes du voyage, si quelqu'un l'utilise.
-
 Pas d'hélicoptère.
 
 ## Les fichiers
 
 | fichier | rôle |
 |---|---|
-| `hooks/register.tsx` | quelle session montre la course, le compte à rebours, le pointage lu, ce qui part à l'appli (`rhum`, `rhumProgress`, `rhumFlotte`, `rhumTetes`) |
-| `hooks/world.ts` | ces champs du monde |
-| `rendu/src/forge/monde.rs` | les mêmes, côté appli |
+| ClaudeTerminal `src/cerveau/rhum.rs` | quelle séance montre la course, le compte à rebours, le pointage lu, le relevé tous les quarts d'heure |
+| ClaudeTerminal `src/cerveau/tests.rs` | ses tests (désignation, compte à rebours, pointage) |
+| `rendu/src/forge/monde.rs` | les champs du monde (`rhum`, `rhumProgress`, `rhumFlotte`, `rhumTetes`) |
 | `rendu/src/forge/baie.rs` | la baie, la flotte, le voyage, la faune, la carte |
 | `rendu/src/forge/trace.rs` | polygones, traits et disques lissés |
 | `rendu/src/forge/cour.rs` | la cour laisse transparent ce que la baie peint dessous |
 | `rendu/src/forge/mod.rs` | la baie peinte sous les cellules de la cour, à chaque image |
 | `rendu/src/forge/planche.rs` | les scènes de la planche et de la vitrine |
-| `hooks/themes/forge-yard.ts` | la version en gros pixels, pour le terminal |
-| `tools/route-du-rhum.mts` | désigner la session |
-| `tests/diorama.test.tsx` | les tests du plugin (désignation, compte à rebours, pointage) |
+| `tools/route-du-rhum.mts` | désigner la séance |
+| `tools/route-du-rhum-suivre.mts`, `route-du-rhum-lire.mts` | relever le pointage sur le tracker GeoVoile |

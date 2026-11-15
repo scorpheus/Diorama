@@ -11,7 +11,7 @@ macro_rules! sorte {
 
         #[allow(dead_code)]
         impl $nom {
-            /// Le nom que lui donne le plugin.
+            /// Le nom que lui donne le cerveau.
             pub fn de(s: &str) -> Option<Self> {
                 match s { $($s => Some(Self::$v),)* _ => None }
             }
@@ -169,7 +169,7 @@ pub struct Monde {
     pub hour: f64,
     /// L'heure du ciel : celle que la lumière et le ciel suivent, tirée du vrai soleil (ClaudeTerminal,
     /// soleil.rs : 7 h au lever, 13 h au midi solaire, 19 h 30 au coucher, 21 h à la fin du crépuscule) ; sans
-    /// elle (le mod ne l'écrit pas), l'heure de la pendule. Les routines (volets, sommeil) gardent `hour`.
+    /// elle (le cerveau ne l'écrit pas), l'heure de la pendule. Les routines (volets, sommeil) gardent `hour`.
     #[serde(default)]
     pub ciel: Option<f64>,
     pub month: i32,

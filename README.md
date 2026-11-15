@@ -1,87 +1,65 @@
 # Diorama
 
-Un petit monde en pixel art qui vit au-dessus du prompt de Claude Code.
+Un petit monde en pixel art qui vit au-dessus du prompt de chaque session de Claude Code, dans
+[ClaudeTerminal](https://github.com/scorpheus/ClaudeTerminal). Le personnage suit le travail de Claude :
+il réfléchit quand le modèle réfléchit, se met à l'ouvrage quand un outil tourne, éprouve les tests,
+scelle les commits, attend la personne quand Claude a une question et fait la sieste après dix minutes
+de calme. Les sous-agents arrivent en petites créatures, les sessions se rendent visite.
 
-Un personnage suit le travail de Claude, sans qu'on ait rien à faire :
-- il réfléchit quand le modèle réfléchit et se met à l'ouvrage quand un outil tourne ;
-- il éprouve les tests, scelle les commits, attend la personne quand Claude a une question ;
-- il fait la sieste après dix minutes de calme.
+![La forge](docs/forge.png)
 
-Chaque sous-agent arrive en petite créature, puis repart sa mission faite. Les sessions ouvertes sur la même machine se rendent visite et s'envoient des nouvelles, et un animal unique passe de l'une à l'autre. Les visites ne se passent pas toujours comme prévu :
-- **Porte close** : un invité trouve la forge vide. L'hôte rentre en courant, juste à temps pour l'accueillir, ou bien l'invité attend, puis glisse un mot sous la porte, que l'hôte trouve en rentrant.
-- **Chassé-croisé** : deux personnages partent l'un chez l'autre. Ils se croisent en chemin, et l'un fait demi-tour pour recevoir l'autre.
-- **Chez un troisième** : l'hôte est parti chez un autre. Le visiteur va les rejoindre là-bas, ou il attend un peu devant la porte.
-- Chaque session dit aux autres chez qui son personnage est parti, dès qu'il sort. Personne ne part donc chez quelqu'un qui est déjà dehors. Sous Windows, le visiteur traverse l'écran en vol, d'une fenêtre de terminal à l'autre (voir [Le passeur](#le-passeur-windows)).
+Ce dépôt garde **le dessin** : ClaudeTerminal compile la forge telle quelle depuis ce dossier (son
+`build.rs`, `DIORAMA_DIR`, sinon `../Diorama`) et la peint au vrai pixel de l'écran. Le moteur qui suit
+les sessions (le « cerveau ») vit dans ClaudeTerminal (`src/cerveau/`). L'ancien mod de Claude Code
+(les hooks, l'appli de rendu par-dessus le terminal, le passeur, les thèmes JSON) a été retiré le
+15 novembre 2026 ; l'historique le garde jusqu'au commit `2fa375b`.
 
-À côté de la scène s'affichent les jauges de contexte, de la fenêtre de 5 h et de celle de 7 jours, avec l'heure de leur remise à zéro. Le contexte se mesure à la fenêtre de compaction quand les réglages en fixent une (`autoCompactWindow`, ou `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), sinon à celle du modèle. Il y a aussi l'expérience gagnée, ce que fait Claude en ce moment et un journal court.
+## Ce qu'il y a
 
-| La forge (thème par défaut) | L'antre de la sorcière |
+| dossier | rôle |
 |---|---|
-| ![La forge](docs/forge.png) | ![La sorcière](docs/sorciere.png) |
+| `rendu/src/forge/` | la forge : l'atelier, la cour, la baie, le ciel, les bêtes, le personnage (`pet.rs`) |
+| `rendu/src/scene.rs` | le contrat entre la forge et celui qui la peint (`Image`, `Scene`) |
+| `rendu/pet/` | les planches du personnage et de ses accessoires (`.webp`, lues à la compilation) |
+| `rendu/src/main.rs`, `vitrine.rs` | les outils pour regarder la forge sans ClaudeTerminal |
+| `habitants/` | les habitants des onglets de ClaudeTerminal, un JSON chacun (contrat : `habitants/LISEZMOI.md`) |
+| `tools/habitants/` | dessiner, vérifier et ranger les habitants |
+| `tools/pet/` | refaire les planches du personnage (`tools/pet/CHATGPT.md`) |
+| `tools/route-du-rhum*.mts` | la Route du Rhum : désigner la séance, relever le pointage |
 
-## Installation
+## Regarder la forge
 
-Il faut Claude Code avec les mods (plugins de *function hooks*), et un terminal à couleurs vraies. Le mod a été testé avec la version 2.1.291, sous Windows Terminal.
+Dans `rendu/` :
 
 ```
-claude plugin marketplace add scorpheus/Diorama
-claude plugin install diorama@diorama
+cargo run --release -- --planche planche.png [--large <colonnes>]   chaque moment, sur une planche PNG
+cargo run --release -- --galadriel <dossier> [--large <colonnes>]   Galadriel dans chaque moment
+cargo run --release -- --vitrine                                    les moments joués dans une fenêtre
+cargo test
 ```
 
-Ouvrez ensuite une nouvelle session : le bandeau apparaît au-dessus du prompt. Pour mettre à jour : `claude plugin update diorama@diorama`.
-
-## Réglages (`/config`)
-
-| réglage | valeurs |
-|---|---|
-| **Thème** | `forge` (par défaut), `sorciere`, ou le chemin absolu d'un `theme.json` à soi |
-| **Largeur de la scène** | `auto` prend la plus large qui tient à côté du texte ; `complet`, `compact` et `seul` réduisent la scène |
-| **Panneau à droite de la scène** | `auto` (par défaut) : le panneau complet quand toute la scène tient à côté ; sinon, la scène seule prend toute la largeur, cour comprise, et les trois jauges (`ctx`, `5h`, `7j` : le nom, une barre, le pourcentage) se peignent côte à côte sur son sol, en bas à droite, sur le quai, l'herbe ou le pont ; `complet` : toujours le panneau, la scène rétrécit ; `discret` : toujours les jauges au sol. Une session peut avoir le sien : `DIORAMA_PANNEAU=discret` (ou `auto`, `complet`) dans son environnement l'emporte sur le réglage, pour elle seule. C'est ce qu'un lanceur pose pour une session à côté d'un tableau. |
-| **Répliques** | `local` : des phrases toutes prêtes, sans coût ; `haiku` : Haiku écrit la réplique de fin de tour ; `aucune` : le personnage se tait |
-| **Statut de la tâche** | `haiku` : Haiku résume la tâche et où elle en est ; `simple` : sans modèle ; `aucun` |
-
-**Ce que coûte Haiku.** Avec les réglages par défaut, Haiku est appelé :
-- une fois par conversation, pour choisir la tenue du personnage ;
-- une fois par sous-agent, pour lui donner un nom ;
-- une fois par conversation, à la première sieste, pour le rêve ;
-- pour le statut de la tâche : une fois par demande, au plus une fois toutes les deux minutes de travail, et une fois en fin de tour.
-
-Chaque appel coûte quelques centaines de jetons, sur votre compte. Pour n'en faire aucun : *Statut* `simple` ou `aucun`, et *Répliques* `local` ou `aucune`. Il restera tout de même les appels pour la tenue, le nom des aides et le rêve. Haiku reçoit le début de la conversation, des extraits de réponses et les noms des actions en cours.
-
-## Le passeur (Windows)
-
-Quand un personnage part en visite, le passeur le fait voler pour de vrai : il saute du bord de sa scène, traverse l'écran en arc, par-dessus les autres fenêtres, sans monter plus haut que le tiers bas de l'écran, et se pose au bord de la scène de son hôte. Au retour, il refait le chemin dans l'autre sens. C'est le personnage du thème, dans sa tenue, au quart de sa taille, qui marche en l'air. Il vole dans les couleurs de la palette, sans la lumière de la scène.
-
-- **Lancement** : un hook `SessionStart` le démarre, caché, s'il ne tourne pas déjà. Il n'y en a qu'un par machine. C'est un petit programme compilé une fois dans `%LOCALAPPDATA%\Diorama\passeur.exe`, puis de nouveau quand `passeur/passeur.cs` change. Il s'arrête seul une minute après la fermeture de la dernière session, ou quand son code change (le lancement suivant prend la nouvelle version).
-- **Ce qu'il coûte** : au repos, 0,1 à 0,3 % d'un cœur et 30 Mo de mémoire, avec une dizaine de sessions ouvertes. Il regarde la date du stockage quatre fois par seconde, et quand elle change, il n'en décode que les visites qui ont changé. Un vol coûte environ 0,3 s de processeur, réparties sur ses deux secondes.
-- **Ce qu'il faut** : Windows, avec Windows PowerShell 5.1, celui de Windows, et rien d'autre à installer. Il fonctionne avec Windows Terminal et avec la console classique (conhost).
-- **Quand il ne vole pas** : une session sans fenêtre (lancée en fond), une fenêtre réduite ou cachée par une autre à l'endroit de sa scène, deux sessions dans deux onglets d'une même fenêtre, ou une session qui n'affiche pas la scène (fenêtre trop étroite). La visite a lieu quand même, comme avant.
-- **Ce qu'il lit**, sans rien écrire : le stockage du mod (les visites, et la scène de chaque session), et `~/.claude/sessions/` pour savoir quel processus porte quelle session. La fenêtre d'une session, il la trouve en s'attachant un instant à sa console.
-- **Son journal** : `%TEMP%\diorama-passeur.log` dit chaque vol, ou pourquoi il n'a pas eu lieu.
-- **La géométrie** suit les réglages par défaut de Windows Terminal : onglets dans la barre de titre, marge de 8 px, police quelconque. Avec d'autres réglages, le point de départ peut tomber à côté. Les constantes sont en tête de `passeur/passeur.cs` (classe `Places`).
-
-Pour voir un vol sans attendre une visite : `node tools/envol.mts forge --de <session | pid> --vers <session | pid>`. Sans arguments, l'outil liste les sessions ouvertes.
+Dans la vitrine : ← → change de moment, espace met en pause, R reprend le moment, C change la cape,
+A l'accessoire. Une fois la forge changée, recompiler ClaudeTerminal l'embarque.
 
 ## La Route du Rhum
 
-Pour la Route du Rhum 2026 (départ de Saint-Malo le dimanche 1er novembre à 13h02), une session de la machine, et une seule, voit la cour de la forge devenir la mer. L'appli native la peint au vrai pixel de l'écran ; le dessin au terminal (`rendu` à `non`) en garde une version en gros pixels, à Saint-Malo seulement.
+Pour la Route du Rhum 2026 (départ de Saint-Malo le dimanche 1er novembre à 13h02), une séance de
+ClaudeTerminal, et une seule, voit la cour de la forge devenir la mer : la flotte, le voyage de
+Saint-Malo à la Guadeloupe, le ciel de l'heure, la carte de l'Atlantique, le départ et les arrivées
+fêtés. La forge la dessine (`rendu/src/forge/baie.rs`, `trace.rs`) ; ClaudeTerminal choisit la séance
+et lit le pointage (`src/cerveau/rhum.rs`).
 
-- **La flotte** : de petites voiles à l'horizon, des Class40 et des IMOCA (foils, gennaker au portant), un Ocean Fifty, et, si la cour est assez large, un ou deux Ultim en vol (la coque centrale hors de l'eau, le flotteur et ses foils dedans). Avant le départ, ils tirent des bords autour des bouées de la ligne ; après, ils filent vers l'Atlantique, sillage et embruns compris. La nuit, leurs feux de navigation s'allument.
-- **Le voyage** : le décor suit l'avancée de la course.
-  - À Saint-Malo, le quai de granit, le pavois, le phare sur son îlot, et le bateau-comité dont le canon tonne jusqu'au départ.
-  - Au large, le pont de teck et ses filières, des dauphins qui sautent, une baleine qui souffle, et le Pico quand on passe les Açores ; la nuit, les sillages s'allument.
-  - Aux tropiques, les cumulus des alizés, les grains et leur rideau de pluie, les poissons volants, les sargasses et les frégates.
-  - En Guadeloupe, la plage, les palmiers, les mornes de Basse-Terre et la Soufrière ; la nuit, le feu d'artifice des arrivées.
-- **Le ciel de l'heure** : le soleil qui se couche dans la mer et son reflet, la lune, les étoiles, les cumulus qui passent, l'orage.
-- **À côté des jauges** : le compte à rebours, puis le jour de course. Au coup de canon, le personnage saute de joie et le journal le note.
-- **Le spectacle du lancement** : quand une session prend la mer (à son ouverture, ou quand on la désigne), elle joue une vingtaine de secondes, dès que l'appli l'a trouvée.
-  - Jusqu'aux premières arrivées, c'est **le départ rejoué** à Saint-Malo : la flotte alignée sur la ligne, le coup de canon du bateau-comité, le personnage qui saute de joie, la flotte lâchée vers le large. Avant le 1er novembre, les bateaux reviennent ensuite tirer leurs bords.
-  - Ensuite, c'est **l'arrivée** à Pointe-à-Pitre : un Ultim aux couleurs du premier coupe la ligne, un feu d'artifice part, de jour comme de nuit, et un message nomme les bateaux arrivés que la machine n'a pas encore fêtés (`rhum:arrivees` dans le magasin du plugin). Un pointage qui apporte une arrivée la fait jouer aussitôt dans la session ouverte.
-  - Le vrai départ, à 13h02, joue le même lâcher de la flotte.
+**Quelle séance la montre** : celle que nomme la première ligne de `diorama-route-du-rhum.txt`, dans
+le dossier de Claude Code (`%USERPROFILE%\.claude`, ou `CLAUDE_CONFIG_DIR`), par son pid, son nom ou
+son identifiant ; ou celle dont le profil pose `DIORAMA_ROUTE_DU_RHUM=1`. L'outil la désigne :
 
-**La carte.** Une carte de l'Atlantique reste épinglée dans la cour, sauf le temps du spectacle : la côte, les îles, la rose des vents, la route de Saint-Malo à Pointe-à-Pitre. Sans pointage, elle montre la flotte à l'estime (au port avant le départ, puis sur la route).
+```
+node tools/route-du-rhum.mts            qui la montre, et les sessions ouvertes
+node tools/route-du-rhum.mts 12345      désigne cette session
+node tools/route-du-rhum.mts --aucune   plus aucune
+```
 
-**Les vraies données.** La session désignée lit aussi `diorama-route-du-rhum.json`, à côté du fichier de désignation, dès qu'il change. Quand il est là :
+**Les vraies données.** La séance désignée lit aussi `diorama-route-du-rhum.json`, à côté du fichier de désignation, dès qu'il change. Quand il est là :
 - chaque bateau est à sa place sur la carte, coloré par classe, le premier de chaque classe cerclé, ceux qui ont abandonné en gris ;
 - la trace du premier de chaque classe, depuis Saint-Malo ;
 - quand une classe change de premier, le journal le note et le personnage le dit ;
@@ -119,87 +97,9 @@ node tools/route-du-rhum-suivre.mts --annee 2022 --instant 2022-11-12T14:00Z --s
 ```
 Tant que la carte 2026 n'est pas en ligne, il le dit et n'écrit rien.
 
-**Personne n'a à le lancer** : la session désignée le lance elle-même, avec `--une-fois`, tous les quarts d'heure, d'une semaine avant le départ à quarante jours après. Elle le fait sans fenêtre, et tant qu'elle est ouverte.
+**Personne n'a à le lancer** : la séance de ClaudeTerminal qui montre la course le lance elle-même, avec `--une-fois`, tous les quarts d'heure, d'une semaine avant le départ à quarante jours après. Elle le fait sans fenêtre, et tant qu'elle est ouverte.
 
-Ce qui reste à vérifier et à brancher sur un PC, avec les vraies informations : [docs/route-du-rhum-a-faire.md](docs/route-du-rhum-a-faire.md).
-
-**Quelle session la montre**, au choix :
-- **le fichier** `diorama-route-du-rhum.txt`, dans le dossier de Claude Code (`%USERPROFILE%\.claude`, ou `CLAUDE_CONFIG_DIR`). Sa première ligne nomme la session par son pid, son nom ou son identifiant. Les sessions le relisent toutes les deux secondes, et celle qu'il nomme prend la mer. C'est ce qu'un orchestrateur écrit pour désigner une session, par exemple depuis cmd :
-  ```
-  echo 12345> "%USERPROFILE%\.claude\diorama-route-du-rhum.txt"
-  ```
-  ou avec l'outil : sans argument, il dit qui la montre et liste les sessions ouvertes avec leur pid ; avec un pid, un nom ou un identifiant, il désigne cette session ; avec `--aucune`, plus aucune ne la montre.
-  ```
-  node tools/route-du-rhum.mts
-  node tools/route-du-rhum.mts 12345
-  node tools/route-du-rhum.mts --aucune
-  ```
-- **l'environnement** de la session, à son lancement : `DIORAMA_ROUTE_DU_RHUM=1`. Pour ouvrir depuis l'orchestrateur une fenêtre cmd qui la montre :
-  ```
-  start "Route du Rhum" cmd /k "set DIORAMA_ROUTE_DU_RHUM=1&& claude"
-  ```
-
-Il faut l'option *Lumière* à `oui` (par défaut) pour le dessin au terminal. La mer est celle de la forge ; un thème JSON garde son propre décor.
-
-## Un thème à soi
-
-Le forgeron n'est qu'un thème. Un personnage différent, avec son décor et ses mots, tient dans **un seul fichier JSON**.
-
-Le plus simple : demandez-le à Claude, avec la compétence fournie par le plugin.
-
-```
-/diorama:nouveau-theme un pirate dans la cale de son navire, des perroquets comme aides
-```
-
-Claude dessine le thème, vous montre des aperçus et le retouche avec vous, puis l'enregistre. Il reste à mettre son chemin dans `/config` → *Thème*. Le bandeau se redessine ensuite tout seul à chaque modification du fichier.
-
-Le format est décrit dans [THEMES.md](THEMES.md), et l'antre de la sorcière ([themes/sorciere/theme.json](themes/sorciere/theme.json)) sert d'exemple complet. Pour vérifier un thème et en tirer une planche PNG, avec Node 22.6 ou plus :
-
-```
-node tools/apercu.mts mon-theme.json apercu.png
-```
-
-Pour le voir jouer en direct dans un terminal, moment par moment, à son vrai rythme :
-
-```
-node tools/mire.mts mon-theme.json
-```
-
-Pour partager un thème, ouvrez une demande de fusion avec un dossier `themes/<nom>/`.
-
-## Ce que le mod garde, et où
-
-- **L'état de la session** (jauges, équipe, journal) vit en mémoire dans Claude Code.
-- **Le stockage local du plugin** est partagé entre les sessions de la machine. Il contient ce qui fait vivre les échanges entre sessions :
-  - la présence et la tenue de chaque session ;
-  - les visites en cours et les nouvelles envoyées (une visite porte aussi le personnage découpé et la largeur de sa scène, pour le passeur) ;
-  - l'animal et le banquet du jour ;
-  - les trophées de chaque conversation et ses chefs-d'œuvre.
-- Rien ne sort de la machine, sauf les appels à Haiku décrits plus haut.
-
-## Développer
-
-```
-claude plugin validate .
-claude plugin test .
-```
-
-Pour tester sans installer, chargez le dossier directement : `CLAUDE_CODE_PLUGIN_DIRS=<chemin du dépôt>` dans l'`env` de `~/.claude/settings.json`. Chaque modification d'un fichier recharge alors le mod dans les sessions ouvertes. Ne l'installez pas en même temps par le marketplace : il serait chargé deux fois.
-
-Le code se répartit ainsi :
-
-| fichier | rôle |
-|---|---|
-| `hooks/register.tsx` | le moteur : il suit Claude Code et tient le `World` |
-| `hooks/world.ts` | le contrat entre le moteur et un thème |
-| `hooks/themes/forge.ts` | la forge, dessinée en code |
-| `hooks/themes/data.ts` | lit un thème JSON et le vérifie |
-| `hooks/props.ts` | ce que tous les thèmes partagent : palette, bulles, ciel, rêves |
-| `hooks/flight.ts` | découpe le personnage de sa scène, pour le passeur |
-| `passeur/passeur.ps1`, `passeur/passeur.cs` | le passeur : lancement en PowerShell, cœur en C# compilé à la volée |
-| `tools/envol.mts` | un vol d'essai entre deux sessions |
-| `tools/route-du-rhum.mts` | désigne la session qui montre la Route du Rhum |
-| `rendu/src/forge/baie.rs`, `trace.rs` | la Route du Rhum peinte au vrai pixel, et ce qui dessine (polygones, traits, disques lissés) |
+Ce qui restait à vérifier pendant la course : [docs/route-du-rhum-a-faire.md](docs/route-du-rhum-a-faire.md).
 
 ## Licence
 
