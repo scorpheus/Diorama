@@ -182,6 +182,7 @@ impl Paysage {
             }
             if !gala {
                 petites_betes(&mut toile, &c, &sky, plan, se, t);
+                dragonnets(&mut toile, &c, &sky, plan, t);
             }
             lucioles(&mut toile, &c, &sky, se, t);
             if !gala {
@@ -1382,171 +1383,35 @@ fn oiseaux(t: &mut Toile, c: &Cadre, sky: &Ciel, w: &Monde, temps: f32) {
     }
 }
 
-/// Un point dans un polygone (pair-impair).
-fn dans(p: f32, q: f32, pts: &[(f32, f32)]) -> bool {
-    let mut dedans = false;
-    let mut j = pts.len() - 1;
-    for i in 0..pts.len() {
-        let (a, b) = (pts[i], pts[j]);
-        if (a.1 > q) != (b.1 > q) && p < (b.0 - a.0) * (q - a.1) / (b.1 - a.1) + a.0 {
-            dedans = !dedans;
-        }
-        j = i;
-    }
-    dedans
-}
-
-/// Ce qu'est le dragon en (p, q), en colonnes de forge depuis le milieu de son corps, tourné vers la droite (q vers
-/// le bas) : 0 rien, 1 le corps, 2 l'aile de derrière, 3 l'aile de devant, 4 le ventre, 5 les cornes et la crête.
-fn dragon_ici(p: f32, q: f32, haut: f32, onde: f32) -> u8 {
-    // une aile de chauve-souris : l'épaule, le poignet, trois doigts, la membrane festonnée entre eux, la hanche
-    let aile = |dp: f32, dq: f32, k: f32| -> bool {
-        let up = haut * k;
-        let e = (0.5 + dp, -0.3 + dq);
-        let poignet = (-0.1 + dp, -0.35 - 1.6 * up + dq);
-        let d1 = (-1.3 + dp, -0.55 - 2.4 * up + dq);
-        let d2 = (-2.5 + dp, -0.25 - 1.5 * up + dq);
-        let d3 = (-2.5 + dp, 0.15 - 0.45 * up + dq);
-        let hanche = (-1.15 + dp, 0.05 + dq);
-        let creux = |a: (f32, f32), b: (f32, f32)| {
-            let m = ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5);
-            (m.0 + (poignet.0 - m.0) * 0.32, m.1 + (poignet.1 - m.1) * 0.32)
-        };
-        let pts = [e, poignet, d1, creux(d1, d2), d2, creux(d2, d3), d3, creux(d3, hanche), hanche];
-        // les os des doigts, plus épais que la membrane
-        dans(p, q, &pts)
-    };
-    if aile(0.0, 0.0, 1.0) {
-        return 3;
-    }
-    // la tête cornue au bout du cou qui ondule
-    let cou = [(1.1, -0.15), (1.9, -0.25 + onde * 0.1), (2.4, -0.75), (2.95, -0.85)];
-    let mut avant = cou[0];
-    for i in 1..=10 {
-        let t = i as f32 / 10.0;
-        let m = 1.0 - t;
-        let b = (
-            m * m * m * cou[0].0 + 3.0 * m * m * t * cou[1].0 + 3.0 * m * t * t * cou[2].0 + t * t * t * cou[3].0,
-            m * m * m * cou[0].1 + 3.0 * m * m * t * cou[1].1 + 3.0 * m * t * t * cou[2].1 + t * t * t * cou[3].1,
-        );
-        if seg(p, q, avant, b) < 0.34 - 0.1 * t {
-            return 1;
-        }
-        avant = b;
-    }
-    let (a, b) = ((p - 3.15) / 0.55, (q + 0.95) / 0.33);
-    if a * a + b * b <= 1.0 || dans(p, q, &[(3.4, -1.12), (4.15, -0.88), (3.4, -0.72)]) {
-        return 1;
-    }
-    if dans(p, q, &[(2.95, -1.18), (2.35, -1.75), (3.2, -1.22)]) || dans(p, q, &[(3.2, -1.2), (2.85, -1.8), (3.45, -1.2)]) {
-        return 5;
-    }
-    // le corps, le ventre clair dessous ; la crête du dos
-    let (a, b) = (p / 1.65, (q - 0.02) / 0.55);
-    if a * a + b * b <= 1.0 {
-        return if q > 0.22 && p > -1.1 { 4 } else { 1 };
-    }
-    for k in 0..4 {
-        let x = -1.0 + k as f32 * 0.6;
-        if dans(p, q, &[(x - 0.2, -0.45), (x + 0.2, -0.48), (x - 0.05, -0.8)]) {
-            return 5;
-        }
-    }
-    // les pattes repliées sous le ventre
-    if dans(p, q, &[(0.6, 0.4), (1.0, 0.45), (0.9, 0.85)]) || dans(p, q, &[(-0.9, 0.35), (-0.4, 0.45), (-0.7, 0.9)]) {
-        return 1;
-    }
-    // la queue, longue et sinueuse, jusqu'à la pointe en fer de lance
-    let queue = [(-1.4, 0.1), (-2.8, 0.45 + onde * 0.4), (-4.0, -0.35 - onde * 0.4), (-5.2, 0.1 + onde * 0.2)];
-    let mut avant = queue[0];
-    for i in 1..=14 {
-        let t = i as f32 / 14.0;
-        let m = 1.0 - t;
-        let b = (
-            m * m * m * queue[0].0 + 3.0 * m * m * t * queue[1].0 + 3.0 * m * t * t * queue[2].0 + t * t * t * queue[3].0,
-            m * m * m * queue[0].1 + 3.0 * m * m * t * queue[1].1 + 3.0 * m * t * t * queue[2].1 + t * t * t * queue[3].1,
-        );
-        if seg(p, q, avant, b) < 0.34 - 0.26 * t {
-            return 1;
-        }
-        avant = b;
-    }
-    let bout = queue[3];
-    if dans(p, q, &[(bout.0 + 0.1, bout.1), (bout.0 - 0.45, bout.1 - 0.3), (bout.0 - 0.7, bout.1), (bout.0 - 0.45, bout.1 + 0.3)]) {
-        return 5;
-    }
-    if aile(0.45, -0.2, 0.85) {
-        return 2;
-    }
-    0
-}
-
-/// La distance de (p, q) au segment ab.
-fn seg(p: f32, q: f32, a: (f32, f32), b: (f32, f32)) -> f32 {
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let l = dx * dx + dy * dy;
-    let t = if l > 0.0 { (((p - a.0) * dx + (q - a.1) * dy) / l).clamp(0.0, 1.0) } else { 0.0 };
-    (a.0 + dx * t - p).hypot(a.1 + dy * t - q)
-}
-
-/// Le dragon qui passe, au pixel d'art : de jour un grand dragon rouge sombre au ventre d'or, les ailes battantes,
-/// pâli par la distance ; la nuit une silhouette noire où rougeoie la braise du ventre, l'œil d'or, et qui crache
-/// parfois une gerbe de feu.
+/// Le dragon qui passe, dessiné à la main en lettres (dragon.rs) : de jour rouge sombre au ventre d'or sous la lumière
+/// de l'heure, ses ailes qui battent ; la nuit une silhouette où rougeoie la braise du ventre, l'œil d'or, et qui, au
+/// milieu de sa traversée, ouvre la gueule et crache une gerbe de feu qui grandit puis s'éteint.
 #[allow(clippy::too_many_arguments)]
 fn dragon(t: &mut Toile, c: &Cadre, sky: &Ciel, u: f32, v: f32, sens: f32, temps: f32, f: f32) {
-    let (x0, y0) = (c.x(u), c.y(v));
-    let k = c.cw; // une colonne de forge en pixels de la toile (q aussi, pour garder les proportions)
-    let haut = (temps * 0.38).sin();
-    let onde = (temps * 0.21).sin();
-    // le corps monte quand les ailes s'abaissent
-    let y0 = y0 + haut * 0.25 * k;
+    use super::dragon as d;
     let nuit = sky.nuit;
-    let braise = 0.75 + 0.25 * (temps * 0.9).sin();
-    let (corps, ventre, aile_av, aile_ar, corne) = if nuit {
-        (hex(0x161626), mix(hex(0x3a1a12), hex(0xff7a2a), 0.55 * braise), hex(0x221c34), hex(0x141420), hex(0x2a2a3e))
-    } else {
-        (sky.lit(hex(0x6a2a20), 0.3), sky.lit(hex(0xc8963a), 0.3), sky.lit(hex(0x9a4030), 0.3), sky.lit(hex(0x4e1e18), 0.3), sky.lit(hex(0xd8c8a0), 0.3))
+    let tic = temps as i64;
+    let feu = nuit && (0.35..0.6).contains(&f);
+    let image = d::image(tic, feu);
+    let miroir = sens < 0.0;
+    let large = image[0].len() as i32;
+    // le corps monte d'un pixel quand les ailes s'abaissent
+    let monte = if std::ptr::eq(image.as_ptr(), d::BAS.as_ptr()) { -1 } else { 0 };
+    let cx = if miroir { large - 1 - d::CORPS.0 } else { d::CORPS.0 };
+    let (x, y) = (c.x(u).round() as i32 - cx, c.y(v).round() as i32 - d::CORPS.1 + monte);
+    let teinte = |l: u8| {
+        let (k, luit) = d::couleur(l, nuit)?;
+        Some(if luit || nuit { hex(k) } else { sky.lit(hex(k), 0.0) })
     };
-    let (pa, pb, qa, qb) = (-5.8f32, 4.4f32, -3.4f32, 2.4f32);
-    let (xa, xb) = ((x0 + pa.min(-pb) * k).floor() as i32, (x0 + pb.max(-pa) * k).ceil() as i32);
-    let (ya, yb) = ((y0 + qa * k).floor() as i32, (y0 + qb * k).ceil() as i32);
-    for y in ya.max(0)..yb.min(t.h as i32) {
-        for x in xa.max(0)..xb.min(t.w as i32) {
-            let p = (x as f32 + 0.5 - x0) / k * sens;
-            let q = (y as f32 + 0.5 - y0) / k;
-            let n = dragon_ici(p, q, haut, onde);
-            if n == 0 {
-                continue;
-            }
-            // le dessus de chaque partie prend la lumière
-            let dessus = dragon_ici(p, q - 1.0 / k, haut, onde) != n;
-            let mut col = match n {
-                2 => aile_ar,
-                3 => aile_av,
-                4 => ventre,
-                5 => corne,
-                _ => corps,
-            };
-            if dessus && !nuit {
-                col = mix(col, hex(0xffffff), 0.18);
-            }
-            t.poser(x, y, col, if n == 2 || n == 3 { 0.94 } else { 1.0 });
-        }
-    }
-    // l'œil
-    let (ex, ey) = (x0 + 3.3 * k * sens, y0 - 1.0 * k);
-    t.poser(ex.round() as i32, ey.round() as i32, if nuit { hex(0xffd040) } else { hex(0xffe08a) }, 1.0);
-    // la nuit, au milieu de sa traversée, une gerbe de feu devant le museau
-    if nuit && (0.35..0.6).contains(&f) {
+    lettres(t, x, y, image, miroir, &teinte);
+    if feu {
+        // la gerbe sort de la gueule, s'allonge puis se retire, rognée nette à sa longueur
         let souffle = ((f - 0.35) / 0.25 * PI).sin();
-        for i in 0..9 {
-            let d = 0.4 + i as f32 * 0.42;
-            let r = (0.25 + i as f32 * 0.09) * k * souffle;
-            let px = x0 + (4.2 + d) * k * sens;
-            let py = y0 - 0.9 * k + d * 0.22 * k + (temps * 1.7 + i as f32).sin() * 0.12 * k;
-            let col = if i < 3 { hex(0xfff0a0) } else if i < 6 { hex(0xffa03a) } else { hex(0xe0482a) };
-            t.disque(px, py, r, col, (1.0 - i as f32 / 10.0) * souffle, 0.6);
-        }
+        let flamme = &d::FLAMME[(tic / 2).rem_euclid(2) as usize];
+        let n = ((flamme[0].len() as f32 * souffle).ceil() as usize).clamp(1, flamme[0].len());
+        let rognee: Vec<&str> = flamme.iter().map(|l| &l[..n]).collect();
+        let fx = if miroir { x + large - d::GUEULE_FEU.0 - n as i32 } else { x + d::GUEULE_FEU.0 };
+        lettres(t, fx, y + d::GUEULE_FEU.1, &rognee, miroir, &teinte);
     }
 }
 
@@ -2419,6 +2284,54 @@ fn petites_betes(t: &mut Toile, c: &Cadre, sky: &Ciel, plan: &Plan, se: Saison, 
             });
             let image: &[&str] = if ouvert { &PAPILLON_OUVERT } else { &PAPILLON_FERME };
             lettres(t, c.x(u).round() as i32 - 2, c.y(v).round() as i32 - 1, image, false, &couleur);
+        }
+    }
+}
+
+/// Les dragonnets du puits (dragonnet.rs) : Braise perché sur la pointe de l'épi du toit, Mousse au coin droit de
+/// l'avant-toit. Ils clignent, soufflent de temps en temps un rond de fumée par les naseaux ; toutes les trois minutes
+/// ils s'envolent ensemble, Mousse sur les talons de Braise, font une boucle au-dessus de la cour et reviennent se
+/// poser. La nuit ils dorment, les yeux clos, et leur souffle fume encore ; l'orage les fait rentrer.
+fn dragonnets(t: &mut Toile, c: &Cadre, sky: &Ciel, plan: &Plan, temps: f32) {
+    use super::dragonnet as d;
+    let Some(p) = plan.well.filter(|_| !sky.orage) else { return };
+    let p = p as f32;
+    let tic = temps as i64;
+    let fumee = sky.lit(hex(0xa4a4b2), 0.0);
+    for (n, (u0, v0, robe)) in [(p + 4.5, 13.4, d::BRAISE), (p + 9.2, 18.5, d::MOUSSE)].into_iter().enumerate() {
+        let n = n as i64;
+        // le vol : 140 tics toutes les 1300, Mousse 14 tics derrière Braise ; une boucle vers la gauche puis la droite,
+        // en montant, les ailes qui battent tous les deux tics
+        let a = (tic - n * 14).rem_euclid(1300);
+        let vol = !sky.nuit && a < 140;
+        let (du, dv) = if vol {
+            let s = a as f32 / 140.0;
+            (-(s * 2.0 * PI).sin() * 16.0, -(s * PI).sin() * 7.0 + (s * 4.0 * PI).sin() * 1.2)
+        } else {
+            (0.0, 0.0)
+        };
+        // perché : il souffle un rond de fumée toutes les 90 tics, cligne de temps en temps ; la nuit il dort
+        let b = (tic + n * 45).rem_euclid(90);
+        let image: &[&str] = if vol {
+            if (a / 2) % 2 == 0 { &d::VOL_HAUT } else { &d::VOL_BAS }
+        } else if sky.nuit || (tic + n * 17).rem_euclid(53) < 2 {
+            &d::CLIGNE
+        } else if b < 4 {
+            &d::SOUFFLE
+        } else {
+            &d::ASSIS
+        };
+        let (x, y) = (c.x(u0 + du).round() as i32 - 8, c.y(v0 + dv).round() as i32 - 16);
+        lettres(t, x, y, image, false, &|l| d::couleur(l, &robe).map(|k| sky.lit(hex(k), 0.0)));
+        // le rond de fumée sort du museau, monte en grandissant, poussé de côté (vers le dehors du toit pour Mousse)
+        if !vol && b < 12 {
+            const ROND: [&[&str]; 4] = [&["o"], &["oo", "oo"], &[".o.", "o.o", ".o."], &[".oo.", "o..o", "o..o", ".oo."]];
+            let rond = ROND[(b / 3) as usize];
+            let cote = if n == 0 { -1 } else { 1 };
+            let large = rond[0].len() as i32;
+            let fx = x + d::NASEAUX.0 + cote * (3 + b as i32) - if cote < 0 { large } else { 0 };
+            let fy = y + d::NASEAUX.1 - (b as i32 * 3) / 2 - rond.len() as i32 / 2;
+            lettres(t, fx, fy, rond, false, &|l| (l == b'o').then_some(fumee));
         }
     }
 }

@@ -16,6 +16,8 @@ pub mod jauges;
 pub mod lumiere;
 pub mod cadeau;
 pub mod chouette;
+pub mod dragon;
+pub mod dragonnet;
 pub mod louveteau;
 pub mod paysage;
 pub mod monde;

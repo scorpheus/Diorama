@@ -261,6 +261,24 @@ pub fn galadriel(dossier: &str, extra: i32, perso: Option<Perso>, filtre: &[Stri
             w.rhum = None;
             w.rare = Some(super::monde::Rare { kind: super::monde::Rarete::Dragon, age: 0 });
         })),
+        // et la nuit, au milieu de sa traversée, il crache le feu (paysage.rs : `f` entre 0,35 et 0,6)
+        ("dragon-feu", Activite::Idle, 0, gala(&|w| {
+            w.hour = 23.0;
+            w.rhum = None;
+            w.clock = 360;
+            w.rare = Some(super::monde::Rare { kind: super::monde::Rarete::Dragon, age: 0 });
+        })),
+        // les dragonnets sur le toit du puits : Braise souffle un rond de fumée ; puis tous deux en vol au-dessus de la cour
+        ("dragonnets", Activite::Idle, 0, gala(&|w| {
+            w.hour = 11.0;
+            w.rhum = None;
+            w.clock = 446;
+        })),
+        ("dragonnets-vol", Activite::Idle, 0, gala(&|w| {
+            w.hour = 11.0;
+            w.rhum = None;
+            w.clock = 1340;
+        })),
         // les louveteaux au grand jour, à leurs corvées dans la cour
         ("aides-jour", Activite::Running, 0, gala(&|w| {
             w.hour = 11.0;
