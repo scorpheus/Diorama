@@ -386,6 +386,43 @@ HABITANTS = {
              (9, 12, ["u"]), (7, 10, ["s"]), (11, 9, ["s"]), (2, 13, ["s"]), (15, 11, ["s"])],
         ],
     },
+    # le raton laveur du Repaire des Mécanos (il remplace le soudeur, jamais validé, le 20-11-2026) : oreilles
+    # rondes, masque noir aux yeux qui brillent, museau blanc, lunettes d'aviateur relevées sur le front à la
+    # couleur du profil, salopette de toile, queue rayée à ses pieds ; à l'ouvrage, il serre un écrou à la clé
+    'raton': {
+        'profil_couleur': '#2ab8a6',
+        'description': "le raton laveur du Repaire des Mécanos : masque noir, lunettes d'aviateur relevées à la couleur du profil, salopette, queue rayée ; il serre un écrou à la clé",
+        'palette': {'g': '#8e8a96', 'G': '#c4c0ca', 'n': '#2c2832', 'f': '#ffffff', 'a': '#2e343a',
+                    'A': '#8a90a0', 'S': '#3d6f8f', 's': '#ffd75e', 'D': '#b4b7bf'},
+        'debout': miroir([
+            "........",
+            "..kk....",
+            ".kGgkkkk",
+            ".kgggggg",
+            ".kgOOOOg",
+            ".kgOccOg",
+            "kGnnnnnG",
+            "kGnnfnnw",
+            ".kgnnnww",
+            "..kgwwwm",
+            "..kgkwww",
+            ".kggkSSS",
+            ".kggSsSS",
+            ".knkSSSS",
+            "...kSSSk",
+            "..knnnk.",
+        ]),
+        'plus': [(0, 13, ["k"]), (0, 14, ["nGn"]), (0, 15, ["kk"])],
+        'yeux': [(4, 7), (11, 7)],
+        'ferme': 'n',
+        'bouche': (7, 10, ["MM"]),
+        'triste': [(4, 7, ["n"]), (11, 7, ["n"]), (4, 8, ["f"]), (11, 8, ["f"]), (12, 9, ["c"])],
+        'main': (14, 11),
+        'ouvrage': [
+            [(14, 10, ["n"]), (13, 9, ["D"]), (12, 8, ["D"]), (11, 11, [".kkk.", "kaaak", "kaAak", "kaaak", ".kkk."])],
+            [(14, 11, ["n"]), (13, 12, ["D"]), (12, 13, ["D"]), (11, 11, [".kkk.", "kaaak", "kaAak", "kaaak", ".kkk."])],
+        ],
+    },
     # l'astromancien de Gemini : coiffe d'astronome constellée à la couleur du profil, besicles rondes de laiton,
     # barbe blanche, robe sombre bordée d'or ; à l'ouvrage, il fait tourner entre ses mains deux étoiles jumelles,
     # l'une blanc-cyan, l'autre d'or (les Gémeaux)

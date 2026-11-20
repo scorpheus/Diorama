@@ -43,7 +43,9 @@ l'état de la session. Ce fichier est le contrat entre les deux (copie dans `D:\
   Les habitants, de face, trapus, à la manière des créatures de Dwarf Fortress, et pas forcément humains :
   `galadriel` (Orchestratrice, comme son pet du Diorama), `forgeron` (Endurance, un nain), `marin` (Diorama, Route du
   Rhum), `mecano` (vehigraph), `tailleur` (LaPierreDesMots, un golem de pierre), `europa` (Europa, une voiture de
-  rallye), `claudeterminal` (ClaudeTerminal, une pieuvre qui tape de tous ses bras), `voyageur` (tous les autres, dont « Claude » : un petit
+  rallye), `claudeterminal` (ClaudeTerminal, une pieuvre qui tape de tous ses bras), `raton` (Repaire des Mécanos,
+  un raton laveur mécano aux lunettes relevées, validé le 20-11 ; il remplace le `soudeur`, jamais validé, qui
+  laissait le voyageur sur ces onglets), `voyageur` (tous les autres, dont « Claude » : un petit
   marcheur des contes, capuche et cape à la couleur du profil, bâton ; il a remplacé l'escargot le 02-11). Tous dans `tools/habitants/gabarits.py` (le dessin debout, puis ce qui change d'un
   état à l'autre) : un nouvel habitant y est une entrée.
 - **Accessoires** : `habitants/accessoires.json`, une palette pour tous (complète, `"#rrggbb"`, `O`/`o` à la couleur
